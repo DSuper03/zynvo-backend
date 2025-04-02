@@ -1,0 +1,4 @@
+add hashing to pw 
+add auth middleware 
+update schema for orgs 
+complete the post routes
