@@ -13,9 +13,9 @@ const JWT_SECRET = process.env.JWT_SECRET as string
 
 //login and signup in one route
 router.post("/signup", async (req: Request , res: Response) => {
-    const parsedData = signupSchema.safeParse(req.body)    
     const {name, email, password} = req.body; 
-
+    const parsedData = signupSchema.safeParse(req.body) 
+       
     if(!parsedData.success) {
         res.status(411).json({msg  : "incorrect inputs"});
         logger.error(parsedData.error);

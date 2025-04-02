@@ -8,7 +8,6 @@
     "dev": "nodemon --exec ts-node src/index.ts",
     "build": "tsc",
     "db": "cd src/db && npx prisma migrate dev"
-
   },
   "keywords": [],
   "author": "",
@@ -20,7 +19,6 @@
     "@types/cors": "^2.8.17",
     "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.1",
-    "@types/jsonwebtoken": "^9.0.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
@@ -32,6 +30,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.9",
     "prisma": "6.5.0"
   }
 }

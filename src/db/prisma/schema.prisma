@@ -14,8 +14,34 @@ datasource db {
 }
 
 model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
-  password String
+  id            Int     @id @default(autoincrement())
+  email         String  @unique
+  name          String?
+  profileAvatar String?
+  password      String
+  createdAt     DateTime @default(now())
+
+  CreatePost    CreatePost[]
+}
+
+model CreatePost {
+  id            Int      @id @default(autoincrement())
+  title         String
+  description   String
+  content       String
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  published     Boolean  @default(false)
+  authorId      Int
+  author        User     @relation(fields: [authorId], references: [id])
+
+  Author Author[]
+}
+
+model Author {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  posts     CreatePost[]
 }
