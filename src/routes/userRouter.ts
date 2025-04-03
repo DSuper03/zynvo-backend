@@ -4,6 +4,7 @@ import { logger } from "../utils/logger";
 import { signupSchema } from "../types/formtypes";
 import jwt from "jsonwebtoken"; 
 import dotenv from "dotenv";
+import { log } from "winston";
 
 dotenv.config()
 const router = Router();
@@ -68,6 +69,24 @@ router.post("/signup", async (req: Request , res: Response) => {
 
 
 })
+
+router.post("/veryfy", async (req: Request , res: Response) => {
+    try {
+        //need to setup smtp server for email / TIP: USE SENDGRID   
+    } catch (error) {
+        logger.error(error);
+    }
+})
+
+router.post("/reset-password", async (req: Request , res: Response) => {
+    try {
+        
+    } catch (error) {
+        logger.error(error);
+    }
+})
+
+
 
 
 // get user info (profile)
