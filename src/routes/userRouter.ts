@@ -4,22 +4,22 @@ import { logger } from "../utils/logger";
 import { signupSchema } from "../types/formtypes";
 import jwt from "jsonwebtoken"; 
 import dotenv from "dotenv";
-import { log } from "winston";
-
+import { hashSync, compareSync } from "bcrypt-ts";
 dotenv.config()
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET as string
+const JWT_SECRET = process.env.JWT_SECRET!
 
-// todo => use bcrypt to hash 
+
 
 //login and signup in one route
 router.post("/signup", async (req: Request , res: Response) => {
     const {name, email, password} = req.body; 
     const parsedData = signupSchema.safeParse(req.body) 
-       
+      
     if(!parsedData.success) {
         res.status(411).json({msg  : "incorrect inputs"});
         logger.error(parsedData.error);
+        return; 
     }
     try {
         const resposne = await prisma.user.findUnique({
@@ -27,47 +27,50 @@ router.post("/signup", async (req: Request , res: Response) => {
                 email : parsedData.data?.email
             }
         })
-
+      
         if (resposne) {
             const userPw = resposne.password; 
             const id = resposne.id
-            if (password === userPw) {
-                // login
-                const token = jwt.sign({ id }, JWT_SECRET)
-                localStorage.setItem("token", token);
-                //remove when production
+            
+       
+            if (compareSync(password, userPw)) {
+            
+                const token = jwt.sign({ id }, JWT_SECRET)                
                 res.status(200).json({
                     msg : "login success",
                     token
                 })
-                
+            } else {
+              
+                res.status(401).json({
+                    msg: "Invalid email or password"
+                });
             }
         }
         else {
-           const response = await prisma.user.create({
+           
+            const hashedPassword = hashSync(parsedData.data?.password as string, 10);
+            
+            const response = await prisma.user.create({
                 data : {
-                    email : parsedData.data?.email as string ,
-                    name : parsedData.data?.name , 
-                    password : parsedData.data?.password as string
+                    email : parsedData.data?.email as string,
+                    name : parsedData.data?.name, 
+                    password : hashedPassword 
                 }
             })
             
             const id = response.id
-
             const token = jwt.sign({id}, JWT_SECRET);
-            localStorage.setItem("token", token)
-
             res.status(200).json({
                 msg : "account created", 
                 token
             })
         }
-    } catch (error) {
-     logger.info(error);
-     logger.error(error);
+    } catch (error:any) {
+        logger.info(error.message);
+        logger.error(error);
+        res.status(500).json({msg : "internal server error"})
     }
-
-
 })
 
 router.post("/veryfy", async (req: Request , res: Response) => {

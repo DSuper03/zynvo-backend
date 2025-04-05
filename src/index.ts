@@ -12,10 +12,10 @@ const PORT = 3000;
 
 app.use(express.json());
 app.use(cors())
-app.use("api/v1/user" , limiter)
+app.use("/api/v1/user" , limiter)
 
-app.use("api/v1/user", userRouter)
-app.use("api/v1/post", postRouter)
+app.use("/api/v1/user", userRouter)
+app.use("/api/v1/post", postRouter)
 app.use("/api/v1/auth", collageRouter)
 
 app.listen(PORT, () => {
