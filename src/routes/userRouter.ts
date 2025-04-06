@@ -7,11 +7,8 @@ import dotenv from "dotenv";
 import { hashSync, compareSync } from "bcrypt-ts";
 dotenv.config()
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET!
 
 
-
-//login and signup in one route
 router.post("/signup", async (req: Request , res: Response) => {
     const {name, email, password} = req.body; 
     const parsedData = signupSchema.safeParse(req.body) 
@@ -35,7 +32,7 @@ router.post("/signup", async (req: Request , res: Response) => {
        
             if (compareSync(password, userPw)) {
             
-                const token = jwt.sign({ id }, JWT_SECRET)                
+                const token = jwt.sign({ id }, process.env.JWT_SECRET!)                
                 res.status(200).json({
                     msg : "login success",
                     token
@@ -60,7 +57,7 @@ router.post("/signup", async (req: Request , res: Response) => {
             })
             
             const id = response.id
-            const token = jwt.sign({id}, JWT_SECRET);
+            const token = jwt.sign({id}, process.env.JWT_SECRET!);
             res.status(200).json({
                 msg : "account created", 
                 token
