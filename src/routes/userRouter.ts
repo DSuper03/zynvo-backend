@@ -1,12 +1,18 @@
 import { Router , Request, Response} from "express";
 import prisma from "../db/db";
 import { logger } from "../utils/logger";
-import { signupSchema } from "../types/formtypes";
+import { newPWschema, signupSchema } from "../types/formtypes";
 import jwt from "jsonwebtoken"; 
 import dotenv from "dotenv";
 import { hashSync, compareSync } from "bcrypt-ts";
+import crypto from "crypto";
+import mail from "../utils/nodemailer";
 dotenv.config()
 const router = Router();
+
+const genToken =() => {
+  return crypto.randomBytes(20).toString("hex")
+}
 
 
 router.post("/signup", async (req: Request , res: Response) => {
@@ -31,7 +37,7 @@ router.post("/signup", async (req: Request , res: Response) => {
             
        
             if (compareSync(password, userPw)) {
-            
+                
                 const token = jwt.sign({ id }, process.env.JWT_SECRET!)                
                 res.status(200).json({
                     msg : "login success",
@@ -47,15 +53,21 @@ router.post("/signup", async (req: Request , res: Response) => {
         else {
            
             const hashedPassword = hashSync(parsedData.data?.password as string, 10);
-            
+            const vToken = genToken();
+
             const response = await prisma.user.create({
                 data : {
                     email : parsedData.data?.email as string,
                     name : parsedData.data?.name, 
-                    password : hashedPassword 
+                    password : hashedPassword, 
+                    vToken : vToken,
+                    expiryToken : Date.now(),
+                    ValidFor : 86400000
                 }
             })
             
+            const url = `${process.env.FE_URL}/verify`
+            await mail(parsedData.data.email, "Verification email for zynvo", `Please click this link to verify this email : ${url}`)
             const id = response.id
             const token = jwt.sign({id}, process.env.JWT_SECRET!);
             res.status(200).json({
@@ -70,17 +82,105 @@ router.post("/signup", async (req: Request , res: Response) => {
     }
 })
 
-router.post("/veryfy", async (req: Request , res: Response) => {
+router.post("/verify", async (req: Request , res: Response) => {
+    const vToken = req.query.vToken as string
+
+    if(!vToken) {
+        res.status(404).json({
+            msg : "bad response, invalid token"
+        })
+    }
     try {
-        //need to setup smtp server for email / TIP: USE SENDGRID   
+        //need to setup smtp server for email / TIP: USE SENDGRID
+        const response =  await prisma.user.findFirst({
+            where: {
+                vToken : vToken,
+            }
+        }) 
+        
+        if(!response) {
+            res.status(400).json({
+                msg : "no user found, Invalid token"
+            })
+        }
+
+        const expTime = response?.expiryToken as number
+        const currentTime = Date.now()
+        const ValidFor = response?.ValidFor as number
+        if (currentTime - expTime <= ValidFor ){
+            const Res = await prisma.user.update({
+                where : {
+                    id : response?.id
+                }, 
+                data : {
+                    isVerified : true
+                }
+            })
+
+            if(!Res) {
+                res.status(500).json({
+                    msg : "internal server error, try again"
+                })
+            }
+
+            res.status(200).json({
+                msg  : "Verified successfully"
+            })
+        }
     } catch (error) {
         logger.error(error);
+        res.status(500).json({
+            msg : "internal server error"
+        })
     }
 })
 
-router.post("/reset-password", async (req: Request , res: Response) => {
+router.put("/reset-password", async (req: Request , res: Response) => {
+    // add auth middleware and remove the ts ignore
+    //@ts-ignore
+    const userID = req.id 
+    const password = req.body
+    const newPassword =req.body
+
+    const parsedData = newPWschema.safeParse(newPassword);
+
+    if(!parsedData.success) {
+        res.json({
+            msg : "invalid passwrd format blud"
+        })
+    }
+    
     try {
-        
+        const response = await prisma.user.findFirst({
+            where : {
+                id : userID
+            }
+        })
+
+        if(!response) {
+            res.status(404).json({
+                msg : "invalid user, no such user"
+            })
+        }
+
+        const pw = response?.password as string
+
+        if(compareSync(password, pw)) {
+            const update = await prisma.user.update({
+                where : {
+                    id : response?.id
+                }, 
+                data : {
+                    password : parsedData.data?.password
+                }
+            })
+
+            if(!update) res.status(500).json({ msg : "internal server error, try again" }) 
+            
+            res.status(200).json({
+                msg : "password updated successfully"
+            })
+        }
     } catch (error) {
         logger.error(error);
     }
