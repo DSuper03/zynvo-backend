@@ -187,8 +187,12 @@ router.put("/reset-password", async (req: Request , res: Response) => {
 })
 
 
-
-
-// get user info (profile)
+router.get("/", (req: Request,res: Response) => {
+   try {
+    
+   } catch (error) {
+    logger.error(error);
+   }
+})
 
 export const userRouter = router;
