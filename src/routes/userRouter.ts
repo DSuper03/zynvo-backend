@@ -1,4 +1,4 @@
-import { Router , Request, Response} from "express";
+import  { Router , Request, Response} from "express";
 import prisma from "../db/db";
 import { logger } from "../utils/logger";
 import { newPWschema, signupSchema } from "../types/formtypes";
@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import { hashSync, compareSync } from "bcrypt-ts";
 import crypto from "crypto";
 import mail from "../utils/nodemailer";
+import { AuthMiddleware } from "../middleware/AuthMiddleware";
 dotenv.config()
 const router = Router();
 
@@ -61,8 +62,8 @@ router.post("/signup", async (req: Request , res: Response) => {
                     name : parsedData.data?.name, 
                     password : hashedPassword, 
                     vToken : vToken,
-                    expiryToken : Date.now(),
-                    ValidFor : 86400000
+                    expiryToken: Math.floor(Date.now() / 1000),
+                    ValidFor : 86400000       
                 }
             })
             
@@ -135,18 +136,16 @@ router.post("/verify", async (req: Request , res: Response) => {
     }
 })
 
-router.put("/reset-password", async (req: Request , res: Response) => {
-    // add auth middleware and remove the ts ignore
-    //@ts-ignore
-    const userID = req.id 
-    const password = req.body
-    const newPassword =req.body
+router.put("/reset-password",AuthMiddleware , async (req: Request , res: Response) => {
+    const userID = req.id;
+    const password = req.body;
+    const newPassword =req.body;
 
     const parsedData = newPWschema.safeParse(newPassword);
 
     if(!parsedData.success) {
         res.json({
-            msg : "invalid passwrd format blud"
+            msg : "invalid passwrd format"
         })
     }
     
@@ -182,6 +181,7 @@ router.put("/reset-password", async (req: Request , res: Response) => {
             })
         }
     } catch (error) {
+        logger.info(error)
         logger.error(error);
     }
 })

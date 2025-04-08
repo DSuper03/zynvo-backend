@@ -21,20 +21,8 @@ model User {
   isVerified    Boolean? @default(false)
   CreatePost    CreatePost[]
 
-  // verificationToken VerificationToken[]
 }
 
-// model VerificationToken {
-//   id        String      @id @default(uuid())
-//   userId    String
-//   token     String   @unique
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-//   expiryTime DateTime? 
-//   isVerified Boolean @default(false)
- 
-//   user User @relation(fields: [userId], references: [id])
-// }
 
 model CreatePost {
   id            Int      @id @default(autoincrement())
