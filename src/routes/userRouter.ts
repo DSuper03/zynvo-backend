@@ -5,6 +5,7 @@ import { newPWschema, signupSchema } from "../types/formtypes";
 import jwt from "jsonwebtoken"; 
 import dotenv from "dotenv";
 import { hashSync, compareSync } from "bcrypt-ts";
+import bcrypt from "bcrypt";
 import crypto from "crypto";
 import mail from "../utils/nodemailer";
 import { AuthMiddleware } from "../middleware/AuthMiddleware";
@@ -37,7 +38,7 @@ router.post("/signup", async (req: Request , res: Response) => {
             const id = resposne.id
             
        
-            if (compareSync(password, userPw)) {
+            if (bcrypt.compareSync(password, userPw)) {
                 
                 const token = jwt.sign({ id }, process.env.JWT_SECRET!)                
                 res.status(200).json({
@@ -53,7 +54,7 @@ router.post("/signup", async (req: Request , res: Response) => {
         }
         else {
            
-            const hashedPassword = hashSync(parsedData.data?.password as string, 10);
+            const hashedPassword = bcrypt.hashSync(parsedData.data?.password as string, 10);
             const vToken = genToken();
 
             const response = await prisma.user.create({
@@ -138,10 +139,12 @@ router.post("/verify", async (req: Request , res: Response) => {
 
 router.put("/reset-password",AuthMiddleware , async (req: Request , res: Response) => {
     const userID = req.id;
-    const password = req.body;
-    const newPassword =req.body;
+    // const password = req.body.password;
+    // const newPassword =req.body.newPassword;
+   
+    const {password, newPassword} = req.body
+    const parsedData = newPWschema.safeParse(req.body);
 
-    const parsedData = newPWschema.safeParse(newPassword);
 
     if(!parsedData.success) {
         res.json({
@@ -164,13 +167,13 @@ router.put("/reset-password",AuthMiddleware , async (req: Request , res: Respons
 
         const pw = response?.password as string
 
-        if(compareSync(password, pw)) {
+        if(bcrypt.compareSync(password, pw)) {
             const update = await prisma.user.update({
                 where : {
                     id : response?.id
                 }, 
                 data : {
-                    password : parsedData.data?.password
+                    password : bcrypt.hashSync(parsedData.data?.password as string, 10)
                 }
             })
 
@@ -189,7 +192,7 @@ router.put("/reset-password",AuthMiddleware , async (req: Request , res: Respons
 
 router.get("/", (req: Request,res: Response) => {
    try {
-    
+    console.log("working")
    } catch (error) {
     logger.error(error);
    }

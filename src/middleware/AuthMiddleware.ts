@@ -20,11 +20,11 @@ export const AuthMiddleware = async (
     next: NextFunction
   ) => {
     try { 
-         const autHHeader = req.headers.authorization;
-         if(!autHHeader || !autHHeader.startsWith("Bearer")) {
+         const authHeader = req.headers.authorization;
+         if(!authHeader || !authHeader.startsWith("Bearer ")) {
              throw new Error("Please login")
         }
-        const token = autHHeader.split(" ")[1]
+        const token = authHeader.split(" ")[1]
         if(!token) {
              res.status(401).json({
                 message: "Please signin ,Unauthorized"
