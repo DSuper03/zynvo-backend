@@ -1,3 +1,4 @@
+import { title } from "process";
 import { z } from "zod";
 
 export const signupSchema = z.object({
@@ -18,4 +19,7 @@ export const newPWschema = z.object({
     // .regex(/[\W_]/, "Password must contain at least one special character") 
 })
 
-
+export const postSchema = z.object({
+    title : z.string(), 
+    description : z.string(), 
+})

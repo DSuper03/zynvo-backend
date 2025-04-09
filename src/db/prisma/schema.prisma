@@ -19,20 +19,37 @@ model User {
   expiryToken   Int 
   ValidFor      Int
   isVerified    Boolean? @default(false)
+  clubId        String?
+  club          clubs?       @relation(fields: [clubId], references: [id])
   CreatePost    CreatePost[]
 
 }
 
+model clubs{
+  id String @id @default(uuid())
+  name String @unique 
+  collegeName String 
+  collegeId String @default(uuid()) @unique
+  description String?
+  profilePicUrl String?  
+
+  //relations 
+  posts    CreatePost[] 
+  members  User[]
+  //events[]
+}
 
 model CreatePost {
   id            Int      @id @default(autoincrement())
   title         String
   description   String
-  content       String
+  //content       String
   image         String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   published     Boolean  @default(false)
+  collegeId     String
+  club          clubs   @relation(fields: [collegeId], references: [collegeId])
   authorId      String
   author        User     @relation(fields: [authorId], references: [id])
 
@@ -45,3 +62,13 @@ model Author {
   email     String   @unique
   posts     CreatePost[]
 }
+
+model event {
+  id Int     @id @default(autoincrement())
+  EventName String @unique
+}
+
+// model comments {
+
+// }
+
