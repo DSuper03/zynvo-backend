@@ -1,3 +1,6 @@
+//this page can only be created if colleges itself register with us. 
+// no point of creating this now.
+
 import { Request, Response, Router } from "express";
 import { logger } from "../utils/logger";
 

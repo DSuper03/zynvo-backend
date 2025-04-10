@@ -9,8 +9,9 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String    @id   @default(cuid())
   email         String  @unique
+  collegeName   String  @unique @default("not joined")
   name          String?
   profileAvatar String?
   password      String
@@ -19,15 +20,16 @@ model User {
   expiryToken   Int 
   ValidFor      Int
   isVerified    Boolean? @default(false)
-  clubId        String?
+  clubName      String?  @default("No Club Joined")
+  clubId        String?  @default("No Club Joined")
   club          clubs?       @relation(fields: [clubId], references: [id])
   CreatePost    CreatePost[]
 
 }
 
-model clubs{
+model clubs{ // same names multiple colleges , same college multiple
   id String @id @default(uuid())
-  name String @unique 
+  name String 
   collegeName String 
   collegeId String @default(uuid()) @unique
   description String?
@@ -36,7 +38,7 @@ model clubs{
   //relations 
   posts    CreatePost[] 
   members  User[]
-  //events[]
+  events   event[]
 }
 
 model CreatePost {
@@ -64,8 +66,12 @@ model Author {
 }
 
 model event {
-  id Int     @id @default(autoincrement())
+  id String    @id @default(uuid())
   EventName String @unique
+  description String
+  clubName  String
+  clubId    String
+  club      clubs  @relation(fields: [clubId], references: [id])
 }
 
 // model comments {
