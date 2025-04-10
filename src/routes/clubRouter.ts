@@ -15,6 +15,7 @@ router.post("/club", async (req:Request, res:Response) => {
     }
 })
 
+//query korbo, params na , tahole id , name , duto diye e khoja jabe 
 router.get("/club/:id", async (req:Request, res:Response) => {
   try {
     

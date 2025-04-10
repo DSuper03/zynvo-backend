@@ -91,8 +91,35 @@ router.post("/create",AuthMiddleware, async (req:Request, res:Response) => {
 })
 
 router.put("/edit/:id",AuthMiddleware, async (req:Request, res:Response) => {
-
+    const Postid = req.params.id 
+    const {title , description } = req.body
+      const parsedData = postSchema.safeParse(req.body);
+      if(!parsedData.success) {
+        res.json({
+            msg : "incorrect format"
+        })
+      }
       try {
+        //add updation of images later
+        const response = await prisma.createPost.update({
+            where : {
+                id : Postid
+            },
+            data : {
+                title : parsedData.data?.title,
+                description : parsedData.data?.description
+            }
+        })
+
+        if(!response) {
+            res.status(500).json({
+                msg : "internal server error"
+            })
+        }
+
+        res.json(200).json({
+            msg : "post updated, changes will reflect shortly"
+        })
         
       } catch (error) {
         logger.error(error);
@@ -137,6 +164,22 @@ router.get("/all", async (req:Request, res:Response) => {
 router.get("/get/:id",AuthMiddleware, async (req:Request, res:Response) => {
     const { id } = req.params;
     try {
+        const response = await prisma.createPost.findFirst({
+            where : {
+                id : id
+            }
+        })
+
+        if(!response) {
+            res.json({
+                msg : "no such post found"
+            })
+        }
+
+        res.status(200).json({
+            msg  : "post fetched", 
+            response // choose what you want to send to frontend
+        })
         
     } catch (error) {
         logger.error(error);
@@ -150,6 +193,21 @@ router.get("/get/:id",AuthMiddleware, async (req:Request, res:Response) => {
 router.delete("/delete/:id",AuthMiddleware, async (req:Request, res:Response) => {
     const { id } = req.params;
     try {
+        const response = await prisma.createPost.delete({
+            where : {
+                id : id
+            }
+        })
+
+        if(!response) {
+            res.json({
+                msg : "no such post found"
+            })
+        }
+
+        res.status(200).json({
+            msg  : "post deleted" // choose what you want to send to frontend
+        })
         
     } catch (error) {
         logger.error(error);
