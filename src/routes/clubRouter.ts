@@ -2,8 +2,11 @@ import { Request, Response, Router } from "express";
 import { logger } from "../utils/logger";
 import prisma from "../db/db";
 import { ClubSchema } from "../types/formtypes";
+import { AuthMiddleware } from "../middleware/AuthMiddleware";
 
 const router = Router();
+
+router.use(AuthMiddleware)
 
 router.post("/club", async (req:Request, res:Response) => {
 //include pfp later
@@ -60,7 +63,7 @@ if(!parsedData.success) {
     }
 })
 
-//query korbo, params na , tahole id , name , duto diye e khoja jabe 
+//query korbo, params na , tahole id , name , collegeName diye o khoja jabe 
 router.get("/club", async (req:Request, res:Response) => {
   const id = req.query.id
   const name = req.query.name

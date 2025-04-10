@@ -29,3 +29,8 @@ export const ClubSchema = z.object({
     collegeName : z.string(),
     description : z.string().optional()
 })
+
+export const EventSchema = z.object({
+    eventName : z.string(), 
+    description : z.string().optional()
+})

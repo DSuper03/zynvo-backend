@@ -6,6 +6,7 @@ import { postRouter } from "./routes/postRouter";
 import { limiter } from "./utils/rate-limiter";
 import { collageRouter } from "./routes/collageRouter";
 import { AuthMiddleware } from "./middleware/AuthMiddleware";
+import { EventRouter } from "./routes/eventRouter";
 
 const app = express();
 const PORT = 3000;
@@ -19,7 +20,7 @@ app.use("api/v1/college", AuthMiddleware);
 
 app.use("/api/v1/user", userRouter);
 app.use("/api/v1/post", postRouter);
-app.use("/api/v1/college", collageRouter);
+app.use("/api/v1/events", EventRouter);
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

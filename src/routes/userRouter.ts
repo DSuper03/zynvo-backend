@@ -18,7 +18,7 @@ const genToken =() => {
 
 
 router.post("/signup", async (req: Request , res: Response) => {
-    const {name, email, password} = req.body; 
+    const {name, email, password, collegeName} = req.body; 
     const parsedData = signupSchema.safeParse(req.body) 
       
     if(!parsedData.success) {
@@ -61,7 +61,8 @@ router.post("/signup", async (req: Request , res: Response) => {
                 data : {
                     email : parsedData.data?.email as string,
                     name : parsedData.data?.name, 
-                    password : hashedPassword, 
+                    password : hashedPassword,
+                    collegeName : collegeName, 
                     vToken : vToken,
                     expiryToken: Math.floor(Date.now() / 1000),
                     ValidFor : 86400000       
@@ -190,8 +191,44 @@ router.put("/reset-password",AuthMiddleware , async (req: Request , res: Respons
 })
 
 
-router.get("/", (req: Request,res: Response) => {
+router.post("/joinClub/:id",AuthMiddleware, async (req: Request,res: Response) => {
+    // maybe allow users to join multiple clubs. 
+   const ClubId = req.params.id;
+   const userId = req.id;
    try {
+    const club = await prisma.clubs.findFirst({
+        where : {
+            id : ClubId
+        }, 
+        select : {
+            name : true
+        }
+    })
+
+    if(!club) {
+        res.json({
+            msg  : "no club found"
+        })
+    }
+
+    const clubName = club?.name as string
+
+    const JoinClub = await prisma.user.update({
+         where : {
+            id : userId
+         }, 
+         data : {
+            clubName : clubName,
+            clubId : ClubId
+         }
+    })
+
+    if(JoinClub) {
+        res.status(200).json({
+            msg : "yay club joined"
+        })
+    }
+
     console.log("working")
    } catch (error) {
     logger.error(error);
