@@ -69,10 +69,11 @@ router.post("/signup", async (req: Request , res: Response) => {
                 }
             })
             
-            const url = `${process.env.FE_URL}/verify`
+            const isVerified = response.isVerified
+            const url = `${process.env.FE_URL}/verify?${vToken}`
             await mail(parsedData.data.email, "Verification email for zynvo", `Please click this link to verify this email : ${url}`)
             const id = response.id
-            const token = jwt.sign({id}, process.env.JWT_SECRET!);
+            const token = jwt.sign({id, isVerified}, process.env.JWT_SECRET!);
             res.status(200).json({
                 msg : "account created", 
                 token
@@ -119,6 +120,11 @@ router.post("/verify", async (req: Request , res: Response) => {
                     isVerified : true
                 }
             })
+
+            const id = Res.id;
+            const isVerified = Res.isVerified
+
+            const token = jwt.sign({id, isVerified}, process.env.JWT_SECRET!);
 
             if(!Res) {
                 res.status(500).json({
