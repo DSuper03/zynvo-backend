@@ -1,3 +1,4 @@
+//tested
 import { Request, Response, Router } from "express";
 import { logger } from "../utils/logger";
 import prisma from "../db/db";
@@ -5,8 +6,17 @@ import { ClubSchema } from "../types/formtypes";
 import { AuthMiddleware } from "../middleware/AuthMiddleware";
 
 const router = Router();
+const Verification = (req:Request, res:Response) => {
+  if(!req.isVerified) {
+    res.status(400).json({
+      msg : "please verify yourself first"
+    })
+  }
+}
 
+router.use(Verification)
 router.use(AuthMiddleware)
+
 
 router.post("/club", async (req:Request, res:Response) => {
 //include pfp later
@@ -18,6 +28,8 @@ if(!parsedData.success) {
     msg : "wrong format for creating a club"
   })
 }
+
+
     try {
         // they can still bypass this by changing the casing of characters, Validate the names of club in lowerCase
         //cannot make changes in database for this 
@@ -64,7 +76,7 @@ if(!parsedData.success) {
 })
 
 //query korbo, params na , tahole id , name , collegeName diye o khoja jabe 
-router.get("/club", async (req:Request, res:Response) => {
+router.get("/getClub", async (req:Request, res:Response) => {
   const id = req.query.id
   const name = req.query.name
   const collegeName = req.query.collegeName

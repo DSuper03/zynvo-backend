@@ -20,8 +20,8 @@ model User {
   expiryToken   Int 
   ValidFor      Int
   isVerified    Boolean? @default(false)
-  clubName      String?  @default("No Club Joined")
-  clubId        String?  @default("No Club Joined")
+  clubName      String?  
+  clubId        String?  
   club          clubs?       @relation(fields: [clubId], references: [id])
   CreatePost    CreatePost[]
 
@@ -34,7 +34,7 @@ model clubs{ // same names multiple colleges , same college multiple
   collegeId String @default(uuid()) @unique
   description String?
   profilePicUrl String?  
-
+  // is Accepted boolean default false true how , will be changed by us 
   //relations 
   posts    CreatePost[] 
   members  User[]
@@ -54,7 +54,7 @@ model CreatePost {
   club          clubs   @relation(fields: [collegeId], references: [collegeId])
   authorId      String
   author        User     @relation(fields: [authorId], references: [id])
-
+  //event type in future
   Author Author[]
 }
 

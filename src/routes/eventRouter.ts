@@ -1,3 +1,4 @@
+//tested
 import { Request, Response, Router } from "express";
 import { logger } from "../utils/logger";
 import prisma from "../db/db";
@@ -5,7 +6,17 @@ import {  EventSchema } from "../types/formtypes";
 import { AuthMiddleware } from "../middleware/AuthMiddleware";
 
 
+
 const router = Router();
+const Verification = (req:Request, res:Response) => {
+  if(!req.isVerified) {
+    res.status(400).json({
+      msg : "please verify yourself first"
+    })
+  }
+}
+
+router.use(Verification)
 
 router.post("/event",AuthMiddleware, async (req:Request, res:Response) => {
 //include pfp later
@@ -47,7 +58,7 @@ try {
         if(response) {
             res.status(200).json({
                 msg  : "event created", 
-                if : response.id
+                id : response.id
             })
 
         } else {

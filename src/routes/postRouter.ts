@@ -1,3 +1,4 @@
+//tested
 import { Request, Response, Router } from "express";
 import { logger } from "../utils/logger";
 import { AuthMiddleware } from "../middleware/AuthMiddleware";
@@ -5,7 +6,15 @@ import prisma from "../db/db";
 import { postSchema } from "../types/formtypes";
 
 const router = Router();
+const Verification = (req:Request, res:Response) => {
+  if(!req.isVerified) {
+    res.status(400).json({
+      msg : "please verify yourself first"
+    })
+  }
+}
 
+router.use(Verification)
 
 router.post("/create",AuthMiddleware, async (req:Request, res:Response) => {
     //add collegeName and EventType to databases
