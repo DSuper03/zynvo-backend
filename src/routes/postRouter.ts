@@ -14,7 +14,7 @@ const Verification = (req:Request, res:Response) => {
   }
 }
 
-router.use(Verification)
+//router.use(Verification)
 
 router.post("/create",AuthMiddleware, async (req:Request, res:Response) => {
     //add collegeName and EventType to databases

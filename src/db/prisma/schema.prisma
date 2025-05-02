@@ -11,7 +11,7 @@ datasource db {
 model User {
   id            String    @id   @default(cuid())
   email         String  @unique
-  collegeName   String  @unique @default("not joined")
+  collegeName   String  @default("not joined")
   name          String?
   profileAvatar String?
   password      String
