@@ -22,6 +22,8 @@ model User {
   isVerified    Boolean? @default(false)
   clubName      String?  
   clubId        String?  
+  eventAttended String?
+  event         event?  @relation(fields: [eventAttended], references: [id])
   club          clubs?       @relation(fields: [clubId], references: [id])
   CreatePost    CreatePost[]
 
@@ -55,23 +57,30 @@ model CreatePost {
   authorId      String
   author        User     @relation(fields: [authorId], references: [id])
   //event type in future
-  Author Author[]
+ 
 }
 
-model Author {
+model speakers {
   id        Int      @id @default(autoincrement())
   name      String
   email     String   @unique
-  posts     CreatePost[]
+  eventId   String 
+  event     event    @relation(fields: [eventId], references: [id])
 }
 
 model event {
   id String    @id @default(uuid())
+  eventHeaderImage String? @default("none")
   EventName String @unique
   description String
+  prizes String @default("no prizes given")
   clubName  String
   clubId    String
+  createdAt DateTime  @default(now())
+  endDate   DateTime?  
   club      clubs  @relation(fields: [clubId], references: [id])
+  speakers  speakers[]
+  attendees User[]
 }
 
 // model comments {
