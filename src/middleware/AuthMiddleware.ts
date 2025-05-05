@@ -35,7 +35,7 @@ export const AuthMiddleware = async (
         try {
             const decoded = jwt.verify(token, process.env.JWT_SECRET!)
             
-            if (typeof decoded === "object" && "id" in decoded && "isVerified" in decoded) {
+            if (typeof decoded === "object" && "id" in decoded ) {
                 req.id = (decoded as jwt.JwtPayload).id as string;
                 req.isVerified = (decoded as jwt.JwtPayload).isVerified as boolean;
                 next();

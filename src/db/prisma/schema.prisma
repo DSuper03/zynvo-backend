@@ -22,8 +22,8 @@ model User {
   isVerified    Boolean? @default(false)
   clubName      String?  
   clubId        String?  
-  eventAttended String?
-  event         event?  @relation(fields: [eventAttended], references: [id])
+  eventAttended userEvents[]
+  // event         event?  @relation(fields: [eventAttended], references: [id])
   club          clubs?       @relation(fields: [clubId], references: [id])
   CreatePost    CreatePost[]
 
@@ -62,6 +62,7 @@ model CreatePost {
 
 model speakers {
   id        Int      @id @default(autoincrement())
+  profilePic String? 
   name      String
   email     String   @unique
   eventId   String 
@@ -80,10 +81,15 @@ model event {
   endDate   DateTime?  
   club      clubs  @relation(fields: [clubId], references: [id])
   speakers  speakers[]
-  attendees User[]
+  attendees userEvents[]
 }
 
-// model comments {
+model userEvents {
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  event     event   @relation(fields: [eventId], references: [id])
+  eventId   String
+  joinedAt  DateTime @default(now())
 
-// }
-
+  @@id([userId, eventId]) // Composite primary key
+}

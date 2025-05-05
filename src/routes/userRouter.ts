@@ -5,7 +5,6 @@ import { logger } from "../utils/logger";
 import { newPWschema, signupSchema } from "../types/formtypes";
 import jwt from "jsonwebtoken"; 
 import dotenv from "dotenv";
-import { hashSync, compareSync } from "bcrypt-ts";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import mail from "../utils/nodemailer";
@@ -46,11 +45,14 @@ router.post("/signup", async (req: Request , res: Response) => {
                     msg : "login success",
                     token
                 })
+                return
             } else {
               
                 res.status(401).json({
-                    msg: "Invalid email or password"
+                    msg: "Invalid email or password",
+                    token : "no token"
                 });
+                return
             }
         }
         else {
@@ -74,7 +76,7 @@ router.post("/signup", async (req: Request , res: Response) => {
             const url = `${process.env.FE_URL}/verify?${vToken}`
             await mail(parsedData.data.email, "Verification email for zynvo", `Please click this link to verify this email : ${url}`)
             const id = response.id
-            const token = jwt.sign({id, isVerified}, process.env.JWT_SECRET!);
+            const token = jwt.sign({id}, process.env.JWT_SECRET!);
             res.status(200).json({
                 msg : "account created", 
                 token
@@ -194,6 +196,52 @@ router.put("/reset-password",AuthMiddleware , async (req: Request , res: Respons
     } catch (error) {
         logger.info(error)
         logger.error(error);
+    }
+})
+
+router.get("/getUser", AuthMiddleware, async (req: Request, res:Response) => {
+    const userId = req.id;
+    try {
+        const user = await prisma.user.findUnique({
+            where : {
+                id : userId
+            }, 
+            select : {
+                name : true,
+                clubName : true,
+                email : true,
+                isVerified : true,
+                eventAttended : {
+                    where : {
+                        userId : userId
+                    }, 
+                    select : {
+                        event : {
+                            select : {
+                                EventName : true,
+                                id : true
+                            }
+                        }
+                    }
+                }
+            }
+        })
+
+     
+        if(!user) {
+            res.status(404)
+            console.log("error")
+            return;
+        }else {
+            res.status(200).json({
+                user
+            })
+            return
+        }
+
+
+    } catch (error) {
+        
     }
 })
 
