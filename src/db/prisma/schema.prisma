@@ -8,6 +8,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum clubType  {
+  Technology 
+  Cultural
+  Business
+  Social
+  Literature
+  Design
+  General
+}
+
+
 model User {
   id            String    @id   @default(cuid())
   email         String  @unique
@@ -32,16 +43,22 @@ model User {
 model clubs{ // same names multiple colleges , same college multiple
   id String @id @default(uuid())
   name String 
+  founderEmail String @default("none")
+  facultyEmail String @default("none")
   collegeName String 
   collegeId String @default(uuid()) @unique
-  description String?
-  profilePicUrl String?  
+  type  clubType @default(General)
+  description String
+  requirements String? @default("none")
+  profilePicUrl String? 
+  clubContact String @default("none")
   // is Accepted boolean default false true how , will be changed by us 
   //relations 
   posts    CreatePost[] 
   members  User[]
   events   event[]
 }
+
 
 model CreatePost {
   id            String      @id @default(uuid())

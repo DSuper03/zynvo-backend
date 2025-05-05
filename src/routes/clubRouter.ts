@@ -20,7 +20,7 @@ router.use(AuthMiddleware)
 
 router.post("/club", async (req:Request, res:Response) => {
   //include pfp later
-  const { name , collegeName, description} = req.body
+  const { name , collegeName, description, type, FounderEmail, clubContact, requirements, facultyEmail} = req.body
   const parsedData = ClubSchema.safeParse(req.body)
   const userId = req.id
   if(!parsedData.success) {
@@ -28,7 +28,6 @@ router.post("/club", async (req:Request, res:Response) => {
       msg : "wrong format for creating a club"
     })
   }
-  
   
       try {
         const college = await prisma.user.findFirst({
@@ -38,6 +37,18 @@ router.post("/club", async (req:Request, res:Response) => {
             collegeName : true
           }
         })
+
+        const founder = await prisma.user.findUnique({
+          where : {
+            email : FounderEmail
+          }
+        })
+
+        if(!founder) {
+          res.status(402).json({
+            msg : "founder not found , ask him to register"
+          })
+        }
 
         if(college?.collegeName.toLowerCase() !== collegeName.toLowerCase() ) {
           res.status(404).json({msg : "you are not associated with this college"})
@@ -71,7 +82,12 @@ router.post("/club", async (req:Request, res:Response) => {
             data : {
               name : parsedData.data?.name as string,
               collegeName : parsedData.data?.collegeName as string,
-              description : parsedData.data?.description as string || ""
+              description : parsedData.data?.description as string || "",
+              type : type, 
+              founderEmail : FounderEmail,
+              clubContact : clubContact,
+              requirements : requirements,
+              facultyEmail : facultyEmail
             }
           })
   
