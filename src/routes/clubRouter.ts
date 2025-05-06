@@ -200,4 +200,20 @@ router.get("/getClub", async (req:Request, res:Response) => {
     logger.error(error);
   }
 })
+
+
+router.get("/getAll", AuthMiddleware, async(req: Request, res: Response) => {
+  try {
+    const resp = await prisma.clubs.findMany({})
+    if(resp) {
+      res.status(200).json({
+        resp
+      })
+      return;
+    }
+  } catch (error) {
+    console.log(error)
+  }
+})
+
 export const clubRouter = router;
