@@ -128,7 +128,7 @@ router.get("/getClub", async (req:Request, res:Response) => {
           id : true, 
           name : true, 
           collegeName : true, 
-          description : true,
+          description : true
           // add profile pic later
         }
       })
@@ -144,6 +144,7 @@ router.get("/getClub", async (req:Request, res:Response) => {
         response
       })
 
+      return;
 
     }  else if(name) {
 
@@ -170,6 +171,8 @@ router.get("/getClub", async (req:Request, res:Response) => {
         msg : "clubs found, add college filter to sort out", 
         response
       })
+
+      return;
     } else if (name && collegeName) {
       const response = await prisma.clubs.findFirst({
         where : {

@@ -109,4 +109,32 @@ router.get("/event/:id", AuthMiddleware, async (req:Request, res:Response) => {
     logger.error(error);
   }
 })
+
+router.get("/eventByClub/:id", AuthMiddleware, async (req:Request, res:Response) => {
+ const clubId = req.params.id;
+
+ try {
+  const event = await prisma.event.findMany({
+    where : {
+      clubId : clubId
+    }
+  })
+
+  if(event) {
+    res.status(200).json({
+      msg : "fetched",
+      event , // [{}, {}, {}]      
+    })
+    return ;
+  } else {
+    res.status(404).json({
+      msg : "no club found"
+    })
+    return
+  }
+ } catch (error) {
+   console.log(error);
+ }
+})
+
 export const EventRouter = router;
