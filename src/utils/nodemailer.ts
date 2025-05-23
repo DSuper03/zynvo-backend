@@ -1,30 +1,29 @@
-import node from 'nodemailer';
+import dotenv from "dotenv"
+import sgMail from '@sendgrid/mail'
+dotenv.config()
+
+const Api_key = process.env.SENDGRID_API_KEY as string
 
 export default async function mail(
-  email: string,
-  subject: string,
-  html: string
+name : string,
+email: string,
+subject: string,
+html: string
 ) {
-  try {
-    const transporter = node.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
+sgMail.setApiKey(Api_key)
+const msg = {
+  to: email, // Change to your recipient
+  from: 'Dsuper03.dev@gmail.com', // Change to your verified sender
+  subject: subject,
+  text: `Zynvo it.`,
+  html: html,
+}
 
-    const info = await transporter.sendMail({
-      from: process.env.SMTP_FROM,
-      to: email,
-      subject,
-      html,
-    });
+const response = await sgMail.send(msg)
 
-    console.log('Email sent successfully:', info);
-  } catch (error) {
-    console.error('Error sending email:', error);
-  }
+if(response){
+  console.log("Sent email")
+} else {
+  console.log("some error occured")
+}
 }

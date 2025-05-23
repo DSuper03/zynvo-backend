@@ -72,11 +72,26 @@ router.post('/signup', async (req: Request, res: Response) => {
       });
 
       const isVerified = response.isVerified;
-      const url = `${process.env.FE_URL}/verify?${vToken}`;
+      const url = `https://zynvo.social/verification-email?${vToken}`;
       await mail(
+        parsedData.data.name,
         parsedData.data.email,
-        'Verification email for zynvo',
-        `Please click this link to verify this email : ${url}`
+        'One click away from greatness (seriously, just one)',
+        `Hey there! ${name} 👋
+        <br>
+         Welcome to Zynvo! You've got excellent taste in platforms (we're not biased at all).
+         We just need to make sure you're not a robot trying to take over the world. 
+        <br>
+        <strong>Click that Link and boom – you're officially part of the cool kids club : ${url}</strong>
+        <br>
+        Questions? Just reply to this email.
+        <br>
+        Welcome aboard!
+        <br>
+        The Zynvo Team 🚀
+        <br>
+        PS : P.S. This link expires in 24 hours, so don't overthink it like choosing a Netflix show.
+        `
       );
       const id = response.id;
       const token = jwt.sign({ id }, process.env.JWT_SECRET!);
@@ -91,6 +106,14 @@ router.post('/signup', async (req: Request, res: Response) => {
     res.status(500).json({ msg: 'internal server error' });
   }
 });
+
+
+router.post("/test-email", async(req : Request, res: Response) => {
+  await mail("mohak", "mohakchakraborty2007@outlook.com", "test email", "test email html")
+  res.json("email sent");
+})
+
+
 
 router.post('/verify', async (req: Request, res: Response) => {
   const vToken = req.query.vToken as string;
