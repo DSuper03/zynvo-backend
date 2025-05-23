@@ -138,94 +138,93 @@ router.get(
   }
 );
 
-router.get('/all', async(req : Request, res: Response) => {
-
+router.get('/all', async (req: Request, res: Response) => {
   try {
-    const response =  await prisma.event.findMany({
-      include : {
-        attendees : {
-          select : {
-            user : {
-              select : {
-                name : true
-              }
-            }
-          }
-        }
-      }
-    })
-    if(!response) {
+    const response = await prisma.event.findMany({
+      include: {
+        attendees: {
+          select: {
+            user: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!response) {
       res.status(404).json({
-        msg : "No events found"
-      })
-      return
+        msg: 'No events found',
+      });
+      return;
     }
     res.status(200).json({
-      msg : "found", 
-      response
-    })
+      msg: 'found',
+      response,
+    });
   } catch (error) {
     res.status(500).json({
-      msg : "internal server error"
-    })
+      msg: 'internal server error',
+    });
   }
+});
 
-})
-
-
-router.post('registerEvent', AuthMiddleware, async(req: Request, res: Response) => {
-  const userId = req.id;
-  if(!userId) {
-    res.status(402).json({
-      msg : "invalid user"
-    })
-    return;
-  }
-
-  const {eventId} = req.body
-  try {
-
-    const alreadyRegistered = await prisma.userEvents.findUnique({
-      where : {
-       userId_eventId : {
-        userId : userId,
-        eventId : eventId
-       }
-      }
-    })
-
-    if(alreadyRegistered) {
+router.post(
+  'registerEvent',
+  AuthMiddleware,
+  async (req: Request, res: Response) => {
+    const userId = req.id;
+    if (!userId) {
       res.status(402).json({
-        msg : "already registered bro"
-      })
-      return
+        msg: 'invalid user',
+      });
+      return;
     }
 
-    const response = await prisma.userEvents.create({
-      data : {
-        userId : userId,
-        eventId : eventId
+    const { eventId } = req.body;
+    try {
+      const alreadyRegistered = await prisma.userEvents.findUnique({
+        where: {
+          userId_eventId: {
+            userId: userId,
+            eventId: eventId,
+          },
+        },
+      });
+
+      if (alreadyRegistered) {
+        res.status(402).json({
+          msg: 'already registered bro',
+        });
+        return;
       }
-    })
 
-    if(response) {
-      res.status(200).json({
-        msg : "registered successfully"
-      })
-      return
-    } else {
-      res.status(402).json({
-        msg : "please try again later"
-      })
+      const response = await prisma.userEvents.create({
+        data: {
+          userId: userId,
+          eventId: eventId,
+        },
+      });
+
+      if (response) {
+        res.status(200).json({
+          msg: 'registered successfully',
+        });
+        return;
+      } else {
+        res.status(402).json({
+          msg: 'please try again later',
+        });
+      }
+    } catch (error) {
+      res.status(500).json({
+        msg: 'internal server error',
+      });
+
+      console.log(error);
     }
-  } catch (error) {
-    res.status(500).json({
-      msg : "internal server error"
-    })
-
-    console.log(error);
   }
-})
-
+);
 
 export const EventRouter = router;

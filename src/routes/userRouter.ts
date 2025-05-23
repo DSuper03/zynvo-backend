@@ -18,7 +18,7 @@ const genToken = () => {
 
 router.post('/signup', async (req: Request, res: Response) => {
   const { name, email, password, collegeName } = req.body;
-  const avatarUrl = req.body.avatarUrl
+  const avatarUrl = req.body.avatarUrl;
   const parsedData = signupSchema.safeParse(req.body);
 
   if (!parsedData.success) {
@@ -64,7 +64,7 @@ router.post('/signup', async (req: Request, res: Response) => {
           name: parsedData.data?.name,
           password: hashedPassword,
           collegeName: collegeName,
-          profileAvatar : avatarUrl,
+          profileAvatar: avatarUrl,
           vToken: vToken,
           expiryToken: Math.floor(Date.now() / 1000),
           ValidFor: 86400000,
@@ -214,7 +214,7 @@ router.get('/getUser', AuthMiddleware, async (req: Request, res: Response) => {
         id: userId,
       },
       select: {
-        profileAvatar : true,
+        profileAvatar: true,
         name: true,
         clubName: true,
         email: true,
