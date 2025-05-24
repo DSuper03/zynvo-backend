@@ -72,7 +72,7 @@ router.post('/signup', async (req: Request, res: Response) => {
       });
 
       const isVerified = response.isVerified;
-      const url = `https://zynvo.social/verification-email?${vToken}`;
+      const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
       await mail(
         parsedData.data.name,
         parsedData.data.email,
@@ -90,14 +90,13 @@ router.post('/signup', async (req: Request, res: Response) => {
         <br>
         The Zynvo Team 🚀
         <br>
-        PS : P.S. This link expires in 24 hours, so don't overthink it like choosing a Netflix show.
+        P.S. This link expires in 24 hours, so don't overthink it like choosing a Netflix show.
         `
       );
       const id = response.id;
       const token = jwt.sign({ id }, process.env.JWT_SECRET!);
       res.status(200).json({
-        msg: 'account created',
-        token,
+        msg: 'account created'
       });
     }
   } catch (error: any) {
@@ -107,9 +106,10 @@ router.post('/signup', async (req: Request, res: Response) => {
   }
 });
 
-
-router.post("/test-email", async(req : Request, res: Response) => {
-  await mail("mohak", "mohakchakraborty2007@outlook.com", "test email", "test email html")
+// will write it later
+router.post("/ResendEmail", async(req : Request, res: Response) => {
+  const email = req.query.email as string
+  await mail("mohak", "mohakchakraborty2007@outlook.com", "test email", `this verification email is resent to you`)
   res.json("email sent");
 })
 
@@ -117,7 +117,7 @@ router.post("/test-email", async(req : Request, res: Response) => {
 
 router.post('/verify', async (req: Request, res: Response) => {
   const vToken = req.query.vToken as string;
-
+  console.log("1")
   if (!vToken) {
     res.status(404).json({
       msg: 'bad response, invalid token',
@@ -135,12 +135,18 @@ router.post('/verify', async (req: Request, res: Response) => {
       res.status(400).json({
         msg: 'no user found, Invalid token',
       });
+      return;
     }
 
     const expTime = response?.expiryToken as number;
-    const currentTime = Date.now();
+    const currentTime = Math.floor(Date.now()/1000);
     const ValidFor = response?.ValidFor as number;
+    // console.log(currentTime)
+    // console.log(ValidFor)
+    // console.log(currentTime - expTime)
+
     if (currentTime - expTime <= ValidFor) {
+      console.log(2)
       const Res = await prisma.user.update({
         where: {
           id: response?.id,
@@ -159,11 +165,17 @@ router.post('/verify', async (req: Request, res: Response) => {
         res.status(500).json({
           msg: 'internal server error, try again',
         });
+        return;
       }
 
       res.status(200).json({
         msg: 'Verified successfully',
+        token
       });
+    } else {
+      res.status(400).json({
+        msg : "expired"
+      })
     }
   } catch (error) {
     logger.error(error);
