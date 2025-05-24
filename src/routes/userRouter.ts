@@ -124,7 +124,6 @@ router.post('/verify', async (req: Request, res: Response) => {
     });
   }
   try {
-    //need to setup smtp server for email / TIP: USE SENDGRID
     const response = await prisma.user.findFirst({
       where: {
         vToken: vToken,
@@ -145,7 +144,7 @@ router.post('/verify', async (req: Request, res: Response) => {
     // console.log(ValidFor)
     // console.log(currentTime - expTime)
 
-    if (currentTime - expTime <= ValidFor) {
+    if (currentTime - expTime <= (ValidFor / 1000)) {
       console.log(2)
       const Res = await prisma.user.update({
         where: {
