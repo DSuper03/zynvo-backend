@@ -43,7 +43,10 @@ model User {
 model clubs{ // same names multiple colleges , same college multiple
   id String @id @default(uuid())
   name String 
-  founderEmail String @default("none")
+  founderEmail String @default("none") @unique
+  coremember1  String? @default("none")
+  coremember2  String? @default("none")
+  coremember3  String? @default("none")
   facultyEmail String @default("none")
   collegeName String 
   collegeId String @default(uuid()) @unique
@@ -80,6 +83,7 @@ model CreatePost {
 model speakers {
   id        Int      @id @default(autoincrement())
   profilePic String? 
+  about      String
   name      String
   email     String   @unique
   eventId   String 
@@ -88,10 +92,18 @@ model speakers {
 
 model event {
   id String    @id @default(uuid())
+  posterUrl String? @default("")
+  EventMode String @default("Hybrid") //online, offline, Hybrid
+  EventType String @default("general") // give the options on frontend
   eventHeaderImage String? @default("none")
   EventName String @unique
   description String
   prizes String @default("no prizes given")
+  TeamSize Int @default(1)
+  Venue String @default("")
+  EventUrl String? @default("")
+  EventDuration String? @default("")
+  applicationStatus String @default("open") // open/ closed , frontend par button hoga jo ki core member click krke isko close kr skta hai as desired.
   clubName  String
   clubId    String
   createdAt DateTime  @default(now())
@@ -106,6 +118,7 @@ model userEvents {
   userId    String
   event     event   @relation(fields: [eventId], references: [id])
   eventId   String
+  uniquePassId String? @default("none")
   joinedAt  DateTime @default(now())
 
   @@id([userId, eventId]) // Composite primary key
