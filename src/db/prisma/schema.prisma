@@ -102,12 +102,17 @@ model event {
   TeamSize Int @default(1)
   Venue String @default("")
   EventUrl String? @default("")
-  EventDuration String? @default("")
   applicationStatus String @default("open") // open/ closed , frontend par button hoga jo ki core member click krke isko close kr skta hai as desired.
   clubName  String
   clubId    String
+  university String 
   createdAt DateTime  @default(now())
-  endDate   DateTime?  
+  startDate String 
+  endDate   String?
+  collegeStudentsOnly Boolean @default(true)  
+  participationFee Boolean @default(false)
+  contactEmail String 
+  contactPhone Int?
   club      clubs  @relation(fields: [clubId], references: [id])
   speakers  speakers[]
   attendees userEvents[]

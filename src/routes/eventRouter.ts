@@ -19,7 +19,7 @@ const Verification = (req: Request, res: Response) => {
 router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
   //include pfp later
   // prizes not added here
-  const { eventName, description, EventMode, EventType, TeamSize, Venue, EventUrl, EventDuration } = req.body;
+  const { eventName, description,eventStartDate, eventEndDate, eventMode, eventType, maxTeamSize, venue, eventWebsite,university,  collegeStudentsOnly, contactEmail, contactPhone, noParticipationFee, prizes } = req.body;
   const userId = req.id;
   const parsedData = EventSchema.safeParse(req.body);
 
@@ -64,7 +64,8 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
     },
     select : {
       name : true,
-      id : true
+      id : true,
+      collegeName : true
     }
   })
 
@@ -80,14 +81,21 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
       data: {
         EventName: parsedData.data?.eventName as string,
         description: parsedData.data?.description as string,
-        EventMode : EventMode,
-        EventDuration : EventDuration,
-        EventType : EventType,
-        EventUrl : EventUrl ? EventUrl : "",
-        Venue : Venue,
-        TeamSize : TeamSize,
+        EventMode : eventMode,
+        EventType : eventType,
+        EventUrl : eventWebsite ? eventWebsite : "",
+        Venue : venue,
+        TeamSize : maxTeamSize,
         clubName: club?.name as string,
         clubId: club?.id as string,
+        prizes : prizes ? prizes : "",
+        startDate : eventStartDate,
+        endDate : eventEndDate,
+        university : university ? university.toLowerCase() : (club.collegeName).toLowerCase(),
+        collegeStudentsOnly : collegeStudentsOnly,
+        contactEmail : contactEmail,
+        contactPhone : contactPhone,
+        participationFee : noParticipationFee
       },
     });
 
