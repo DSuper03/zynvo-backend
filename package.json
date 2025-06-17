@@ -25,6 +25,7 @@
     "@types/express": "^5.0.1",
     "@types/nodemailer": "^6.4.17",
     "bcrypt-ts": "^6.0.0",
+    "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "dotenv": "^16.4.7",

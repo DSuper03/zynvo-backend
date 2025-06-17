@@ -127,13 +127,6 @@ router.get(
           where: {
             id: Eventid,
           },
-          select: {
-            id: true,
-            EventName: true,
-            clubName: true,
-            description: true,
-            // add pics later
-          },
         });
 
         if (!response) {
