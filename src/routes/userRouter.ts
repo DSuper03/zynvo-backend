@@ -96,7 +96,7 @@ router.post('/signup', async (req: Request, res: Response) => {
       const id = response.id;
       const token = jwt.sign({ id }, process.env.JWT_SECRET!);
       res.status(200).json({
-        msg: 'account created'
+        msg: 'account created',
       });
     }
   } catch (error: any) {
@@ -107,17 +107,20 @@ router.post('/signup', async (req: Request, res: Response) => {
 });
 
 // will write it later
-router.post("/ResendEmail", async(req : Request, res: Response) => {
-  const email = req.query.email as string
-  await mail("mohak", "mohakchakraborty2007@outlook.com", "test email", `this verification email is resent to you`)
-  res.json("email sent");
-})
-
-
+router.post('/ResendEmail', async (req: Request, res: Response) => {
+  const email = req.query.email as string;
+  await mail(
+    'mohak',
+    'mohakchakraborty2007@outlook.com',
+    'test email',
+    `this verification email is resent to you`
+  );
+  res.json('email sent');
+});
 
 router.post('/verify', async (req: Request, res: Response) => {
   const vToken = req.query.vToken as string;
-  console.log("1")
+  console.log('1');
   if (!vToken) {
     res.status(404).json({
       msg: 'bad response, invalid token',
@@ -138,14 +141,14 @@ router.post('/verify', async (req: Request, res: Response) => {
     }
 
     const expTime = response?.expiryToken as number;
-    const currentTime = Math.floor(Date.now()/1000);
+    const currentTime = Math.floor(Date.now() / 1000);
     const ValidFor = response?.ValidFor as number;
     // console.log(currentTime)
     // console.log(ValidFor)
     // console.log(currentTime - expTime)
 
-    if (currentTime - expTime <= (ValidFor / 1000)) {
-      console.log(2)
+    if (currentTime - expTime <= ValidFor / 1000) {
+      console.log(2);
       const Res = await prisma.user.update({
         where: {
           id: response?.id,
@@ -169,12 +172,12 @@ router.post('/verify', async (req: Request, res: Response) => {
 
       res.status(200).json({
         msg: 'Verified successfully',
-        token
+        token,
       });
     } else {
       res.status(400).json({
-        msg : "expired"
-      })
+        msg: 'expired',
+      });
     }
   } catch (error) {
     logger.error(error);

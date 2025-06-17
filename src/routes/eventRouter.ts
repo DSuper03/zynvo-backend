@@ -19,7 +19,23 @@ const Verification = (req: Request, res: Response) => {
 router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
   //include pfp later
   // prizes not added here
-  const { eventName, description,eventStartDate, eventEndDate, eventMode, eventType, maxTeamSize, venue, eventWebsite,university,  collegeStudentsOnly, contactEmail, contactPhone, noParticipationFee, prizes } = req.body;
+  const {
+    eventName,
+    description,
+    eventStartDate,
+    eventEndDate,
+    eventMode,
+    eventType,
+    maxTeamSize,
+    venue,
+    eventWebsite,
+    university,
+    collegeStudentsOnly,
+    contactEmail,
+    contactPhone,
+    noParticipationFee,
+    prizes,
+  } = req.body;
   const userId = req.id;
   const parsedData = EventSchema.safeParse(req.body);
 
@@ -34,68 +50,69 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
         id: userId,
       },
       select: {
-        email : true
+        email: true,
       },
     });
 
-    if(!user) {
+    if (!user) {
       res.status(404).json({
-        msg : "No user Found"
-      })
+        msg: 'No user Found',
+      });
       return;
     }
-  //  const clubId = club?.clubId
-    
-  //   if (!club || !clubId) {
-  //     res.json({
-  //       msg: 'invalid user or club',
-  //     });
-  //   } 
+    //  const clubId = club?.clubId
 
-  //   const isPresident = await prisma.clubs.findFirst({
-  //     where : {
-  //       id : clubId
-  //     }
-  //   })
-  
-  const club = await prisma.clubs.findUnique({
-    where : {
-      founderEmail : user.email
-    },
-    select : {
-      name : true,
-      id : true,
-      collegeName : true
+    //   if (!club || !clubId) {
+    //     res.json({
+    //       msg: 'invalid user or club',
+    //     });
+    //   }
+
+    //   const isPresident = await prisma.clubs.findFirst({
+    //     where : {
+    //       id : clubId
+    //     }
+    //   })
+
+    const club = await prisma.clubs.findUnique({
+      where: {
+        founderEmail: user.email,
+      },
+      select: {
+        name: true,
+        id: true,
+        collegeName: true,
+      },
+    });
+
+    if (!club) {
+      res.status(402).json({
+        msg: 'invalid president identification',
+      });
+      return;
     }
-  })
 
-
-  if(!club) {
-    res.status(402).json({
-      msg : "invalid president identification"
-    })
-    return;
-  }
- 
     const response = await prisma.event.create({
       data: {
         EventName: parsedData.data?.eventName as string,
         description: parsedData.data?.description as string,
-        EventMode : eventMode,
-        EventType : eventType,
-        EventUrl : eventWebsite ? eventWebsite : "",
-        Venue : venue,
-        TeamSize : maxTeamSize,
+        EventMode: eventMode,
+        EventType: eventType,
+        EventUrl: eventWebsite ? eventWebsite : '',
+        Venue: venue,
+        TeamSize: maxTeamSize,
         clubName: club?.name as string,
         clubId: club?.id as string,
-        prizes : prizes ? prizes : "",
-        startDate : eventStartDate,
-        endDate : eventEndDate,
-        university : university ? university.toLowerCase() : (club.collegeName).toLowerCase(),
-        collegeStudentsOnly : collegeStudentsOnly,
-        contactEmail : contactEmail,
-        contactPhone : contactPhone,
-        participationFee : noParticipationFee
+        prizes: prizes ? prizes : '',
+        startDate: eventStartDate,
+        endDate: eventEndDate,
+        university: university
+          ? university.toLowerCase()
+          : club.collegeName.toLowerCase(),
+        collegeStudentsOnly: collegeStudentsOnly,
+        contactEmail: contactEmail,
+        contactPhone: contactPhone,
+        participationFee: noParticipationFee,
       },
     });
 
@@ -243,14 +260,14 @@ router.post(
         data: {
           userId: userId,
           eventId: eventId,
-          uniquePassId : generateUUID()
+          uniquePassId: generateUUID(),
         },
       });
 
       if (response) {
         res.status(200).json({
           msg: 'registered successfully',
-          ForkedUpId : response.uniquePassId
+          ForkedUpId: response.uniquePassId,
         });
         return;
       } else {
@@ -269,80 +286,83 @@ router.post(
   }
 );
 
+router.post(
+  '/addSpeakers',
+  AuthMiddleware,
+  async (req: Request, res: Response) => {
+    const userId = req.id;
 
-router.post("/addSpeakers", AuthMiddleware, async(req : Request, res : Response) => {
-  const userId = req.id
+    const { profilePic, about, name, email, eventId } = req.body;
 
-  const {profilePic, about, name, email, eventId} = req.body
+    try {
+      const user = await prisma.user.findFirst({
+        where: {
+          id: userId,
+        },
+        select: {
+          email: true,
+        },
+      });
 
-  try {
-     const user = await prisma.user.findFirst({
-      where: {
-        id: userId,
-      },
-      select: {
-        email : true
-      },
-    });
+      if (!user) {
+        res.status(404).json({
+          msg: 'No user Found',
+        });
+        return;
+      }
 
-    if(!user) {
-      res.status(404).json({
-        msg : "No user Found"
-      })
-      return;
+      const club = await prisma.clubs.findUnique({
+        where: {
+          founderEmail: user.email,
+        },
+        select: {
+          name: true,
+          id: true,
+        },
+      });
+
+      if (!club) {
+        res.status(402).json({
+          msg: 'invalid president identification',
+        });
+        return;
+      }
+
+      const addSpeaker = await prisma.speakers.create({
+        data: {
+          profilePic: profilePic ? profilePic : '',
+          about: about,
+          name: name,
+          email: email,
+          eventId: eventId,
+        },
+      });
+
+      if (addSpeaker) {
+        res.status(200).json({
+          msg: 'Speaker added',
+          id: addSpeaker.id,
+        });
+        return;
+      }
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({
+        msg: 'internal server error',
+      });
     }
-
-     const club = await prisma.clubs.findUnique({
-    where : {
-      founderEmail : user.email
-    },
-    select : {
-      name : true,
-      id : true
-    }
-  })
-
-
-  if(!club) {
-    res.status(402).json({
-      msg : "invalid president identification"
-    })
-    return;
   }
-
-  const addSpeaker = await prisma.speakers.create({
-    data : {
-      profilePic : profilePic ? profilePic : "", 
-      about : about,
-      name : name, 
-      email : email,
-      eventId : eventId
-    }
-  })
-
-
-  if(addSpeaker) {
-    res.status(200).json({
-      msg : "Speaker added",
-      id : addSpeaker.id
-    })
-    return
-  }
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      msg : "internal server error"
-    })
-  }
-})
+);
 
 function generateUUID() {
-  return 'Zynvo xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
+  return 'Zynvo xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
+    /[xy]/g,
+    function (c) {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    }
+  );
 }
-
 
 export const EventRouter = router;
