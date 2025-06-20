@@ -135,6 +135,9 @@ router.get('/getClub', async (req: Request, res: Response) => {
           name: true,
           collegeName: true,
           description: true,
+          founderEmail : true,
+          facultyEmail : true,
+          members : true
           // add profile pic later
         },
       });
@@ -143,6 +146,7 @@ router.get('/getClub', async (req: Request, res: Response) => {
         res.json({
           msg: 'no such club',
         });
+        return 
       }
 
       res.status(200).json({
@@ -169,6 +173,7 @@ router.get('/getClub', async (req: Request, res: Response) => {
         res.json({
           msg: 'no such club',
         });
+        return
       }
 
       res.status(200).json({

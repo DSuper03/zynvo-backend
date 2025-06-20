@@ -306,9 +306,26 @@ router.post(
         res.json({
           msg: 'no club found',
         });
+        return
       }
 
       const clubName = club?.name as string;
+
+      const userClub = await prisma.user.findUnique({
+        where : {
+          id : userId
+        },
+        select : {
+          clubName : true, 
+          clubId : true
+        }
+      })
+
+      if(userClub?.clubId && userClub.clubName) {
+        res.json({
+          msg : "you are alredy a part of club, leave that first to join this."
+        })
+      }
 
       const JoinClub = await prisma.user.update({
         where: {
@@ -324,6 +341,7 @@ router.post(
         res.status(200).json({
           msg: 'yay club joined',
         });
+        return
       }
 
       console.log('working');

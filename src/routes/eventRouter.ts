@@ -121,8 +121,10 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
         msg: 'event created',
         id: response.id,
       });
+      return;
     } else {
       res.json('error crreating event');
+      return
     }
   } catch (error) {
     logger.error(error);
@@ -150,12 +152,14 @@ router.get(
           res.json({
             msg: 'no such event',
           });
+          return;
         }
 
         res.status(200).json({
           msg: 'event found',
           response,
         });
+        return;
       }
     } catch (error) {
       logger.error(error);
@@ -227,7 +231,7 @@ router.get('/all', async (req: Request, res: Response) => {
 });
 
 router.post(
-  'registerEvent',
+  '/registerEvent',
   AuthMiddleware,
   async (req: Request, res: Response) => {
     const userId = req.id;
