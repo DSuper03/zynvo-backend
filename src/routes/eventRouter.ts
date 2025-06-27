@@ -369,4 +369,33 @@ function generateUUID() {
   );
 }
 
+router.get('/getSpeakers', async(req : Request, res: Response) => {
+  const eventId = req.query.id as string
+  try {
+    const speakers = await prisma.speakers.findMany({
+      where : {
+        eventId : eventId
+      }
+    })
+
+    if(!speakers || speakers.length <= 0) {
+      res.status(404).json({
+        msg : "No speakers added for the event"
+      })
+      return;
+    }
+
+    res.status(200).json({
+      msg : "speakers are there",
+      speakers
+    })
+    return 
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      msg : "internal server error"
+    })
+  }
+})
+
 export const EventRouter = router;

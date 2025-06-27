@@ -351,4 +351,64 @@ router.post(
   }
 );
 
+router.get('/isFounder', async(req : Request, res: Response) => {
+   const userId = req.id;
+   const eventId = req.query.id as string
+
+    try {
+      const user = await prisma.user.findFirst({
+        where: {
+          id: userId,
+        },
+        select: {
+          email: true,
+        },
+      });
+
+      if (!user) {
+        res.status(404).json({
+          msg: 'No user Found',
+        });
+        return;
+      }
+
+      const club = await prisma.clubs.findUnique({
+        where: {
+          founderEmail: user.email,
+        },
+        select: {
+          name: true,
+          id: true,
+        },
+      });
+
+      const event = await prisma.event.findUnique({
+        where : {
+          id : eventId
+        },
+        select : {
+          clubId : true
+        }
+      })
+
+
+      if (club?.id !== event?.clubId) {
+        res.status(402).json({
+          msg: 'invalid president identification',
+        });
+        return;
+      } else {
+        res.status(200).json({
+          msg : "identified"
+        })
+        return
+      }
+    } catch (e) {
+      console.log(e)
+      res.status(500).json({
+        msg : "internal server error"
+      })
+    }
+})
+
 export const userRouter = router;
