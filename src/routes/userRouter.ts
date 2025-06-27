@@ -351,7 +351,7 @@ router.post(
   }
 );
 
-router.get('/isFounder', async(req : Request, res: Response) => {
+router.get('/isFounder', AuthMiddleware, async(req : Request, res: Response) => {
    const userId = req.id;
    const eventId = req.query.id as string
 
@@ -365,12 +365,15 @@ router.get('/isFounder', async(req : Request, res: Response) => {
         },
       });
 
+
       if (!user) {
         res.status(404).json({
           msg: 'No user Found',
         });
         return;
       }
+
+      console.log(user.email)
 
       const club = await prisma.clubs.findUnique({
         where: {
@@ -382,6 +385,13 @@ router.get('/isFounder', async(req : Request, res: Response) => {
         },
       });
 
+      if(!club){
+        res.json({
+          msg : "you nihh not a founder"
+        })
+        return;
+      }
+      console.log(club.name)
       const event = await prisma.event.findUnique({
         where : {
           id : eventId
@@ -391,17 +401,25 @@ router.get('/isFounder', async(req : Request, res: Response) => {
         }
       })
 
-
-      if (club?.id !== event?.clubId) {
-        res.status(402).json({
-          msg: 'invalid president identification',
-        });
+       if(!event){
+        res.json({
+          msg : "you nihh not a founder"
+        })
         return;
-      } else {
-        res.status(200).json({
+      }
+
+      console.log(event.clubId)
+
+      if (club?.id == event?.clubId) {
+         res.status(200).json({
           msg : "identified"
         })
         return
+      } else {
+        res.json({
+          msg: 'invalid president identification',
+        });
+        return;
       }
     } catch (e) {
       console.log(e)

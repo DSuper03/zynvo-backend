@@ -371,6 +371,7 @@ function generateUUID() {
 
 router.get('/getSpeakers', async(req : Request, res: Response) => {
   const eventId = req.query.id as string
+  console.log("eventid: ", eventId)
   try {
     const speakers = await prisma.speakers.findMany({
       where : {
