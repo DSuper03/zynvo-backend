@@ -3,7 +3,15 @@ import { hash } from 'bcryptjs'
 import prisma from '../db'
 
 
-
+// enum clubType  {
+//   Technology, 
+//   Cultural,
+//   Business,
+//   Social,
+//   Literature,
+//   Design,
+//   General,
+// }
 
 async function main() {
   console.log('Starting database seeding...')
