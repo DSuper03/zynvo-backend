@@ -1,4 +1,4 @@
-import { clubType } from '@prisma/client'
+// import { clubType } from '@prisma/client' 
 import { hash } from 'bcryptjs'
 import prisma from '../db'
 
@@ -51,7 +51,7 @@ async function main() {
       coremember3: 'core3@mit.edu',
       facultyEmail: 'faculty1@mit.edu',
       collegeName: colleges[0],
-      type: clubType.Technology,
+      type: "Technology",
       description: 'A club dedicated to exploring cutting-edge technologies and fostering innovation among students.',
       requirements: 'Basic programming knowledge, passion for technology',
       profilePicUrl: 'https://example.com/tech-innovators.jpg',
@@ -64,7 +64,7 @@ async function main() {
       coremember2: 'core5@stanford.edu',
       facultyEmail: 'faculty2@stanford.edu',
       collegeName: colleges[1],
-      type: clubType.Cultural,
+      type: "Cultural",
       description: 'Celebrating diversity and promoting cultural exchange through various events and activities.',
       requirements: 'Open to all students interested in cultural activities',
       profilePicUrl: 'https://example.com/cultural-society.jpg',
@@ -78,7 +78,7 @@ async function main() {
       coremember3: 'core8@harvard.edu',
       facultyEmail: 'faculty3@harvard.edu',
       collegeName: colleges[2],
-      type: clubType.Business,
+      type: "Business",
       description: 'Supporting aspiring entrepreneurs with resources, mentorship, and networking opportunities.',
       requirements: 'Interest in entrepreneurship and business development',
       profilePicUrl: 'https://example.com/entrepreneurship-hub.jpg',
@@ -91,7 +91,7 @@ async function main() {
       coremember2: 'core10@berkeley.edu',
       facultyEmail: 'faculty4@berkeley.edu',
       collegeName: colleges[3],
-      type: clubType.Literature,
+      type: "Literature",
       description: 'A community for book lovers, writers, and literature enthusiasts.',
       requirements: 'Love for reading and writing',
       profilePicUrl: 'https://example.com/literary-circle.jpg',
@@ -105,7 +105,7 @@ async function main() {
       coremember3: 'core13@cmu.edu',
       facultyEmail: 'faculty5@cmu.edu',
       collegeName: colleges[4],
-      type: clubType.Design,
+      type: "Design",
       description: 'Exploring the intersection of art, technology, and human-centered design.',
       requirements: 'Portfolio submission, design fundamentals knowledge',
       profilePicUrl: 'https://example.com/design-studio.jpg',
@@ -118,7 +118,7 @@ async function main() {
       coremember2: 'core15@iitd.ac.in',
       facultyEmail: 'faculty6@iitd.ac.in',
       collegeName: colleges[5],
-      type: clubType.Social,
+      type: "Social",
       description: 'Working towards creating positive social change through community service and advocacy.',
       requirements: 'Commitment to social causes and community service',
       profilePicUrl: 'https://example.com/social-impact.jpg',

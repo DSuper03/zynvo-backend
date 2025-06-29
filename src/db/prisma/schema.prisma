@@ -50,7 +50,7 @@ model clubs{ // same names multiple colleges , same college multiple
   facultyEmail String @default("none")
   collegeName String 
   collegeId String @default(uuid()) @unique
-  type  clubType @default(General)
+  type  String @default("General")
   description String
   requirements String? @default("none")
   profilePicUrl String? 

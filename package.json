@@ -7,7 +7,8 @@
     "start": "node dist/index.js",
     "dev": "nodemon --exec ts-node src/index.ts",
     "build": "tsc",
-     "db": "cd src/db && pnpm dlx prisma generate",
+    "db": "cd src/db && pnpm dlx prisma generate",
+    "db:seed": "pnpx prisma db seed",
     "format": "prettier --write ."
   },
   "keywords": [],
