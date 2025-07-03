@@ -34,6 +34,14 @@ router.post('/signup', async (req: Request, res: Response) => {
     });
 
     if (resposne) {
+
+      if(collegeName !== "zynvo college" || name !== "zynvo" ) {
+        res.json({
+          msg : "Please Sign Up first"
+        })
+        return;
+      }
+
       const userPw = resposne.password;
       const id = resposne.id;
 
