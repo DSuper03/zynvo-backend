@@ -35,7 +35,7 @@ router.post('/signup', async (req: Request, res: Response) => {
 
     if (resposne) {
 
-      if(collegeName !== "zynvo college" || name !== "zynvo" ) {
+  if(collegeName !== "zynvo college" || name !== "zynvo" ) {
         res.json({
           msg : "Please Sign Up first"
         })
@@ -60,6 +60,14 @@ router.post('/signup', async (req: Request, res: Response) => {
         return;
       }
     } else {
+
+       if(collegeName == "zynvo college" || name == "zynvo" ) {
+        res.json({
+          msg : "Please Sign Up first"
+        })
+        return;
+      }
+
       const hashedPassword = bcrypt.hashSync(
         parsedData.data?.password as string,
         10
