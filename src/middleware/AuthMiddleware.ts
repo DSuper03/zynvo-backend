@@ -29,6 +29,7 @@ export const AuthMiddleware = async (
       res.status(401).json({
         message: 'Please signin ,Unauthorized',
       });
+      return;
     }
 
     try {
@@ -42,6 +43,7 @@ export const AuthMiddleware = async (
         res.status(401).json({
           message: 'Invalid token format',
         });
+        return
       }
     } catch (error: any) {
       logger.error(error);
@@ -53,7 +55,7 @@ export const AuthMiddleware = async (
   } catch (error) {
     console.log(error);
     res.json({
-      msg: 'error occured',
+      msg: 'error occured in processing token, either token not found or is invalid.',
     });
   }
 };

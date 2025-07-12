@@ -25,6 +25,7 @@ router.post('/create', AuthMiddleware, async (req: Request, res: Response) => {
     res.status(500).json({
       msg: 'wrong format for your posts',
     });
+    return
   }
   const userId = req.id;
   try {
@@ -46,6 +47,7 @@ router.post('/create', AuthMiddleware, async (req: Request, res: Response) => {
       res.status(404).json({
         msg: 'no such user found',
       });
+      return;
     }
 
     const ClubId = response?.clubId as string;
@@ -60,6 +62,7 @@ router.post('/create', AuthMiddleware, async (req: Request, res: Response) => {
       res.status(404).json({
         msg: 'no club found associated to you, either join a club or create one',
       });
+      return;
     }
 
     const collegeName = response1?.collegeName;
@@ -79,11 +82,13 @@ router.post('/create', AuthMiddleware, async (req: Request, res: Response) => {
       res.status(500).json({
         msg: 'internal server error, post not published',
       });
+      return;
     } else {
       res.status(200).json({
         msg: 'post created',
         id: response2.id,
       });
+      return;
     }
   } catch (error) {
     logger.error(error);
@@ -101,6 +106,7 @@ router.put('/edit/:id', AuthMiddleware, async (req: Request, res: Response) => {
     res.json({
       msg: 'incorrect format',
     });
+    return;
   }
   try {
     //add updation of images later
@@ -118,11 +124,13 @@ router.put('/edit/:id', AuthMiddleware, async (req: Request, res: Response) => {
       res.status(500).json({
         msg: 'internal server error',
       });
+      return;
     }
 
     res.json(200).json({
       msg: 'post updated, changes will reflect shortly',
     });
+    return;
   } catch (error) {
     logger.error(error);
     res.status(500).json({
@@ -147,12 +155,14 @@ router.get('/all', async (req: Request, res: Response) => {
       res.json({
         msg: 'not enough posts to show',
       });
+      return;
     }
 
     res.status(200).json({
       msg: 'fetched',
       posts: posts,
     });
+    return;
   } catch (error) {
     logger.error(error);
     res.status(500).json({
@@ -160,6 +170,7 @@ router.get('/all', async (req: Request, res: Response) => {
     });
   }
 });
+
 router.get('/get/:id', AuthMiddleware, async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
@@ -173,12 +184,14 @@ router.get('/get/:id', AuthMiddleware, async (req: Request, res: Response) => {
       res.json({
         msg: 'no such post found',
       });
+      return;
     }
 
     res.status(200).json({
       msg: 'post fetched',
       response, // choose what you want to send to frontend
     });
+    return;
   } catch (error) {
     logger.error(error);
     res.status(500).json({
@@ -202,11 +215,13 @@ router.delete(
         res.json({
           msg: 'no such post found',
         });
+        return;
       }
 
       res.status(200).json({
         msg: 'post deleted', // choose what you want to send to frontend
       });
+      return;
     } catch (error) {
       logger.error(error);
       res.status(500).json({
