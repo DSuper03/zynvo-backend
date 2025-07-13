@@ -1,5 +1,5 @@
 //tested
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, response } from 'express';
 import prisma from '../db/db';
 import { logger } from '../utils/logger';
 import { newPWschema, signupSchema } from '../types/formtypes';
@@ -33,7 +33,7 @@ router.post('/signup', async (req: Request, res: Response) => {
       },
     });
 
-    if (resposne) {
+    if (response && resposne?.isVerified) { 
 
   if(collegeName !== "zynvo college" || name !== "zynvo" ) {
         res.json({
@@ -63,7 +63,7 @@ router.post('/signup', async (req: Request, res: Response) => {
 
        if(collegeName == "zynvo college" || name == "zynvo" ) {
         res.json({
-          msg : "Please Sign Up first"
+          msg : "Please Sign Up first and verify yourself."
         })
         return;
       }
@@ -87,7 +87,6 @@ router.post('/signup', async (req: Request, res: Response) => {
         },
       });
 
-      const isVerified = response.isVerified;
       const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
       await mail(
         parsedData.data.name,
