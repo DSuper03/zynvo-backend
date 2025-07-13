@@ -227,4 +227,30 @@ router.get('/getAll', AuthMiddleware, async (req: Request, res: Response) => {
   }
 });
 
+router.get('/getClubs/:college', AuthMiddleware, async (req: Request, res: Response) => {
+  try {
+    const collegeName = req.params.college as string
+    const resp = await prisma.clubs.findMany({
+      where : {
+        collegeName : collegeName
+      } , 
+      select : {
+        name : true
+      }
+    });
+    if (resp && resp.length > 0) {
+      res.status(200).json({
+        resp,
+      });
+      return;
+    } else {
+      res.status(404).json({
+        resp : []
+      })
+    }
+  } catch (error) {
+    console.log(error);
+  }
+});
+
 export const clubRouter = router;
