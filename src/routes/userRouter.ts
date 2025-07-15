@@ -160,16 +160,100 @@ router.post('/signup', async (req: Request, res: Response) => {
   }
 });
 
-// will write it later
+
 router.post('/ResendEmail', async (req: Request, res: Response) => {
   const email = req.query.email as string;
-  await mail(
-    'mohak',
-    'mohakchakraborty2007@outlook.com',
-    'test email',
-    `this verification email is resent to you`
-  );
-  res.json('email sent');
+  try {
+    const exists = await prisma.user.findUnique({
+      where : {
+        email : email
+      }, 
+      select : {
+        name : true
+      }
+    })
+
+    if(exists && exists.name){
+      const vToken = genToken();
+      const update = await prisma.user.update({
+        where : {
+          email : email
+        }, 
+        data : {
+          vToken : vToken,
+          expiryToken: Math.floor(Date.now() / 1000)
+        }
+      })
+      if(update) {
+         const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${email}`;
+              await mail(
+                exists.name,
+                email,
+                'Resend: Verify your Zynvo account',
+                `  <div style="font-family: Arial, sans-serif; padding: 0; margin: 0;">
+                  <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: auto; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+                    <tr>
+                      <td>
+                        <img 
+                          src="https://pbs.twimg.com/profile_banners/1916901326887522304/1750314868/1500x500" 
+                          alt="Welcome to Zynvo" 
+                          style="width: 100%; height: auto; display: block;"
+                        />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 24px;">
+                        <h2 style="color: #333333;">Resend Verification Link</h2>
+                        <p style="color: #555555; font-size: 16px; line-height: 1.6;">
+                          Hi ${exists.name},<br/>
+                          It looks like you requested a new verification link for your Zynvo account.
+                        </p>
+                        <p style="color: #555555; font-size: 16px; line-height: 1.6;">
+                          Click the button below to verify your email and activate your account:
+                        </p>
+                        <p style="margin: 24px 0;">
+                          <a 
+                            href="${url}" 
+                            style="background-color: #facc15; color: #000000; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; display: inline-block;"
+                          >
+                            Verify My Account
+                          </a>
+                        </p>
+                        <p style="color: #555555; font-size: 16px; line-height: 1.6;">
+                          If you did not request this, you can safely ignore this email.
+                        </p>
+                        <p style="color: #999999; font-size: 14px; font-style: italic;">
+                          This link expires in 24 hours.
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+                `
+              );
+          res.status(200).json({
+            msg : "Verification mail sent"
+          })
+          return;
+      }else {
+        res.status(501).json({
+          msg : "some error occured"
+        })
+        return
+      }
+    } else {
+      res.status(200).json({
+        msg : "No such user"
+      })
+      return;
+    }
+
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      msg : "internal server error"
+    })
+  }
 });
 
 router.post('/verify', async (req: Request, res: Response) => {
@@ -197,9 +281,6 @@ router.post('/verify', async (req: Request, res: Response) => {
     const expTime = response?.expiryToken as number;
     const currentTime = Math.floor(Date.now() / 1000);
     const ValidFor = response?.ValidFor as number;
-    // console.log(currentTime)
-    // console.log(ValidFor)
-    // console.log(currentTime - expTime)
 
     if (currentTime - expTime <= ValidFor / 1000) {
       console.log(2);
@@ -246,9 +327,6 @@ router.put(
   AuthMiddleware,
   async (req: Request, res: Response) => {
     const userID = req.id;
-    // const password = req.body.password;
-    // const newPassword =req.body.newPassword;
-
     const { password, newPassword } = req.body;
     const parsedData = newPWschema.safeParse(req.body);
 
@@ -256,6 +334,7 @@ router.put(
       res.json({
         msg: 'invalid passwrd format',
       });
+      return;
     }
 
     try {
@@ -269,6 +348,7 @@ router.put(
         res.status(404).json({
           msg: 'invalid user, no such user',
         });
+        return;
       }
 
       const pw = response?.password as string;
@@ -283,16 +363,21 @@ router.put(
           },
         });
 
-        if (!update)
+        if (!update){
           res.status(500).json({ msg: 'internal server error, try again' });
-
+          return;
+        }
+        
         res.status(200).json({
           msg: 'password updated successfully',
         });
+        return;
       }
     } catch (error) {
       logger.info(error);
       logger.error(error);
+      res.status(500).json({ msg: 'internal server error' });
+
     }
   }
 );

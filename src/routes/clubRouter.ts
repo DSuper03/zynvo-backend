@@ -120,7 +120,7 @@ router.post('/club', async (req: Request, res: Response) => {
 });
 
 //query korbo, params na , tahole id , name , collegeName diye o khoja jabe
-router.get('/getClub', async (req: Request, res: Response) => {
+router.get('/getClub',AuthMiddleware, async (req: Request, res: Response) => {
   const id = req.query.id;
   const name = req.query.name;
   const collegeName = req.query.collegeName;
@@ -227,7 +227,7 @@ router.get('/getAll', AuthMiddleware, async (req: Request, res: Response) => {
   }
 });
 
-router.get('/getClubs/:college', AuthMiddleware, async (req: Request, res: Response) => {
+router.get('/getClubs/:college', async (req: Request, res: Response) => {
   try {
     const collegeName = req.params.college as string
     const resp = await prisma.clubs.findMany({
