@@ -1,9 +1,0 @@
-add hashing to pw 
-add auth middleware 
-update schema for orgs 
-complete the post routes
-33ZQ7N73QXWEVL4LUUTX7U2A
-to add more info in club details backend : core members and faculty 
-implement join club functinality 
-add club posts feature
-create , edit , delete post page
