@@ -390,6 +390,7 @@ router.get('/getUser', AuthMiddleware, async (req: Request, res: Response) => {
         id: userId,
       },
       select: {
+        id : true,
         profileAvatar: true,
         name: true,
         clubName: true,
@@ -408,6 +409,15 @@ router.get('/getUser', AuthMiddleware, async (req: Request, res: Response) => {
             },
           },
         },
+        CreatePost : {
+          where : {
+            authorId : userId
+          }, 
+          select : {
+            id : true,
+            description : true
+          }
+        }
       },
     });
 
