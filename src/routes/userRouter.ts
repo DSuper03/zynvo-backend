@@ -390,7 +390,12 @@ router.get('/getUser', AuthMiddleware, async (req: Request, res: Response) => {
         id: userId,
       },
       select: {
+        createdAt : true,
         id : true,
+        bio : true,
+        year : true,
+        tags : true,
+        course : true,
         profileAvatar: true,
         name: true,
         clubName: true,
@@ -577,5 +582,38 @@ router.get('/isFounder', AuthMiddleware, async(req : Request, res: Response) => 
       })
     }
 })
+
+router.put('/updateProfile',AuthMiddleware, async(req : Request, res: Response) => {
+  const userId = req.id;
+  const {bio , tags, course, year} = req.body;
+  try {
+    const update = await prisma.user.update({
+      where : {
+        id : userId
+      }, 
+      data : {
+        bio : bio,
+        tags : tags,
+        course : course,
+        year : year
+      }
+    })
+
+    if(update) {
+      res.status(200).json({
+        msg : "Profile updated successfully"
+      })
+    } else {
+      res.status(400).json({
+        msg : "some error occured"
+      })
+    }
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      msg : "Internal server error"
+    })
+  }
+} )
 
 export const userRouter = router;

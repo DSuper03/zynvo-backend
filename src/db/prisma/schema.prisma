@@ -33,6 +33,10 @@ model User {
   isVerified    Boolean? @default(false)
   clubName      String?  
   clubId        String?  
+  bio           String?  @default("Zynvo Community Fresher")
+  tags          String[] @default([])
+  course        String?  @default("")
+  year          String?  @default("")
   eventAttended userEvents[]
   // event         event?  @relation(fields: [eventAttended], references: [id])
   club          clubs?       @relation(fields: [clubId], references: [id])
