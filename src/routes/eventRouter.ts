@@ -207,6 +207,9 @@ router.get('/all', async (req: Request, res: Response) => {
     const response = await prisma.event.findMany({
       take : limit,
       skip,
+      orderBy : {
+        createdAt : "desc"
+      },
       include: {
         attendees: {
           select: {
