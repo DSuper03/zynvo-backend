@@ -200,7 +200,13 @@ router.get(
 
 router.get('/all', async (req: Request, res: Response) => {
   try {
+    const page = parseInt(req.query.page as string) || 1
+    const limit = 10
+    const skip = (page - 1) * limit
+
     const response = await prisma.event.findMany({
+      take : limit,
+      skip,
       include: {
         attendees: {
           select: {
@@ -213,6 +219,9 @@ router.get('/all', async (req: Request, res: Response) => {
         },
       },
     });
+
+    const totalData = await prisma.event.count();
+
     if (!response) {
       res.status(404).json({
         msg: 'No events found',
@@ -222,6 +231,7 @@ router.get('/all', async (req: Request, res: Response) => {
     res.status(200).json({
       msg: 'found',
       response,
+      totalPages : Math.ceil(totalData/limit)
     });
   } catch (error) {
     res.status(500).json({
