@@ -14,10 +14,8 @@ const Verification = (req: Request, res: Response) => {
   }
 };
 
-//router.use(Verification)
-router.use(AuthMiddleware);
 
-router.post('/club', async (req: Request, res: Response) => {
+router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
   //include pfp later
   const {
     name,
@@ -213,12 +211,22 @@ router.get('/getClub',AuthMiddleware, async (req: Request, res: Response) => {
   }
 });
 
-router.get('/getAll', AuthMiddleware, async (req: Request, res: Response) => {
+router.get('/getAll',AuthMiddleware, async (req: Request, res: Response) => {
   try {
-    const resp = await prisma.clubs.findMany({});
+    const pages = parseInt(req.query.page as string)
+    const limit = 10
+
+    const skip = (pages - 1) * limit
+
+    const resp = await prisma.clubs.findMany({
+      skip,
+      take : limit
+    });
+    const totalData = await prisma.clubs.count();
     if (resp) {
       res.status(200).json({
-        resp,
+        resp, 
+        totalPages : Math.ceil(totalData/limit)
       });
       return;
     }

@@ -141,9 +141,16 @@ router.put('/edit/:id', AuthMiddleware, async (req: Request, res: Response) => {
 
 router.get('/all', async (req: Request, res: Response) => {
   try {
-    //add more
     //auth not required here
+    const pages = parseInt(req.query.page as string) || 1
+    const limit = 30 
+    const skip = (pages - 1) * limit
     const posts = await prisma.createPost.findMany({
+      skip,
+      take : limit,
+      orderBy : {
+        createdAt : "desc"
+      },
       select: {
         title: true,
         description: true,
