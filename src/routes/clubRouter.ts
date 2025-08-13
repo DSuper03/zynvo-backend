@@ -26,6 +26,7 @@ router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
     clubContact,
     requirements,
     facultyEmail,
+    logo
   } = req.body;
   const parsedData = ClubSchema.safeParse(req.body);
   const userId = req.id;
@@ -94,6 +95,7 @@ router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
         clubContact: clubContact,
         requirements: requirements,
         facultyEmail: facultyEmail,
+        profilePicUrl : logo
       },
     });
 
