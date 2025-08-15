@@ -19,21 +19,16 @@ router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
   //include pfp later
   const {
     name,
-    collegeName,
     description,
     type,
     FounderEmail,
     clubContact,
     requirements,
     facultyEmail,
+    logo
   } = req.body;
-  const parsedData = ClubSchema.safeParse(req.body);
+
   const userId = req.id;
-  if (!parsedData.success) {
-    res.json({
-      msg: 'wrong format for creating a club',
-    });
-  }
 
   try {
     const college = await prisma.user.findFirst({
@@ -55,17 +50,12 @@ router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
       res.status(402).json({
         msg: 'founder not found , ask him to register',
       });
-    }
-
-    if (college?.collegeName.toLowerCase() !== collegeName.toLowerCase()) {
-      res.status(404).json({ msg: 'you are not associated with this college' });
       return;
     }
-    // they can still bypass this by changing the casing of characters, Validate the names of club in lowerCase
-    //cannot make changes in database for this
+
     const findClub = await prisma.clubs.findFirst({
       where: {
-        collegeName: collegeName as string,
+        collegeName: college?.collegeName as string,
         name: name,
       },
     });
@@ -77,23 +67,18 @@ router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
       return;
     }
 
-    // if(findClub?.name == name) {
-    //   res.json({
-    //     msg : "the club of this name already exists in your college, delete that or create a new club"
-    //   })
-    //   return
-    // }
 
     const response = await prisma.clubs.create({
       data: {
-        name: parsedData.data?.name as string,
-        collegeName: parsedData.data?.collegeName as string,
-        description: (parsedData.data?.description as string) || '',
+        name: name,
+        collegeName: college?.collegeName as string,
+        description: description,
         type: type,
         founderEmail: FounderEmail,
         clubContact: clubContact,
         requirements: requirements,
         facultyEmail: facultyEmail,
+        profilePicUrl : logo
       },
     });
 
@@ -104,6 +89,24 @@ router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
       return;
     }
 
+    const partOfClub = await prisma.user.update({
+      where : {
+        email : FounderEmail
+      }, 
+      data : {
+        clubId : response.id,
+        clubName : response.name
+      }
+    })
+
+    if(!partOfClub){
+      res.status(200).json({
+        msg : "club is formed, please explicitly join the club.",
+        clubId : response.id
+      })
+      return;
+    }
+
     res.status(200).json({
       msg: 'club formed!',
       clubId: response.id,
@@ -111,6 +114,7 @@ router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
     return;
   } catch (error) {
     logger.error(error);
+    console.log(error);
     res.status(500).json({
       msg: 'error creating club',
     });

@@ -35,6 +35,7 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
     contactPhone,
     noParticipationFee,
     prizes,
+    image
   } = req.body;
   const userId = req.id;
   const parsedData = EventSchema.safeParse(req.body);
@@ -113,6 +114,7 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
         contactEmail: contactEmail,
         contactPhone: contactPhone,
         participationFee: noParticipationFee,
+        posterUrl : image
       },
     });
 
@@ -123,13 +125,15 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
       });
       return;
     } else {
-      res.json('error crreating event');
-      return
+      res.status(500).json({
+      msg: 'error creating event',
+    });
+    return;
     }
   } catch (error) {
     logger.error(error);
-    res.status(500).json({
-      msg: 'error creating event',
+    res.status(501).json({
+      msg: 'internal server error',
     });
   }
 });
