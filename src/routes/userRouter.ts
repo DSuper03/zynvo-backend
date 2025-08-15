@@ -29,11 +29,13 @@ router.post('/signup', async (req: Request, res: Response) => {
   try {
     const resposne = await prisma.user.findUnique({
       where: {
-        email: parsedData.data?.email,
+        email: email,
       },
     });
 
-    if (response && resposne?.isVerified) { 
+    console.log("response:", resposne)
+
+    if (resposne && resposne?.isVerified) { 
 
   if(collegeName !== "zynvo college" || name !== "zynvo" ) {
         res.json({
@@ -615,5 +617,38 @@ router.put('/updateProfile',AuthMiddleware, async(req : Request, res: Response) 
     })
   }
 } )
+
+router.get(`/getSidebarUser`, AuthMiddleware, async(req : Request, res: Response) => {
+  const userId = req.id
+  try {
+    const data = await prisma.user.findUnique({
+      where : {
+        id : userId
+      },
+      select : {
+        name : true,
+        profileAvatar : true
+      }
+    })
+
+    if(data) {
+      res.status(200).json({
+        data
+      })
+      return
+    } else {
+      res.status(404).json({
+        msg : "no user found"
+      })
+      return
+    }
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+        msg : "internal server error"
+      })
+    return
+  }
+})
 
 export const userRouter = router;
