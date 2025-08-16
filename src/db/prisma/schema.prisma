@@ -76,8 +76,10 @@ model CreatePost {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   published     Boolean  @default(false)
-  collegeId     String
-  club          clubs   @relation(fields: [collegeId], references: [collegeId])
+  collegeName   String   @default("zync college")
+  clubName      String   @default("zync club")
+  collegeId     String?
+  club          clubs?   @relation(fields: [collegeId], references: [collegeId])
   authorId      String
   author        User     @relation(fields: [authorId], references: [id])
   //event type in future

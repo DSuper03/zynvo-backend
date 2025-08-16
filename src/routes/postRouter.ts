@@ -18,7 +18,7 @@ const Verification = (req: Request, res: Response) => {
 
 router.post('/create', AuthMiddleware, async (req: Request, res: Response) => {
   //add collegeName and EventType to databases
-  const { title, description, collegeName, eventType } = req.body;
+  const { title, description, collegeName, clubName, image } = req.body;
   const parsedData = postSchema.safeParse(req.body);
 
   if (!parsedData.success) {
@@ -65,7 +65,6 @@ router.post('/create', AuthMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    const collegeName = response1?.collegeName;
     const collegeId = response1?.collegeId as string;
 
     const response2 = await prisma.createPost.create({
@@ -73,7 +72,10 @@ router.post('/create', AuthMiddleware, async (req: Request, res: Response) => {
         title: parsedData.data?.title as string,
         description: parsedData.data?.description as string,
         collegeId: collegeId,
+        collegeName : collegeName,
+        clubName : clubName,
         authorId: userId,
+        image : image , 
         published: true, //when saved in drafts , default is activated
       },
     });
