@@ -392,6 +392,7 @@ router.get('/getUser', AuthMiddleware, async (req: Request, res: Response) => {
         id: userId,
       },
       select: {
+        collegeName : true,
         createdAt : true,
         id : true,
         bio : true,
