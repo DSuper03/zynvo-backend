@@ -59,6 +59,7 @@ model clubs{ // same names multiple colleges , same college multiple
   requirements String? @default("none")
   profilePicUrl String? 
   clubContact String @default("none")
+  wings         String[] @default([])
   // is Accepted boolean default false true how , will be changed by us 
   //relations 
   posts    CreatePost[] 

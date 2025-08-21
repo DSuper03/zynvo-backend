@@ -393,6 +393,9 @@ router.get('/getUser', AuthMiddleware, async (req: Request, res: Response) => {
       },
       select: {
         collegeName : true,
+        twitter : true,
+        instagram : true,
+        linkedin : true,
         createdAt : true,
         id : true,
         bio : true,
@@ -588,7 +591,7 @@ router.get('/isFounder', AuthMiddleware, async(req : Request, res: Response) => 
 
 router.put('/updateProfile',AuthMiddleware, async(req : Request, res: Response) => {
   const userId = req.id;
-  const {bio , tags, course, year} = req.body;
+  const {bio , tags, course, year, twitter, instagram, linkedin} = req.body;
   try {
     const update = await prisma.user.update({
       where : {
@@ -598,7 +601,10 @@ router.put('/updateProfile',AuthMiddleware, async(req : Request, res: Response) 
         bio : bio,
         tags : tags,
         course : course,
-        year : year
+        year : year,
+        twitter : twitter ? twitter : "",
+        instagram : instagram ? instagram : "",
+        linkedin : linkedin ? linkedin : ""
       }
     })
 

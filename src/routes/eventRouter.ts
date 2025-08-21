@@ -14,6 +14,7 @@ const Verification = (req: Request, res: Response) => {
   }
 };
 
+
 //router.use(Verification)
 
 router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
