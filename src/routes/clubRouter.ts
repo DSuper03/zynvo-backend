@@ -25,7 +25,8 @@ router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
     clubContact,
     requirements,
     facultyEmail,
-    logo
+    logo,
+    wings
   } = req.body;
 
   const userId = req.id;
@@ -67,7 +68,18 @@ router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
       return;
     }
 
+    const alrFounder = await prisma.clubs.findUnique({
+      where : {
+        founderEmail : FounderEmail
+      }
+    })
 
+    if(alrFounder) {
+      res.status(400).json({
+        msg : "President you chose, is already a president of one club"
+      })
+      return;
+    }
     const response = await prisma.clubs.create({
       data: {
         name: name,
@@ -78,7 +90,8 @@ router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
         clubContact: clubContact,
         requirements: requirements,
         facultyEmail: facultyEmail,
-        profilePicUrl : logo
+        profilePicUrl : logo,
+        wings : wings ? wings : []
       },
     });
 

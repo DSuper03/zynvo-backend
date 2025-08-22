@@ -37,6 +37,9 @@ model User {
   tags          String[] @default([])
   course        String?  @default("")
   year          String?  @default("")
+  twitter       String? @default("")
+  linkedin      String? @default("")
+  instagram     String? @default("")
   eventAttended userEvents[]
   // event         event?  @relation(fields: [eventAttended], references: [id])
   club          clubs?       @relation(fields: [clubId], references: [id])
@@ -59,6 +62,7 @@ model clubs{ // same names multiple colleges , same college multiple
   requirements String? @default("none")
   profilePicUrl String? 
   clubContact String @default("none")
+  wings         String[] @default([])
   // is Accepted boolean default false true how , will be changed by us 
   //relations 
   posts    CreatePost[] 
