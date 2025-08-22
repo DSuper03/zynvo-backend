@@ -442,7 +442,12 @@ router.get('/getUser', AuthMiddleware, async (req: Request, res: Response) => {
       });
       return;
     }
-  } catch (error) {}
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      msg : "error fetching details"
+    })
+  }
 });
 
 router.post(
@@ -657,5 +662,112 @@ router.get(`/getSidebarUser`, AuthMiddleware, async(req : Request, res: Response
     return
   }
 })
+
+
+router.get('/SearchUser', async(req : Request, res: Response) => {
+  const name = req.query.name as string
+  if(!name || name == "") {
+    res.status(404).json({
+      msg : "Please enter user's name"
+    })
+    return 
+  }
+  try {
+    const users = await prisma.user.findMany({
+      where : {
+        name : {
+          contains : name,
+          mode : "insensitive"
+        }
+      }, 
+      select : {
+        id : true,
+        name : true,
+        profileAvatar : true,
+        collegeName : true
+      }
+    })
+
+    if(users) {
+      res.status(200).json({
+        users
+      })
+      return
+    } else {
+      res.status(404).json({
+        msg : "no users found",
+        users : []
+      })
+      return
+    }
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      msg : "internal server error"
+    })
+  }
+})
+
+
+router.get('/getPublicUser',AuthMiddleware, async (req: Request, res: Response) => {
+  const userId = req.query.id as string
+  try {
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        collegeName : true,
+        twitter : true,
+        instagram : true,
+        linkedin : true,
+        createdAt : true,
+        id : true,
+        bio : true,
+        year : true,
+        tags : true,
+        course : true,
+        profileAvatar: true,
+        name: true,
+        clubName: true,
+        email: true,
+        isVerified: true,
+        eventAttended: {
+          where: {
+            userId: userId,
+          },
+          select: {
+            event: {
+              select: {
+                EventName: true,
+                id: true,
+              },
+            },
+          },
+        },
+        CreatePost : {
+          where : {
+            authorId : userId
+          }, 
+          select : {
+            id : true,
+            description : true
+          }
+        }
+      },
+    });
+
+    if (!user) {
+      res.status(404);
+      console.log('error');
+      return;
+    } else {
+      res.status(200).json({
+        user,
+      });
+      return;
+    }
+  } catch (error) {}
+});
 
 export const userRouter = router;
