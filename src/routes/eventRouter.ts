@@ -417,4 +417,43 @@ router.get('/getSpeakers', async(req : Request, res: Response) => {
   }
 })
 
+
+router.get('/ver-event',async(req:Request, res:Response)=> {
+  const id = req.query.id as string
+
+  if(!id.startsWith('Zynvo')) {
+    res.status(502).json({
+      status : 'invalid'
+    })
+    return;
+  }
+
+  try {
+    const findUser = await prisma.userEvents.findFirst({
+      where : {
+       uniquePassId : id
+      }
+    })
+
+    if(findUser){
+      res.status(200).json({
+        status : 'registered'
+      })
+      return;
+    } else {
+      res.status(404).json({
+        status : 'unregistered'
+      })
+      return;
+    }
+  } catch ( error ) {
+    res.status(500).json({
+        msg : "internal server error"   
+         })
+      return;
+  }
+
+
+})
+
 export const EventRouter = router;
