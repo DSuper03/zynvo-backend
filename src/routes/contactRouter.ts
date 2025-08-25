@@ -8,12 +8,6 @@ import { AuthMiddleware } from '../middleware/AuthMiddleware';
 import prisma from '../db/db';
 
 const router = Router();
-
-//  name: string,
-//   email: string,
-//   subject: string,
-//   html: string
-
 router.post('/contact', async (req: Request, res: Response) => {
   const {name , email, subject, message} = req.body
   const html = `${message}`
@@ -42,7 +36,7 @@ router.post('/contact', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/feedback', AuthMiddleware, async (req: Request, res: Response) => {
+router.post('/feedback', AuthMiddleware, async (req: Request, res: Response) => {
  
   const userid = req.id
 
