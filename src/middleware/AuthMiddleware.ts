@@ -48,9 +48,9 @@ export const AuthMiddleware = async (
     } catch (error: any) {
       logger.error(error);
       if (error instanceof jwt.TokenExpiredError) {
-         return res.status(401).json({ msg: 'Token expired' });
+          res.status(401).json({ msg: 'Token expired' });
       }
-      return res.status(401).json({ msg: 'Invalid token' });
+       res.status(401).json({ msg: 'Invalid token' });
     }
   } catch (error) {
     console.log(error);
