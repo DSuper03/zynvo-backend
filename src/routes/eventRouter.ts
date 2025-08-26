@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import prisma from '../db/db';
 import { EventSchema } from '../types/formtypes';
 import { AuthMiddleware } from '../middleware/AuthMiddleware';
+import { tuple } from 'zod';
 
 const router = Router();
 const Verification = (req: Request, res: Response) => {
@@ -421,7 +422,7 @@ router.get('/getSpeakers', async(req : Request, res: Response) => {
 router.get('/ver-event',async(req:Request, res:Response)=> {
   const id = req.query.id as string
 
-  if(!id.startsWith('Zynvo')) {
+  if(!id.startsWith('Z')) {
     res.status(502).json({
       status : 'invalid'
     })
@@ -443,6 +444,72 @@ router.get('/ver-event',async(req:Request, res:Response)=> {
     } else {
       res.status(404).json({
         status : 'unregistered'
+      })
+      return;
+    }
+  } catch ( error ) {
+    res.status(500).json({
+        msg : "internal server error"   
+         })
+      return;
+  }
+
+
+})
+
+
+router.get('/event-details',async(req:Request, res:Response)=> {
+  const id = req.query.id as string
+
+  if(!id.startsWith('Z')) {
+    res.status(502).json({
+      status : 'invalid'
+    })
+    return;
+  }
+
+  try {
+    const findUser = await prisma.userEvents.findFirst({
+      where : {
+       uniquePassId : id
+      },
+      select : {
+        event : {
+          select : {
+            EventName : true,
+            clubName : true,
+            club : {
+              select : {
+                collegeName : true
+              }
+            },
+            startDate : true, 
+          }
+        },
+        user : {
+          select : {
+            profileAvatar : true
+          }
+        }
+      }
+    })
+
+    if(findUser){
+      res.status(200).json({
+        data : {
+          eventName : findUser.event.EventName,
+          clubName : findUser.event.clubName,
+          collegeName : findUser.event.club.collegeName,
+          startDate : findUser.event.startDate,
+          profilePic : findUser.user.profileAvatar
+        }
+      })
+      return;
+    } else {
+      res.status(404).json({
+        data : {
+          
+        }
       })
       return;
     }
