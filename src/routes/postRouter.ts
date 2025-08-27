@@ -6,15 +6,6 @@ import prisma from '../db/db';
 import { postSchema } from '../types/formtypes';
 
 const router = Router();
-const Verification = (req: Request, res: Response) => {
-  if (!req.isVerified) {
-    res.status(400).json({
-      msg: 'please verify yourself first',
-    });
-  }
-};
-
-//router.use(Verification)
 
 router.post('/create', AuthMiddleware, async (req: Request, res: Response) => {
   //add collegeName and EventType to databases
@@ -153,11 +144,14 @@ router.get('/all', async (req: Request, res: Response) => {
       orderBy : {
         createdAt : "desc"
       },
-      select: {
-        title: true,
-        description: true,
-        collegeId: true,
-      },
+      include : {
+        author : {
+          select : {
+            profileAvatar : true,
+            name : true
+          }
+        }
+      }
     });
 
     if (!posts || posts.length <= 0) {
