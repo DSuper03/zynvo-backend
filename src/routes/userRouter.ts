@@ -758,8 +758,9 @@ router.get('/getPublicUser',AuthMiddleware, async (req: Request, res: Response) 
     });
 
     if (!user) {
-      res.status(404);
-      console.log('error');
+      res.status(404).json({
+        msg : "user not found"
+      })
       return;
     } else {
       res.status(200).json({
@@ -767,7 +768,56 @@ router.get('/getPublicUser',AuthMiddleware, async (req: Request, res: Response) 
       });
       return;
     }
-  } catch (error) {}
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      msg : "internal server error"
+    })
+  }
 });
+
+router.get("/getAllUsers", async(req: Request, res : Response) => {
+    const page = parseInt(req.query.page as string) || 1
+    const limit = 10
+    const skip = (page - 1) * limit
+  
+  try {
+     const users = await prisma.user.findMany({ 
+      take : limit,
+      skip,
+      orderBy : {
+        createdAt : "desc"
+      },
+      select : {
+        id : true,
+        name : true,
+        profileAvatar : true,
+        collegeName : true,
+        clubName : true,
+        year : true,
+        course : true
+      }
+    })
+
+    const totalData = await prisma.user.count();
+
+    if(users){
+      res.status(200).json({
+        users,
+        totalPages : Math.ceil(totalData/limit)
+      })
+      return;
+    } else {
+      res.status(404).json({
+        msg : "users not found"
+      })
+    }
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      msg : "internal server error"
+    })
+  }
+})
 
 export const userRouter = router;
