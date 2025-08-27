@@ -792,13 +792,19 @@ router.get("/getAllUsers", async(req: Request, res : Response) => {
         id : true,
         name : true,
         profileAvatar : true,
-        collegeName : true
+        collegeName : true,
+        clubName : true,
+        year : true,
+        course : true
       }
     })
 
+    const totalData = await prisma.user.count();
+
     if(users){
       res.status(200).json({
-        users
+        users,
+        totalPages : Math.ceil(totalData/limit)
       })
       return;
     } else {
