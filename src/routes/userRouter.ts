@@ -48,7 +48,7 @@ router.post('/signup', async (req: Request, res: Response) => {
       const id = resposne.id;
 
       if (bcrypt.compareSync(password, userPw)) {
-        const token = jwt.sign({ id }, process.env.JWT_SECRET!);
+        const token = jwt.sign({ id, email }, process.env.JWT_SECRET!);
         res.status(200).json({
           msg: 'login success',
           token,
@@ -150,7 +150,7 @@ router.post('/signup', async (req: Request, res: Response) => {
         `
       );
       const id = response.id;
-      const token = jwt.sign({ id }, process.env.JWT_SECRET!);
+      const token = jwt.sign({ id, email }, process.env.JWT_SECRET!);
       res.status(200).json({
         msg: 'account created',
       });
