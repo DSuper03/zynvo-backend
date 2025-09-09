@@ -142,7 +142,6 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
 
 router.get(
   '/event/:id',
-  AuthMiddleware,
   async (req: Request, res: Response) => {
     const Eventid = req.params.id;
 
