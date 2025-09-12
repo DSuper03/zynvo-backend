@@ -20,8 +20,6 @@ router.post('/create', AuthMiddleware, async (req: Request, res: Response) => {
   }
   const userId = req.id;
   try {
-    // probably perform this in transaction
-    const transaction = await prisma.$transaction([]);
 
     const response = await prisma.user.findFirst({
       where: {
