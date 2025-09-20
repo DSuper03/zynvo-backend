@@ -93,6 +93,12 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
         msg: 'invalid president identification',
       });
       return;
+    } 
+    if (university != club.collegeName) {
+       res.status(400).json({
+        msg: 'College mismatch, select your correct college',
+      });
+      return;
     }
 
     const response = await prisma.event.create({
@@ -109,12 +115,10 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
         prizes: prizes ? prizes : '',
         startDate: eventStartDate,
         endDate: eventEndDate,
-        university: university
-          ? university.toLowerCase()
-          : club.collegeName.toLowerCase(),
+        university: club.collegeName,
         collegeStudentsOnly: collegeStudentsOnly,
         contactEmail: contactEmail,
-        contactPhone: contactPhone,
+        contactPhone: parseInt(contactPhone),
         participationFee: noParticipationFee,
         posterUrl : image
       },
@@ -133,10 +137,11 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
     return;
     }
   } catch (error) {
-    logger.error(error);
+    console.log(error)
     res.status(501).json({
       msg: 'internal server error',
     });
+    return;
   }
 });
 
