@@ -33,6 +33,7 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^6.10.0",
     "nodemon": "^3.1.9",
+    "typescript": "^5.9.2",
     "winston": "^3.17.0",
     "zod": "^3.24.2"
   },

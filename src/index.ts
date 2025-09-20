@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
 import { userRouter } from './routes/userRouter';
@@ -19,7 +22,7 @@ app.use('/api/v1/events', EventRouter);
 app.use('/api/v1/clubs', clubRouter);
 app.use('/api/v1/contact', contactRouter);
 
-app.get('/health', (req: any, res: any) => {
+app.get('/health', (_req: any, res: any) => {
   res.status(200).json({ msg: 'good health' });
 });
 

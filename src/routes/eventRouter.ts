@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 import prisma from '../db/db';
 import { EventSchema } from '../types/formtypes';
 import { AuthMiddleware } from '../middleware/AuthMiddleware';
-import { tuple } from 'zod';
+
 
 const router = Router();
 const Verification = (req: Request, res: Response) => {
