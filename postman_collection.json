@@ -1,0 +1,106 @@
+{
+  "info": {
+    "name": "Zynvo Backend API",
+    "_postman_id": "zynvo-backend-collection",
+    "description": "Postman collection for Zynvo backend API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "User Signup",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"password\": \"Password123!\",\n  \"collegeName\": \"MIT\"\n}"
+        },
+        "url": { "raw": "http://localhost:8000/api/v1/user/signup", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "user", "signup"] }
+      }
+    },
+    {
+      "name": "User Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Password123!\"\n}"
+        },
+        "url": { "raw": "http://localhost:8000/api/v1/user/login", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "user", "login"] }
+      }
+    },
+    {
+      "name": "Create Club",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Test Club\",\n  \"collegeName\": \"MIT\",\n  \"description\": \"A test club\",\n  \"type\": \"Technology\",\n  \"FounderEmail\": \"founder@example.com\",\n  \"clubContact\": \"+1-555-0101\",\n  \"requirements\": \"None\",\n  \"facultyEmail\": \"faculty@example.com\"\n}"
+        },
+        "url": { "raw": "http://localhost:8000/api/v1/clubs/club", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "clubs", "club"] }
+      }
+    },
+    {
+      "name": "Get All Clubs",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "http://localhost:8000/api/v1/clubs/getAll", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "clubs", "getAll"] }
+      }
+    },
+    {
+      "name": "Create Event",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"eventName\": \"Test Event\",\n  \"description\": \"A test event\",\n  \"eventStartDate\": \"2025-08-01\",\n  \"eventEndDate\": \"2025-08-02\",\n  \"eventMode\": \"Offline\",\n  \"eventType\": \"Workshop\",\n  \"maxTeamSize\": 5,\n  \"venue\": \"MIT Auditorium\",\n  \"eventWebsite\": \"https://example.com\",\n  \"university\": \"MIT\",\n  \"collegeStudentsOnly\": true,\n  \"contactEmail\": \"event@example.com\",\n  \"contactPhone\": \"1234567890\",\n  \"noParticipationFee\": true,\n  \"prizes\": \"Trophy\"\n}"
+        },
+        "url": { "raw": "http://localhost:8000/api/v1/events/event", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "events", "event"] }
+      }
+    },
+    {
+      "name": "Get All Events",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "http://localhost:8000/api/v1/events/all", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "events", "all"] }
+      }
+    },
+    {
+      "name": "Create Post",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Test Post\",\n  \"description\": \"This is a test post.\"\n}"
+        },
+        "url": { "raw": "http://localhost:8000/api/v1/post/create", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "post", "create"] }
+      }
+    },
+    {
+      "name": "Get All Posts",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "http://localhost:8000/api/v1/post/all", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "post", "all"] }
+      }
+    }
+  ]
+}

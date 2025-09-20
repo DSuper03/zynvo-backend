@@ -1,5 +1,5 @@
 //tested
-import { Router, Request, Response, response } from 'express';
+import { Router, Request, Response } from 'express';
 import prisma from '../db/db';
 import { logger } from '../utils/logger';
 import { newPWschema, signupSchema } from '../types/formtypes';
