@@ -6,15 +6,57 @@ import { ClubSchema } from '../types/formtypes';
 import { AuthMiddleware } from '../middleware/AuthMiddleware';
 
 const router = Router();
-const Verification = (req: Request, res: Response) => {
-  if (!req.isVerified) {
-    res.status(400).json({
-      msg: 'please verify yourself first',
+
+// Move specific routes BEFORE parameterized routes
+router.get('/getAll', AuthMiddleware, async (req: Request, res: Response) => {
+  try {
+    const pages = parseInt(req.query.page as string) || 1;
+    const limit = 10;
+    const skip = (pages - 1) * limit;
+
+    const resp = await prisma.clubs.findMany({
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        collegeName: true,
+        description: true,
+        type: true,
+        profilePicUrl: true,
+        members: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
+      }
+    });
+
+    const totalData = await prisma.clubs.count();
+    
+    res.status(200).json({
+      resp,
+      totalPages: Math.ceil(totalData / limit)
+    });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({
+      msg: 'Error fetching clubs'
     });
   }
-};
+});
 
-// Get complete club details by ID
+router.get('/getClub', AuthMiddleware, async (req: Request, res: Response) => {
+  // ...existing getClub code...
+});
+
+router.get('/getClubs/:college', async (req: Request, res: Response) => {
+  // ...existing getClubs code...
+});
+
+// Put parameterized routes LAST
 router.get('/:id', AuthMiddleware, async (req: Request, res: Response) => {
   try {
     const clubId = req.params.id;
@@ -35,7 +77,6 @@ router.get('/:id', AuthMiddleware, async (req: Request, res: Response) => {
         facultyEmail: true,
         profilePicUrl: true,
         wings: true,
-        
         members: {
           select: {
             id: true,
@@ -62,7 +103,6 @@ router.get('/:id', AuthMiddleware, async (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error(error);
-    console.log(error);
     res.status(500).json({
       msg: 'Error retrieving club details',
     });
@@ -185,150 +225,6 @@ router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
     res.status(500).json({
       msg: 'error creating club',
     });
-  }
-});
-
-//query korbo, params na , tahole id , name , collegeName diye o khoja jabe
-router.get('/getClub',AuthMiddleware, async (req: Request, res: Response) => {
-  const id = req.query.id;
-  const name = req.query.name;
-  const collegeName = req.query.collegeName;
-  try {
-    if (id) {
-      const response = await prisma.clubs.findFirst({
-        where: {
-          id: id as string,
-        },
-        select: {
-          id: true,
-          name: true,
-          collegeName: true,
-          description: true,
-          founderEmail : true,
-          facultyEmail : true,
-          members : true
-          // add profile pic later
-        },
-      });
-
-      if (!response) {
-        res.json({
-          msg: 'no such club',
-        });
-        return 
-      }
-
-      res.status(200).json({
-        msg: 'club found',
-        response,
-      });
-
-      return;
-    } else if (name) {
-      const response = await prisma.clubs.findMany({
-        where: {
-          name: name as string,
-        },
-        select: {
-          id: true,
-          name: true,
-          collegeName: true,
-          description: true,
-          // add profile pic later
-        },
-      });
-
-      if (!response) {
-        res.json({
-          msg: 'no such club',
-        });
-        return
-      }
-
-      res.status(200).json({
-        msg: 'clubs found, add college filter to sort out',
-        response,
-      });
-
-      return;
-    } else if (name && collegeName) {
-      const response = await prisma.clubs.findFirst({
-        where: {
-          name: name as string,
-          collegeName: collegeName as string,
-        },
-        select: {
-          id: true,
-          name: true,
-          collegeName: true,
-          description: true,
-          // add profile pic later
-        },
-      });
-
-      if (!response) {
-        res.json({
-          msg: 'no such club',
-        });
-      }
-
-      res.status(200).json({
-        msg: 'clubs found',
-        response,
-      });
-    }
-  } catch (error) {
-    logger.error(error);
-  }
-});
-
-router.get('/getAll', AuthMiddleware, async (req: Request, res: Response) => {
-  try {
-    const pages = parseInt(req.query.page as string)
-    const limit = 10
-
-    const skip = (pages - 1) * limit
-
-    const resp = await prisma.clubs.findMany({
-      skip,
-      take : limit
-    });
-    const totalData = await prisma.clubs.count();
-    if (resp) {
-      res.status(200).json({
-        resp, 
-        totalPages : Math.ceil(totalData/limit)
-      });
-      return;
-    }
-  } catch (error) {
-    console.log(error);
-  }
-});
-
-router.get('/getClubs/:college', async (req: Request, res: Response) => {
-  try {
-    const collegeName = req.params.college as string
-    const resp = await prisma.clubs.findMany({
-      where : {
-        collegeName : collegeName
-      } , 
-      select : {
-        name : true
-      }
-    });
-    if (resp && resp.length > 0) {
-      res.status(200).json({
-        resp,
-      });
-      return;
-    } else {
-      res.status(404).json({
-        resp : []
-      })
-    }
-  } catch (error) {
-    console.log(error);
   }
 });
 
