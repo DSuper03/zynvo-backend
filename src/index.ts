@@ -13,6 +13,9 @@ import { clubRouter } from './routes/clubRouter';
 const app = express()
 const PORT = 8000;
 
+// Add this line to trust proxy headers
+app.set('trust proxy', 1); // or true for all proxies
+
 app.use(express.json());
 app.use(cors());
 app.use('/api/v1/user', limiter);
