@@ -14,6 +14,60 @@ const Verification = (req: Request, res: Response) => {
   }
 };
 
+// Get complete club details by ID
+router.get('/:id', AuthMiddleware, async (req: Request, res: Response) => {
+  try {
+    const clubId = req.params.id;
+
+    const club = await prisma.clubs.findUnique({
+      where: {
+        id: clubId,
+      },
+      select: {
+        id: true,
+        name: true,
+        collegeName: true,
+        description: true,
+        type: true,
+        founderEmail: true,
+        clubContact: true,
+        requirements: true,
+        facultyEmail: true,
+        profilePicUrl: true,
+        wings: true,
+        
+        members: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            profileAvatar: true,
+            course: true,
+            year: true
+          }
+        }
+      },
+    });
+
+    if (!club) {
+      res.status(404).json({
+        msg: 'Club not found',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      msg: 'Club details retrieved successfully',
+      club,
+    });
+  } catch (error) {
+    logger.error(error);
+    console.log(error);
+    res.status(500).json({
+      msg: 'Error retrieving club details',
+    });
+  }
+});
 
 router.post('/club', AuthMiddleware,async (req: Request, res: Response) => {
   //include pfp later

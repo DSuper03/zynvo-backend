@@ -10,7 +10,7 @@ import { contactRouter } from './routes/contactRouter';
 import { EventRouter } from './routes/eventRouter';
 import { clubRouter } from './routes/clubRouter';
 
-const app = express();
+const app = express()
 const PORT = 8000;
 
 app.use(express.json());
