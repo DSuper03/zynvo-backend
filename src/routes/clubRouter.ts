@@ -282,7 +282,7 @@ router.get('/getClub',AuthMiddleware, async (req: Request, res: Response) => {
   }
 });
 
-router.get('/getAll',AuthMiddleware, async (req: Request, res: Response) => {
+router.get('/getAll', AuthMiddleware, async (req: Request, res: Response) => {
   try {
     const pages = parseInt(req.query.page as string)
     const limit = 10

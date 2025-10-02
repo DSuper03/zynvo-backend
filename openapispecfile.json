@@ -1,0 +1,536 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Zynvo API",
+    "version": "1.0.0",
+    "description": "API documentation for Zynvo backend"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Development server"
+    }
+  ],
+  "paths": {
+    "/api/v1/user/signup": {
+      "post": {
+        "summary": "Register a new user",
+        "tags": ["User"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "password", "collegeName"],
+                "properties": {
+                  "name": {"type": "string"},
+                  "email": {"type": "string", "format": "email"},
+                  "password": {"type": "string", "format": "password"},
+                  "collegeName": {"type": "string"},
+                  "avatarUrl": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Account created successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/user/login": {
+      "post": {
+        "summary": "Login a user",
+        "tags": ["User"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {"type": "string", "format": "email"},
+                  "password": {"type": "string", "format": "password"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {"type": "string"},
+                    "token": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/user/verify": {
+      "post": {
+        "summary": "Verify user email",
+        "tags": ["User"],
+        "parameters": [
+          {
+            "name": "vToken",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Email verified successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/user/reset-password": {
+      "put": {
+        "summary": "Reset user password",
+        "tags": ["User"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["password", "newPassword"],
+                "properties": {
+                  "password": {"type": "string"},
+                  "newPassword": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password updated successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/user/getUser": {
+      "get": {
+        "summary": "Get user profile",
+        "tags": ["User"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "User profile retrieved successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/user/joinClub/{id}": {
+      "post": {
+        "summary": "Join a club",
+        "tags": ["User"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Club joined successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/post/create": {
+      "post": {
+        "summary": "Create a new post",
+        "tags": ["Post"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "description"],
+                "properties": {
+                  "title": {"type": "string"},
+                  "description": {"type": "string"},
+                  "collegeName": {"type": "string"},
+                  "eventType": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Post created successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/post/edit/{id}": {
+      "put": {
+        "summary": "Edit an existing post",
+        "tags": ["Post"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {"type": "string"},
+                  "description": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Post updated successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/post/all": {
+      "get": {
+        "summary": "Get all posts",
+        "tags": ["Post"],
+        "responses": {
+          "200": {
+            "description": "Posts retrieved successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/post/get/{id}": {
+      "get": {
+        "summary": "Get a specific post",
+        "tags": ["Post"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post retrieved successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/post/delete/{id}": {
+      "delete": {
+        "summary": "Delete a post",
+        "tags": ["Post"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Post deleted successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/events/event": {
+      "post": {
+        "summary": "Create a new event",
+        "tags": ["Event"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["eventName", "description", "eventStartDate"],
+                "properties": {
+                  "eventName": {"type": "string"},
+                  "description": {"type": "string"},
+                  "eventStartDate": {"type": "string", "format": "date"},
+                  "eventEndDate": {"type": "string", "format": "date"},
+                  "eventMode": {"type": "string"},
+                  "eventType": {"type": "string"},
+                  "maxTeamSize": {"type": "integer"},
+                  "venue": {"type": "string"},
+                  "eventWebsite": {"type": "string"},
+                  "university": {"type": "string"},
+                  "collegeStudentsOnly": {"type": "boolean"},
+                  "contactEmail": {"type": "string"},
+                  "contactPhone": {"type": "string"},
+                  "noParticipationFee": {"type": "boolean"},
+                  "prizes": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event created successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/events/event/{id}": {
+      "get": {
+        "summary": "Get a specific event",
+        "tags": ["Event"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event retrieved successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/events/eventByClub/{id}": {
+      "get": {
+        "summary": "Get events by club",
+        "tags": ["Event"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Events retrieved successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/events/all": {
+      "get": {
+        "summary": "Get all events",
+        "tags": ["Event"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Events retrieved successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/events/registerEvent": {
+      "post": {
+        "summary": "Register for an event",
+        "tags": ["Event"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["eventId"],
+                "properties": {
+                  "eventId": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event registration successful"
+          }
+        }
+      }
+    },
+    "/api/v1/events/addSpeakers": {
+      "post": {
+        "summary": "Add speakers to an event",
+        "tags": ["Event"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "about", "eventId"],
+                "properties": {
+                  "profilePic": {"type": "string"},
+                  "about": {"type": "string"},
+                  "name": {"type": "string"},
+                  "email": {"type": "string"},
+                  "eventId": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Speaker added successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/clubs/club": {
+      "post": {
+        "summary": "Create a new club",
+        "tags": ["Club"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "collegeName", "description", "FounderEmail"],
+                "properties": {
+                  "name": {"type": "string"},
+                  "collegeName": {"type": "string"},
+                  "description": {"type": "string"},
+                  "type": {"type": "string"},
+                  "FounderEmail": {"type": "string"},
+                  "clubContact": {"type": "string"},
+                  "requirements": {"type": "string"},
+                  "facultyEmail": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Club created successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/clubs/getClub": {
+      "get": {
+        "summary": "Get a specific club",
+        "tags": ["Club"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "collegeName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Club retrieved successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/clubs/getAll": {
+      "get": {
+        "summary": "Get all clubs",
+        "tags": ["Club"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Clubs retrieved successfully"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check endpoint",
+        "tags": ["Health"],
+        "responses": {
+          "200": {
+            "description": "API is working properly"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}
