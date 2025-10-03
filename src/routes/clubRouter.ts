@@ -13,7 +13,6 @@ router.get('/getAll', AuthMiddleware, async (req: Request, res: Response) => {
     const pages = parseInt(req.query.page as string) || 1;
     const limit = 10;
     const skip = (pages - 1) * limit;
-
     const resp = await prisma.clubs.findMany({
       skip,
       take: limit,
@@ -48,12 +47,166 @@ router.get('/getAll', AuthMiddleware, async (req: Request, res: Response) => {
   }
 });
 
+//query korbo, params na , tahole id , name , collegeName diye o khoja jabe
 router.get('/getClub', AuthMiddleware, async (req: Request, res: Response) => {
-  // ...existing getClub code...
+  const { id, name, collegeName } = req.query;
+
+  try {
+    if (id) {
+      const response = await prisma.clubs.findFirst({
+        where: { id: id as string },
+        select: {
+          id: true,
+          name: true,
+          collegeName: true,
+          description: true,
+          founderEmail: true,
+          facultyEmail: true,
+          members: true,
+        },
+      });
+
+      if (!response) {
+        res.json({ msg: 'no such club' });
+        return;
+      }
+
+      res.status(200).json({ msg: 'club found', response });
+      return;
+    } 
+    else if (name && collegeName) {
+      const response = await prisma.clubs.findFirst({
+        where: {
+          name: name as string,
+          collegeName: collegeName as string,
+        },
+        select: {
+          id: true,
+          name: true,
+          collegeName: true,
+          description: true,
+        },
+      });
+
+      if (!response) {
+        res.json({ msg: 'no such club' });
+        return;
+      }
+
+      res.status(200).json({ msg: 'club found', response });
+      return;
+    }
+    else if (collegeName) {  // ADD THIS CASE
+      const response = await prisma.clubs.findMany({
+        where: { 
+          collegeName: collegeName as string 
+        },
+        select: {
+          id: true,
+          name: true,
+          collegeName: true,
+          description: true,
+          type: true,
+          founderEmail: true,
+          facultyEmail: true,
+          profilePicUrl: true,
+          members: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            }
+          }
+        },
+      });
+
+      if (!response || response.length === 0) {
+        res.json({ msg: 'no clubs found for this college' });
+        return;
+      }
+
+      res.status(200).json({ 
+        msg: 'clubs found', 
+        response,
+        count: response.length 
+      });
+      return;
+    }
+    else if (name) {
+      const response = await prisma.clubs.findMany({
+        where: { name: name as string },
+        select: {
+          id: true,
+          name: true,
+          collegeName: true,
+          description: true,
+        },
+      });
+
+      if (!response || response.length === 0) {
+        res.json({ msg: 'no such club' });
+        return;
+      }
+
+      res.status(200).json({
+        msg: 'clubs found, add college filter to sort out',
+        response,
+      });
+      return;
+    }
+    else {
+      res.status(400).json({ 
+        msg: 'Please provide at least one parameter: id, name, or collegeName' 
+      });
+      return;
+    }
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ msg: 'server error' });
+    return;
+  }
 });
 
+
 router.get('/getClubs/:college', async (req: Request, res: Response) => {
-  // ...existing getClubs code...
+  try {
+    const collegeName = decodeURIComponent(req.params.college);
+    
+    const clubs = await prisma.clubs.findMany({
+      where: { 
+        collegeName: {
+          contains: collegeName,
+          mode: 'insensitive'
+        }
+      },
+      select: {
+        id: true,
+        name: true,
+        collegeName: true,
+        description: true,
+        type: true,
+        founderEmail: true,
+        facultyEmail: true,
+        profilePicUrl: true,
+        members: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
+      }
+    });
+
+    res.status(200).json({
+      msg: `Clubs for ${collegeName} found`,
+      clubs,
+      count: clubs.length
+    });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ msg: 'server error' });
+  }
 });
 
 // Put parameterized routes LAST
