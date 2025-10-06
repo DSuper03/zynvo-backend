@@ -1,25 +1,25 @@
 import winston from 'winston';
 
-let level: 'error' | 'warn' | 'info' | 'http' | 'verbose' | 'debug' | 'silly' =
-  'silly';
+const logLevel = process.env.NODE_ENV === 'production' ? 'info' : 'debug';
 
-switch (process.env.NODE_ENV) {
-  case 'production':
-    level = 'info';
-    break;
-  case 'development':
-    level = 'debug';
-    break;
-  case 'staging':
-    level = 'debug';
-    break;
-}
+const consoleFormat = winston.format.combine(
+  winston.format.colorize(),
+  winston.format.timestamp({ format: 'HH:mm:ss' }),
+  winston.format.printf(({ timestamp, level, message, stack }) => {
+    return `${timestamp} [${level}]: ${stack || message}`;
+  })
+);
 
 export const logger = winston.createLogger({
-  level,
+  level: logLevel,
+  format: winston.format.combine(
+    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
   transports: [
     new winston.transports.Console({
-      format: winston.format.simple(),
-    }),
-  ],
+      format: consoleFormat
+    })
+  ]
 });

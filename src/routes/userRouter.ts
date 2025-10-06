@@ -1,823 +1,546 @@
-//tested
-import { Router, Request, Response, response } from 'express';
+import { Router, Request, Response } from 'express';
 import prisma from '../db/db';
 import { logger } from '../utils/logger';
 import { newPWschema, signupSchema } from '../types/formtypes';
-import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
-import bcrypt from 'bcrypt';
-import crypto from 'crypto';
-import mail from '../utils/nodemailer';
 import { AuthMiddleware } from '../middleware/AuthMiddleware';
-dotenv.config();
+import { emailService } from '../utils/emailService';
+import { authUtils, VERIFICATION_TOKEN_VALIDITY } from '../utils/authUtils';
+
 const router = Router();
 
-const genToken = () => {
-  return crypto.randomBytes(20).toString('hex');
-};
-
 router.post('/signup', async (req: Request, res: Response) => {
-  const { name, email, password, collegeName } = req.body;
-  const avatarUrl = req.body.avatarUrl;
+  const { name, email, password, collegeName, avatarUrl } = req.body;
   const parsedData = signupSchema.safeParse(req.body);
 
   if (!parsedData.success) {
-    res.status(411).json({ msg: 'incorrect inputs' });
-    logger.error(parsedData.error);
-    return;
+    return res.status(400).json({ 
+      msg: 'Invalid input data',
+      errors: parsedData.error.errors 
+    });
   }
+
   try {
-    const resposne = await prisma.user.findUnique({
-      where: {
-        email: email,
-      },
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, isVerified: true }
     });
 
-    console.log("response:", resposne)
-
-    if (resposne && resposne?.isVerified) { 
-
-  if(collegeName !== "zynvo college" || name !== "zynvo" ) {
-        res.json({
-          msg : "Please Sign Up first"
-        })
-        return;
-      }
-
-      const userPw = resposne.password;
-      const id = resposne.id;
-
-      if (bcrypt.compareSync(password, userPw)) {
-        const token = jwt.sign({ id, email, pfp : resposne.profileAvatar, name : resposne.name }, process.env.JWT_SECRET!);
-        res.status(200).json({
-          msg: 'login success',
-          token,
-        });
-        return;
-      } else {
-        res.status(401).json({
-          msg: 'Invalid email or password',
-          token: 'no token',
-        });
-        return;
-      }
-    } else {
-
-       if(collegeName == "zynvo college" || name == "zynvo" ) {
-        res.json({
-          msg : "Please Sign Up first and verify yourself."
-        })
-        return;
-      }
-
-      const hashedPassword = bcrypt.hashSync(
-        parsedData.data?.password as string,
-        10
-      );
-      const vToken = genToken();
-
-      const response = await prisma.user.create({
-        data: {
-          email: parsedData.data?.email as string,
-          name: parsedData.data?.name,
-          password: hashedPassword,
-          collegeName: collegeName,
-          profileAvatar: avatarUrl,
-          vToken: vToken,
-          expiryToken: Math.floor(Date.now() / 1000),
-          ValidFor: 86400000,
-        },
-      });
-
-      const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
-      await mail(
-        parsedData.data.name,
-        parsedData.data.email,
-        'One click away from greatness (seriously, just one)',
-        `  <div style="font-family: Arial, sans-serif; padding: 0; margin: 0;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: auto; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-      <tr>
-        <td>
-          <img 
-            src="https://pbs.twimg.com/profile_banners/1916901326887522304/1750314868/1500x500" 
-            alt="Welcome to Zynvo" 
-            style="width: 100%; height: auto; display: block;"
-          />
-        </td>
-      </tr>
-
-      <tr>
-        <td style="padding: 24px;">
-          <h2 style="color: #333333;">Hey there! ${name} 👋</h2>
-
-          <p style="color: #555555; font-size: 16px; line-height: 1.6;">
-            Welcome to <strong>Zynvo</strong>! You've got excellent taste in platforms (we're not biased at all).
-          </p>
-
-          <p style="color: #555555; font-size: 16px; line-height: 1.6;">
-            We just need to make sure you're not a robot trying to take over the world. 🤖
-          </p>
-
-          <p style="color: #555555; font-size: 16px; line-height: 1.6;">
-            <strong>Click the link below and boom – you're officially part of the cool kids club:</strong>
-          </p>
-
-          <p style="margin: 24px 0;">
-            <a 
-              href="${url}" 
-              style="background-color: #facc15; color: #000000; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; display: inline-block;"
-            >
-              Verify My Account
-            </a>
-          </p>
-
-          <p style="color: #555555; font-size: 16px; line-height: 1.6;">
-            Got questions? Just reply to this email — we're always here to help.
-          </p>
-
-          <p style="color: #555555; font-size: 16px; line-height: 1.6;">
-            Welcome aboard! <br />
-            The Zynvo Team 🚀
-          </p>
-
-          <p style="color: #999999; font-size: 14px; font-style: italic;">
-            P.S. This link expires in 24 hours, so don't overthink it like choosing a Netflix show.
-          </p>
-        </td>
-      </tr>
-    </table>
-  </div>
-        `
-      );
-      const id = response.id;
-      const token = jwt.sign({ id, email, pfp : response.profileAvatar, name : response.name  }, process.env.JWT_SECRET!);
-      res.status(200).json({
-        msg: 'account created',
-      });
+    if (existingUser?.isVerified) {
+      return res.status(409).json({ msg: 'User already exists and verified' });
     }
+
+    const hashedPassword = await authUtils.hashPassword(password);
+    const vToken = authUtils.generateVerificationToken();
+
+    const userData = {
+      email,
+      name,
+      password: hashedPassword,
+      collegeName: collegeName || 'not joined',
+      profileAvatar: avatarUrl,
+      vToken,
+      expiryToken: Math.floor(Date.now() / 1000),
+      ValidFor: VERIFICATION_TOKEN_VALIDITY,
+    };
+
+    const user = existingUser 
+      ? await prisma.user.update({ where: { email }, data: userData })
+      : await prisma.user.create({ data: userData });
+
+    await emailService.sendVerificationEmail(name, email, vToken);
+
+    res.status(201).json({ msg: 'Account created. Please check your email for verification.' });
   } catch (error: any) {
-    logger.info(error.message);
-    logger.error(error);
-    res.status(500).json({ msg: 'internal server error' });
+    logger.error('Signup error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
   }
 });
 
+// LOGIN ROUTE
+router.post('/login', async (req: Request, res: Response) => {
+  const { email, password } = req.body;
 
-router.post('/ResendEmail', async (req: Request, res: Response) => {
-  const email = req.query.email as string;
+  if (!email || !password) {
+    return res.status(400).json({ msg: 'Email and password required' });
+  }
+
   try {
-    const exists = await prisma.user.findUnique({
-      where : {
-        email : email
-      }, 
-      select : {
-        name : true
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        password: true,
+        name: true,
+        profileAvatar: true,
+        isVerified: true
       }
-    })
+    });
 
-    if(exists && exists.name){
-      const vToken = genToken();
-      const update = await prisma.user.update({
-        where : {
-          email : email
-        }, 
-        data : {
-          vToken : vToken,
-          expiryToken: Math.floor(Date.now() / 1000)
-        }
-      })
-      if(update) {
-         const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${email}`;
-              await mail(
-                exists.name,
-                email,
-                'Resend: Verify your Zynvo account',
-                `  <div style="font-family: Arial, sans-serif; padding: 0; margin: 0;">
-                  <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: auto; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
-                    <tr>
-                      <td>
-                        <img 
-                          src="https://pbs.twimg.com/profile_banners/1916901326887522304/1750314868/1500x500" 
-                          alt="Welcome to Zynvo" 
-                          style="width: 100%; height: auto; display: block;"
-                        />
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 24px;">
-                        <h2 style="color: #333333;">Resend Verification Link</h2>
-                        <p style="color: #555555; font-size: 16px; line-height: 1.6;">
-                          Hi ${exists.name},<br/>
-                          It looks like you requested a new verification link for your Zynvo account.
-                        </p>
-                        <p style="color: #555555; font-size: 16px; line-height: 1.6;">
-                          Click the button below to verify your email and activate your account:
-                        </p>
-                        <p style="margin: 24px 0;">
-                          <a 
-                            href="${url}" 
-                            style="background-color: #facc15; color: #000000; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; display: inline-block;"
-                          >
-                            Verify My Account
-                          </a>
-                        </p>
-                        <p style="color: #555555; font-size: 16px; line-height: 1.6;">
-                          If you did not request this, you can safely ignore this email.
-                        </p>
-                        <p style="color: #999999; font-size: 14px; font-style: italic;">
-                          This link expires in 24 hours.
-                        </p>
-                      </td>
-                    </tr>
-                  </table>
-                </div>
-                `
-              );
-          res.status(200).json({
-            msg : "Verification mail sent"
-          })
-          return;
-      }else {
-        res.status(501).json({
-          msg : "some error occured"
-        })
-        return
-      }
-    } else {
-      res.status(200).json({
-        msg : "No such user"
-      })
-      return;
+    if (!user) {
+      return res.status(401).json({ msg: 'Invalid credentials' });
     }
 
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      msg : "internal server error"
-    })
+    if (!user.isVerified) {
+      return res.status(403).json({ msg: 'Please verify your email first' });
+    }
+
+    const isValidPassword = await authUtils.comparePassword(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ msg: 'Invalid credentials' });
+    }
+
+    const token = authUtils.generateJWT({
+      id: user.id, 
+      email: user.email, 
+      isVerified: user.isVerified 
+    });
+
+    res.status(200).json({
+      msg: 'Login successful',
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        profileAvatar: user.profileAvatar
+      }
+    });
+  } catch (error: any) {
+    logger.error('Login error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
+  }
+});
+
+// RESEND EMAIL
+router.post('/resend-email', async (req: Request, res: Response) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ msg: 'Email is required' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { name: true, isVerified: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ msg: 'User already verified' });
+    }
+
+    const vToken = authUtils.generateVerificationToken();
+    await prisma.user.update({
+      where: { email },
+      data: {
+        vToken,
+        expiryToken: Math.floor(Date.now() / 1000)
+      }
+    });
+
+    await emailService.sendResendVerificationEmail(user.name || 'User', email, vToken);
+
+    res.status(200).json({ msg: 'Verification email sent' });
+  } catch (error: any) {
+    logger.error('Resend email error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
   }
 });
 
 router.post('/verify', async (req: Request, res: Response) => {
-  const vToken = req.query.vToken as string;
-  console.log('1');
+  const { vToken } = req.query;
+
   if (!vToken) {
-    res.status(404).json({
-      msg: 'bad response, invalid token',
-    });
+    return res.status(400).json({ msg: 'Verification token required' });
   }
+
   try {
-    const response = await prisma.user.findFirst({
-      where: {
-        vToken: vToken,
-      },
-    });
-
-    if (!response) {
-      res.status(400).json({
-        msg: 'no user found, Invalid token',
-      });
-      return;
-    }
-
-    const expTime = response?.expiryToken as number;
-    const currentTime = Math.floor(Date.now() / 1000);
-    const ValidFor = response?.ValidFor as number;
-
-    if (currentTime - expTime <= ValidFor / 1000) {
-      console.log(2);
-      const Res = await prisma.user.update({
-        where: {
-          id: response?.id,
-        },
-        data: {
-          isVerified: true,
-        },
-      });
-
-      const id = Res.id;
-      const isVerified = Res.isVerified;
-
-      const token = jwt.sign({ id, isVerified }, process.env.JWT_SECRET!);
-
-      if (!Res) {
-        res.status(500).json({
-          msg: 'internal server error, try again',
-        });
-        return;
-      }
-
-      res.status(200).json({
-        msg: 'Verified successfully',
-        token,
-      });
-    } else {
-      res.status(400).json({
-        msg: 'expired',
-      });
-    }
-  } catch (error) {
-    logger.error(error);
-    res.status(500).json({
-      msg: 'internal server error',
-    });
-  }
-});
-
-router.put(
-  '/reset-password',
-  AuthMiddleware,
-  async (req: Request, res: Response) => {
-    const userID = req.id;
-    const { password, newPassword } = req.body;
-    const parsedData = newPWschema.safeParse(req.body);
-
-    if (!parsedData.success) {
-      res.json({
-        msg: 'invalid passwrd format',
-      });
-      return;
-    }
-
-    try {
-      const response = await prisma.user.findFirst({
-        where: {
-          id: userID,
-        },
-      });
-
-      if (!response) {
-        res.status(404).json({
-          msg: 'invalid user, no such user',
-        });
-        return;
-      }
-
-      const pw = response?.password as string;
-
-      if (bcrypt.compareSync(password, pw)) {
-        const update = await prisma.user.update({
-          where: {
-            id: response?.id,
-          },
-          data: {
-            password: bcrypt.hashSync(parsedData.data?.password as string, 10),
-          },
-        });
-
-        if (!update){
-          res.status(500).json({ msg: 'internal server error, try again' });
-          return;
-        }
-        
-        res.status(200).json({
-          msg: 'password updated successfully',
-        });
-        return;
-      }
-    } catch (error) {
-      logger.info(error);
-      logger.error(error);
-      res.status(500).json({ msg: 'internal server error' });
-
-    }
-  }
-);
-
-router.get('/getUser', AuthMiddleware, async (req: Request, res: Response) => {
-  const userId = req.id;
-  try {
-    const user = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
+    const user = await prisma.user.findFirst({
+      where: { vToken: vToken as string },
       select: {
-        collegeName : true,
-        twitter : true,
-        instagram : true,
-        linkedin : true,
-        createdAt : true,
-        id : true,
-        bio : true,
-        year : true,
-        tags : true,
-        course : true,
-        profileAvatar: true,
-        name: true,
-        clubName: true,
+        id: true,
         email: true,
-        isVerified: true,
-        eventAttended: {
-          where: {
-            userId: userId,
-          },
-          select: {
-            event: {
-              select: {
-                EventName: true,
-                id: true,
-              },
-            },
-          },
-        },
-        CreatePost : {
-          where : {
-            authorId : userId
-          }, 
-          select : {
-            id : true,
-            description : true
-          }
-        }
-      },
+        name: true,
+        expiryToken: true,
+        ValidFor: true,
+        isVerified: true
+      }
     });
 
     if (!user) {
-      res.status(404);
-      console.log('error');
-      return;
-    } else {
-      res.status(200).json({
-        user,
-      });
-      return;
+      return res.status(400).json({ msg: 'Invalid verification token' });
     }
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      msg : "error fetching details"
-    })
+
+    if (user.isVerified) {
+      return res.status(400).json({ msg: 'User already verified' });
+    }
+
+    if (authUtils.isTokenExpired(user.expiryToken, user.ValidFor)) {
+      return res.status(400).json({ msg: 'Verification token expired' });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: { 
+        isVerified: true,
+        vToken: null
+      }
+    });
+
+    const token = authUtils.generateJWT({
+      id: updatedUser.id, 
+      email: updatedUser.email,
+      isVerified: true 
+    });
+
+    res.status(200).json({
+      msg: 'Email verified successfully',
+      token
+    });
+  } catch (error: any) {
+    logger.error('Verification error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
   }
 });
 
-router.post(
-  '/joinClub/:id',
-  AuthMiddleware,
-  async (req: Request, res: Response) => {
-    // maybe allow users to join multiple clubs.
-    const ClubId = req.params.id;
-    const userId = req.id;
-    try {
-      const club = await prisma.clubs.findFirst({
-        where: {
-          id: ClubId,
-        },
-        select: {
-          name: true,
-        },
-      });
-
-      if (!club) {
-        res.json({
-          msg: 'no club found',
-        });
-        return
-      }
-
-      const clubName = club?.name as string;
-
-      const userClub = await prisma.user.findUnique({
-        where : {
-          id : userId
-        },
-        select : {
-          clubName : true, 
-          clubId : true
-        }
-      })
-
-      if(userClub?.clubId && userClub.clubName) {
-        res.json({
-          msg : "you are alredy a part of club, leave that first to join this."
-        })
-      }
-
-      const JoinClub = await prisma.user.update({
-        where: {
-          id: userId,
-        },
-        data: {
-          clubName: clubName,
-          clubId: ClubId,
-        },
-      });
-
-      if (JoinClub) {
-        res.status(200).json({
-          msg: 'yay club joined',
-        });
-        return
-      }
-
-      console.log('working');
-    } catch (error) {
-      logger.error(error);
-    }
-  }
-);
-
-router.get('/isFounder', AuthMiddleware, async(req : Request, res: Response) => {
-   const userId = req.id;
-   const eventId = req.query.id as string
-
-    try {
-      const user = await prisma.user.findFirst({
-        where: {
-          id: userId,
-        },
-        select: {
-          email: true,
-        },
-      });
-
-
-      if (!user) {
-        res.status(404).json({
-          msg: 'No user Found',
-        });
-        return;
-      }
-
-      console.log(user.email)
-
-      const club = await prisma.clubs.findUnique({
-        where: {
-          founderEmail: user.email,
-        },
-        select: {
-          name: true,
-          id: true,
-        },
-      });
-
-      if(!club){
-        res.json({
-          msg : "you nihh not a founder"
-        })
-        return;
-      }
-      console.log(club.name)
-      const event = await prisma.event.findUnique({
-        where : {
-          id : eventId
-        },
-        select : {
-          clubId : true
-        }
-      })
-
-       if(!event){
-        res.json({
-          msg : "you nihh not a founder"
-        })
-        return;
-      }
-
-      console.log(event.clubId)
-
-      if (club?.id == event?.clubId) {
-         res.status(200).json({
-          msg : "identified"
-        })
-        return
-      } else {
-        res.json({
-          msg: 'invalid president identification',
-        });
-        return;
-      }
-    } catch (e) {
-      console.log(e)
-      res.status(500).json({
-        msg : "internal server error"
-      })
-    }
-})
-
-router.put('/updateProfile',AuthMiddleware, async(req : Request, res: Response) => {
+// RESET PASSWORD
+router.put('/reset-password', AuthMiddleware, async (req: Request, res: Response) => {
   const userId = req.id;
-  const {bio , tags, course, year, twitter, instagram, linkedin} = req.body;
+  const { currentPassword, newPassword } = req.body;
+
+  const parsedData = newPWschema.safeParse({ password: newPassword });
+  if (!parsedData.success) {
+    return res.status(400).json({ 
+      msg: 'Invalid password format',
+      errors: parsedData.error.errors 
+    });
+  }
+
   try {
-    const update = await prisma.user.update({
-      where : {
-        id : userId
-      }, 
-      data : {
-        bio : bio,
-        tags : tags,
-        course : course,
-        year : year,
-        twitter : twitter ? twitter : "",
-        instagram : instagram ? instagram : "",
-        linkedin : linkedin ? linkedin : ""
-      }
-    })
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { password: true }
+    });
 
-    if(update) {
-      res.status(200).json({
-        msg : "Profile updated successfully"
-      })
-    } else {
-      res.status(400).json({
-        msg : "some error occured"
-      })
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
     }
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      msg : "Internal server error"
-    })
-  }
-} )
 
-router.get(`/getSidebarUser`, AuthMiddleware, async(req : Request, res: Response) => {
-  const userId = req.id
+    const isValidPassword = await authUtils.comparePassword(currentPassword, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ msg: 'Current password is incorrect' });
+    }
+
+    const hashedNewPassword = await authUtils.hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedNewPassword }
+    });
+
+    res.status(200).json({ msg: 'Password updated successfully' });
+  } catch (error: any) {
+    logger.error('Password reset error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
+  }
+});
+
+// GET USER PROFILE
+router.get('/profile', AuthMiddleware, async (req: Request, res: Response) => {
+  const userId = req.id;
+
   try {
-    const data = await prisma.user.findUnique({
-      where : {
-        id : userId
-      },
-      select : {
-        name : true,
-        profileAvatar : true
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        collegeName: true,
+        profileAvatar: true,
+        bio: true,
+        course: true,
+        year: true,
+        tags: true,
+        twitter: true,
+        instagram: true,
+        linkedin: true,
+        clubName: true,
+        isVerified: true,
+        createdAt: true,
+        eventAttended: {
+          select: {
+            event: {
+              select: {
+                id: true,
+                EventName: true
+              }
+            }
+          }
+        },
+        CreatePost: {
+          select: {
+            id: true,
+            description: true
+          }
+        }
       }
-    })
+    });
 
-    if(data) {
-      res.status(200).json({
-        data
-      })
-      return
-    } else {
-      res.status(404).json({
-        msg : "no user found"
-      })
-      return
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
     }
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-        msg : "internal server error"
+
+    res.status(200).json({ user });
+  } catch (error: any) {
+    logger.error('Get profile error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
+  }
+});
+
+// UPDATE PROFILE
+router.put('/profile', AuthMiddleware, async (req: Request, res: Response) => {
+  const userId = req.id;
+  const { bio, tags, course, year, twitter, instagram, linkedin } = req.body;
+
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        bio: bio || undefined,
+        tags: tags || undefined,
+        course: course || undefined,
+        year: year || undefined,
+        twitter: twitter || '',
+        instagram: instagram || '',
+        linkedin: linkedin || ''
+      }
+    });
+
+    res.status(200).json({ msg: 'Profile updated successfully' });
+  } catch (error: any) {
+    logger.error('Update profile error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
+  }
+});
+
+// JOIN CLUB
+router.post('/join-club/:id', AuthMiddleware, async (req: Request, res: Response) => {
+  const clubId = req.params.id;
+  const userId = req.id;
+
+  try {
+    const [club, user] = await Promise.all([
+      prisma.clubs.findUnique({
+        where: { id: clubId },
+        select: { name: true }
+      }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { clubId: true, clubName: true }
       })
-    return
-  }
-})
+    ]);
 
+    if (!club) {
+      return res.status(404).json({ msg: 'Club not found' });
+    }
 
-router.get('/SearchUser', async(req : Request, res: Response) => {
-  const name = req.query.name as string
-  if(!name || name == "") {
-    res.status(404).json({
-      msg : "Please enter user's name"
-    })
-    return 
+    if (user?.clubId) {
+      return res.status(400).json({ 
+        msg: 'You are already a member of a club. Leave current club first.' 
+      });
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        clubName: club.name,
+        clubId: clubId
+      }
+    });
+
+    res.status(200).json({ msg: 'Successfully joined club' });
+  } catch (error: any) {
+    logger.error('Join club error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
   }
+});
+
+// CHECK IF USER IS FOUNDER
+router.get('/is-founder', AuthMiddleware, async (req: Request, res: Response) => {
+  const userId = req.id;
+  const eventId = req.query.eventId as string;
+
+  if (!eventId) {
+    return res.status(400).json({ msg: 'Event ID required' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
+
+    const [club, event] = await Promise.all([
+      prisma.clubs.findUnique({
+        where: { founderEmail: user.email },
+        select: { id: true, name: true }
+      }),
+      prisma.event.findUnique({
+        where: { id: eventId },
+        select: { clubId: true }
+      })
+    ]);
+
+    if (!club || !event) {
+      return res.status(403).json({ msg: 'Not authorized' });
+    }
+
+    if (club.id !== event.clubId) {
+      return res.status(403).json({ msg: 'Not authorized for this event' });
+    }
+
+    res.status(200).json({ msg: 'Founder verified' });
+  } catch (error: any) {
+    logger.error('Founder check error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
+  }
+});
+
+// SEARCH USERS
+router.get('/search', async (req: Request, res: Response) => {
+  const { name, page = '1', limit = '10' } = req.query;
+
+  if (!name || typeof name !== 'string' || name.trim() === '') {
+    return res.status(400).json({ msg: 'Search name is required' });
+  }
+
+  const pageNum = parseInt(page as string);
+  const limitNum = Math.min(parseInt(limit as string), 50);
+  const skip = (pageNum - 1) * limitNum;
+
   try {
     const users = await prisma.user.findMany({
-      where : {
-        name : {
-          contains : name,
-          mode : "insensitive"
-        }
-      }, 
-      select : {
-        id : true,
-        name : true,
-        profileAvatar : true,
-        collegeName : true
-      }
-    })
-
-    if(users) {
-      res.status(200).json({
-        users
-      })
-      return
-    } else {
-      res.status(404).json({
-        msg : "no users found",
-        users : []
-      })
-      return
-    }
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      msg : "internal server error"
-    })
-  }
-})
-
-
-router.get('/getPublicUser',AuthMiddleware, async (req: Request, res: Response) => {
-  const userId = req.query.id as string
-  try {
-    const user = await prisma.user.findUnique({
       where: {
-        id: userId,
+        name: {
+          contains: name.trim(),
+          mode: 'insensitive'
+        },
+        isVerified: true
       },
       select: {
-        collegeName : true,
-        twitter : true,
-        instagram : true,
-        linkedin : true,
-        createdAt : true,
-        id : true,
-        bio : true,
-        year : true,
-        tags : true,
-        course : true,
-        profileAvatar: true,
+        id: true,
         name: true,
-        clubName: true,
-        email: true,
-        isVerified: true,
-        eventAttended: {
-          where: {
-            userId: userId,
-          },
-          select: {
-            event: {
-              select: {
-                EventName: true,
-                id: true,
-              },
-            },
-          },
-        },
-        CreatePost : {
-          where : {
-            authorId : userId
-          }, 
-          select : {
-            id : true,
-            description : true
-          }
-        }
+        profileAvatar: true,
+        collegeName: true
       },
+      take: limitNum,
+      skip
     });
 
-    if (!user) {
-      res.status(404).json({
-        msg : "user not found"
-      })
-      return;
-    } else {
-      res.status(200).json({
-        user,
-      });
-      return;
-    }
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      msg : "internal server error"
-    })
+    res.status(200).json({ users });
+  } catch (error: any) {
+    logger.error('Search users error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
   }
 });
 
-router.get("/getAllUsers", async(req: Request, res : Response) => {
-    const page = parseInt(req.query.page as string) || 1
-    const limit = 10
-    const skip = (page - 1) * limit
-  
+router.get('/public/:id', async (req: Request, res: Response) => {
+  const userId = req.params.id;
+
   try {
-     const users = await prisma.user.findMany({ 
-      take : limit,
-      skip,
-      orderBy : {
-        createdAt : "desc"
-      },
-      select : {
-        id : true,
-        name : true,
-        profileAvatar : true,
-        collegeName : true,
-        clubName : true,
-        year : true,
-        course : true
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        collegeName: true,
+        profileAvatar: true,
+        bio: true,
+        course: true,
+        year: true,
+        tags: true,
+        twitter: true,
+        instagram: true,
+        linkedin: true,
+        clubName: true,
+        createdAt: true,
+        eventAttended: {
+          select: {
+            event: {
+              select: {
+                id: true,
+                EventName: true
+              }
+            }
+          }
+        },
+        CreatePost: {
+          select: {
+            id: true,
+            description: true
+          }
+        }
       }
-    })
+    });
 
-    const totalData = await prisma.user.count();
-
-    if(users){
-      res.status(200).json({
-        users,
-        totalPages : Math.ceil(totalData/limit)
-      })
-      return;
-    } else {
-      res.status(404).json({
-        msg : "users not found"
-      })
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
     }
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      msg : "internal server error"
-    })
+
+    res.status(200).json({ user });
+  } catch (error: any) {
+    logger.error('Get public profile error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
   }
-})
+});
+
+// GET ALL USERS (PAGINATED)
+router.get('/all', async (req: Request, res: Response) => {
+  const { page = '1', limit = '10' } = req.query;
+  
+  const pageNum = parseInt(page as string);
+  const limitNum = Math.min(parseInt(limit as string), 50);
+  const skip = (pageNum - 1) * limitNum;
+
+  try {
+    const [users, totalCount] = await Promise.all([
+      prisma.user.findMany({
+        where: { isVerified: true },
+        select: {
+          id: true,
+          name: true,
+          profileAvatar: true,
+          collegeName: true,
+          clubName: true,
+          year: true,
+          course: true
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limitNum,
+        skip
+      }),
+      prisma.user.count({ where: { isVerified: true } })
+    ]);
+
+    res.status(200).json({
+      users,
+      totalPages: Math.ceil(totalCount / limitNum),
+      currentPage: pageNum,
+      totalUsers: totalCount
+    });
+  } catch (error: any) {
+    logger.error('Get all users error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
+  }
+});
 
 export const userRouter = router;
