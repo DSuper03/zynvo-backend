@@ -1,7 +1,7 @@
 //tested
 import { Request, Response, Router } from 'express';
 import { logger } from '../utils/logger';
-import { AuthMiddleware } from '../middlewares/AuthMiddleware';
+import { AuthMiddleware } from '../middleware/AuthMiddleware';
 import prisma from '../db/db';
 import { postSchema } from '../types/formtypes';
 

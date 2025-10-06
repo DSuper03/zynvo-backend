@@ -8,7 +8,7 @@ import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import mail from '../utils/nodemailer';
-import { AuthMiddleware } from '../middlewares/AuthMiddleware';
+import { AuthMiddleware } from '../middleware/AuthMiddleware';
 dotenv.config();
 const router = Router();
 
