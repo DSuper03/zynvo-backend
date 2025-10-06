@@ -4,7 +4,7 @@ import { Request, Response, Router } from 'express';
 import { logger } from '../utils/logger';
 import mail from '../utils/nodemailer';
 import cmail from '../utils/contactMailer';
-import { AuthMiddleware } from '../middleware/AuthMiddleware';
+import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 import prisma from '../db/db';
 
 const router = Router();

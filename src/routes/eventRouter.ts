@@ -3,7 +3,7 @@ import { Request, Response, Router } from 'express';
 import { logger } from '../utils/logger';
 import prisma from '../db/db';
 import { EventSchema } from '../types/formtypes';
-import { AuthMiddleware } from '../middleware/AuthMiddleware';
+import { AuthMiddleware } from '../middlewares/AuthMiddleware';
 
 
 const router = Router();
