@@ -35,8 +35,14 @@ router.post('/signup', async (req: Request, res: Response) => {
 
     console.log("response:", resposne)
 
-    if (resposne && resposne?.isVerified) { 
+    if (resposne) { 
 
+      if(!resposne?.isVerified){
+        res.json({
+          msg : "please verify yourself"
+        })
+        return;
+      }
   if(collegeName !== "zynvo college" || name !== "zynvo" ) {
         res.json({
           msg : "Please Sign Up first"
@@ -90,7 +96,7 @@ router.post('/signup', async (req: Request, res: Response) => {
       });
 
       const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
-      await mail(
+      const sendMail = await mail(
         parsedData.data.name,
         parsedData.data.email,
         'One click away from greatness (seriously, just one)',
@@ -149,16 +155,24 @@ router.post('/signup', async (req: Request, res: Response) => {
   </div>
         `
       );
+      if(!sendMail) {
+        res.status(400).json({
+          msg : "error in sending mail"
+        })
+        return;
+      }
       const id = response.id;
       const token = jwt.sign({ id, email, pfp : response.profileAvatar, name : response.name  }, process.env.JWT_SECRET!);
       res.status(200).json({
         msg: 'account created',
+        token
       });
+      return
     }
   } catch (error: any) {
-    logger.info(error.message);
-    logger.error(error);
+    console.log(error)
     res.status(500).json({ msg: 'internal server error' });
+    return
   }
 });
 
