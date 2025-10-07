@@ -97,7 +97,7 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
         EventType: eventType,
         EventUrl: eventWebsite ? eventWebsite : '',
         Venue: venue,
-        TeamSize: maxTeamSize,
+        TeamSize: parseInt(maxTeamSize),
         clubName: club?.name as string,
         clubId: club?.id as string,
         prizes: prizes ? prizes : '',
