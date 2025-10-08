@@ -8,9 +8,18 @@ import { AuthMiddleware } from '../middleware/AuthMiddleware';
 import prisma from '../db/db';
 
 const router = Router();
+
+
+//====================================Contact us route=========================================
 router.post('/contact', async (req: Request, res: Response) => {
   const {name , email, subject, message} = req.body
-  const html = `${message}`
+  const html = `
+  
+  <h1>Message received from ${name}</h1>
+  <h3>Message :  ${message}</h3>
+  
+  `
+ 
   try {
     const mail = await cmail(
       name, 
@@ -36,20 +45,15 @@ router.post('/contact', async (req: Request, res: Response) => {
   }
 });
 
+
+//====================================Feedback Route=========================================
+
 router.post('/feedback', AuthMiddleware, async (req: Request, res: Response) => {
  
   const userid = req.id
 
   const {subject , category, description, improvements} = req.body;
 
-  const html = `category : ${category}
-  <br>
-  <br>
-  ${description}
-  <br>
-  <br>
-  improvemnts if any : ${improvements}
-  `
 
   if(!userid) {
     res.status(402).json({
@@ -75,6 +79,14 @@ router.post('/feedback', AuthMiddleware, async (req: Request, res: Response) => 
       })
       return;
     }
+
+     const html = `
+    <h2>Feedback Received</h2>
+    <h3>from ${userEmail}</h3>
+    <p><strong>Category:</strong> ${category}</p>
+    <p><strong>Description:</strong><br>${description}</p>
+    ${improvements ? `<p><strong>Suggested Improvements:</strong><br>${improvements}</p>` : ''}
+  `;
 
     const mail = await cmail(userEmail.name, 
       userEmail.email,

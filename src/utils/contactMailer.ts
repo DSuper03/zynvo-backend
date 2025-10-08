@@ -12,7 +12,7 @@ export default async function cmail(
 ) {
   sgMail.setApiKey(Api_key);
   const msg = {
-    from: email, 
+    from: "debonir001@gmail.com", 
     to: 'Dsuper03.dev@gmail.com', 
     subject: subject,
     text: `Zynvo it.`,
