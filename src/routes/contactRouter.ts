@@ -16,7 +16,7 @@ router.post('/contact', async (req: Request, res: Response) => {
   const html = `
   
   <h1>Message recieved from ${name}</h1>
-  <h3>Message :  ${message}
+  <h3>Message :  ${message}</h3>
   
   `
  
