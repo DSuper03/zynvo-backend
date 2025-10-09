@@ -118,7 +118,7 @@ router.put('/edit/:id', AuthMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    res.json(200).json({
+    res.status(200).json({
       msg: 'post updated, changes will reflect shortly',
     });
     return;

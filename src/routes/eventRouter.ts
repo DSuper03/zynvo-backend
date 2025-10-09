@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 import prisma from '../db/db';
 import { EventSchema } from '../types/formtypes';
 import { AuthMiddleware } from '../middleware/AuthMiddleware';
-import { tuple } from 'zod';
+
 
 const router = Router();
 const Verification = (req: Request, res: Response) => {
@@ -16,11 +16,8 @@ const Verification = (req: Request, res: Response) => {
 };
 
 
-//router.use(Verification)
 
 router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
-  //include pfp later
-  // prizes not added here
   const {
     eventName,
     description,
@@ -39,14 +36,17 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
     prizes,
     image
   } = req.body;
+
   const userId = req.id;
   const parsedData = EventSchema.safeParse(req.body);
 
   if (!parsedData.success) {
-    res.json({
+    res.status(400).json({
       msg: 'incorrect format',
     });
+    return;
   }
+
   try {
     const user = await prisma.user.findFirst({
       where: {
@@ -58,24 +58,11 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      res.status(404).json({
+     res.status(404).json({
         msg: 'No user Found',
       });
       return;
     }
-    //  const clubId = club?.clubId
-
-    //   if (!club || !clubId) {
-    //     res.json({
-    //       msg: 'invalid user or club',
-    //     });
-    //   }
-
-    //   const isPresident = await prisma.clubs.findFirst({
-    //     where : {
-    //       id : clubId
-    //     }
-    //   })
 
     const club = await prisma.clubs.findUnique({
       where: {
@@ -89,8 +76,15 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
     });
 
     if (!club) {
-      res.status(402).json({
+      res.status(403).json({
         msg: 'invalid president identification',
+      });
+      return;
+    }
+
+    if (university !== club.collegeName) {
+      res.status(400).json({
+        msg: 'College mismatch, select your correct college',
       });
       return;
     }
@@ -103,42 +97,42 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
         EventType: eventType,
         EventUrl: eventWebsite ? eventWebsite : '',
         Venue: venue,
-        TeamSize: maxTeamSize,
+        TeamSize: parseInt(maxTeamSize),
         clubName: club?.name as string,
         clubId: club?.id as string,
         prizes: prizes ? prizes : '',
         startDate: eventStartDate,
         endDate: eventEndDate,
-        university: university
-          ? university.toLowerCase()
-          : club.collegeName.toLowerCase(),
+        university: club.collegeName,
         collegeStudentsOnly: collegeStudentsOnly,
         contactEmail: contactEmail,
-        contactPhone: contactPhone,
+        contactPhone: parseInt(contactPhone),
         participationFee: noParticipationFee,
-        posterUrl : image
+        posterUrl: image
       },
     });
 
     if (response) {
-      res.status(200).json({
+      res.status(201).json({
         msg: 'event created',
         id: response.id,
       });
       return;
     } else {
       res.status(500).json({
-      msg: 'error creating event',
-    });
-    return;
+        msg: 'error creating event',
+      });
+      return;
     }
   } catch (error) {
-    logger.error(error);
-    res.status(501).json({
+    console.log(error);
+   res.status(500).json({
       msg: 'internal server error',
     });
+    return
   }
 });
+
 
 router.get(
   '/event/:id',
@@ -154,7 +148,7 @@ router.get(
         });
 
         if (!response) {
-          res.json({
+          res.status(404).json({
             msg: 'no such event',
           });
           return;
@@ -168,6 +162,10 @@ router.get(
       }
     } catch (error) {
       logger.error(error);
+      res.status(500).json({
+        msg : "Internal Server error"
+      })
+      return;
     }
   }
 );
@@ -199,6 +197,10 @@ router.get(
       }
     } catch (error) {
       console.log(error);
+       res.status(500).json({
+        msg : "Internal Server error"
+      })
+      return;
     }
   }
 );
@@ -241,10 +243,12 @@ router.get('/all', async (req: Request, res: Response) => {
       response,
       totalPages : Math.ceil(totalData/limit)
     });
+    return;
   } catch (error) {
     res.status(500).json({
       msg: 'internal server error',
     });
+    return;
   }
 });
 
@@ -299,11 +303,11 @@ router.post(
         return;
       }
     } catch (error) {
+      console.log(error);
       res.status(500).json({
         msg: 'internal server error',
       });
-
-      console.log(error);
+      return;
     }
   }
 );
