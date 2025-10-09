@@ -106,7 +106,7 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
         university: club.collegeName,
         collegeStudentsOnly: collegeStudentsOnly,
         contactEmail: contactEmail,
-        contactPhone: parseInt(contactPhone),
+        contactPhone: String(contactPhone),
         participationFee: noParticipationFee,
         posterUrl: image
       },
@@ -238,10 +238,18 @@ router.get('/all', async (req: Request, res: Response) => {
       });
       return;
     }
+
+    const normalized = response.map(e => ({
+      ...e,
+      // convert BigInt fields to strings to avoid JSON errors
+      contactPhone: typeof (e as any).contactPhone === 'bigint' ? (e as any).contactPhone.toString() : (e as any).contactPhone,
+      // if attendees or nested objects contain BigInt, convert those too
+    }));
+
     res.status(200).json({
       msg: 'found',
-      response,
-      totalPages : Math.ceil(totalData/limit)
+      response: normalized,
+      totalPages: Math.ceil(totalData / limit)
     });
     return;
   } catch (error) {
