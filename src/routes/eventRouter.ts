@@ -106,7 +106,7 @@ router.post('/event', AuthMiddleware, async (req: Request, res: Response) => {
         university: club.collegeName,
         collegeStudentsOnly: collegeStudentsOnly,
         contactEmail: contactEmail,
-        contactPhone: String(contactPhone),
+        contactPhone: contactPhone!=null ? String(contactPhone) : null,
         participationFee: noParticipationFee,
         posterUrl: image
       },
