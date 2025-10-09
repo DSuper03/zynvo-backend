@@ -239,15 +239,11 @@ router.get('/all', async (req: Request, res: Response) => {
       return;
     }
 
-    const normalized = response.map(e => ({
-      ...e,
-      // convert BigInt fields to strings to avoid JSON errors
-      contactPhone: (e as any).contactPhone != null 
-  ? (e as any).contactPhone.toString() 
-  : null,
+   const normalized = response.map(e => ({
+  ...e,
+  contactPhone: e.contactPhone != null ? String(e.contactPhone) : null,
+}));
 
-      // if attendees or nested objects contain BigInt, convert those too
-    }));
 
     res.status(200).json({
       msg: 'found',
