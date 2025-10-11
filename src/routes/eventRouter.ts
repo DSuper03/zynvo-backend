@@ -239,7 +239,7 @@ router.get('/all', async (req: Request, res: Response) => {
       return;
     }
 
-   const normalized = response.map(e => ({
+   const normalized = (response as any[]).map((e: any) => ({
   ...e,
   contactPhone: e.contactPhone != null ? String(e.contactPhone) : null,
 }));
