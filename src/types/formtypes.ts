@@ -34,4 +34,6 @@ export const ClubSchema = z.object({
 export const EventSchema = z.object({
   eventName: z.string(),
   description: z.string().optional(),
+  contactPhone:z.string().optional()
+  
 });
