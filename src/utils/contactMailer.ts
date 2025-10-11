@@ -1,6 +1,4 @@
-import dotenv from 'dotenv';
 import sgMail from '@sendgrid/mail';
-dotenv.config();
 
 const Api_key = process.env.SENDGRID_API_KEY as string;
 

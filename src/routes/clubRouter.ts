@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { AuthMiddleware } from '../middleware/AuthMiddleware';
+import { cache, purgeCache } from '../middleware/cachelayer';
 import {
   getAllClubs,
   getClubByQuery,
@@ -10,10 +11,10 @@ import {
 
 const router = Router();
 
-router.get('/getAll', AuthMiddleware, getAllClubs);
-router.get('/getClub', AuthMiddleware, getClubByQuery);
-router.get('/getClubs/:college', getClubsByCollege);
-router.get('/:id', AuthMiddleware, getClubById);
-router.post('/club', AuthMiddleware, createClub);
+router.get('/getAll', AuthMiddleware, cache({ key: 'all-clubs', ttl: 600, tags: ['clubs'] }), getAllClubs);
+router.get('/getClub', AuthMiddleware, cache({ key: 'club-query', ttl: 600, tags: ['clubs'] }), getClubByQuery);
+router.get('/getClubs/:college', cache({ key: 'clubs-by-college', ttl: 600, tags: ['clubs'] }), getClubsByCollege);
+router.get('/:id', AuthMiddleware, cache({ key: 'club-by-id', ttl: 600, tags: ['clubs'] }), getClubById);
+router.post('/club', AuthMiddleware, purgeCache(['clubs']), createClub);
 
 export const clubRouter = router;

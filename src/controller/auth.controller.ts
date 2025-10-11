@@ -6,11 +6,9 @@ import { generateRequestId } from '../utils/helper';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import dotenv from 'dotenv';
 import mail from '../utils/nodemailer';
 import { getSignupVerificationEmailHTML, getResendVerificationEmailHTML } from '../utils/authEmail';
 
-dotenv.config();
 
 const genToken = (): string => {
     return crypto.randomBytes(20).toString('hex');
@@ -18,10 +16,10 @@ const genToken = (): string => {
 
 export const signup = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
-    const { name, email, password, collegeName } = req.body;
+    const { name, email, collegeName } = req.body;
     const avatarUrl = req.body.avatarUrl;
 
-    logger.info(`[${requestId}] POST /signup - Starting signup/login`, {
+    logger.info(`[${requestId}] POST /signup - Starting signup`, {
         email,
         collegeName
     });
@@ -34,7 +32,124 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
     }
 
     try {
-        const response = await prisma.user.findUnique({
+        const existingUser = await prisma.user.findUnique({
+            where: { email: email },
+            select: {
+                id: true,
+                isVerified: true,
+            }
+        });
+
+        if (existingUser) {
+            if (!existingUser.isVerified) {
+                logger.warn(`[${requestId}] User exists but not verified`, { email });
+                res.status(400).json({
+                    msg: "please verify yourself"
+                });
+                return;
+            } else {
+                logger.warn(`[${requestId}] User already exists`, { email });
+                res.status(409).json({
+                    msg: "User already exists, please login"
+                });
+                return;
+            }
+        }
+
+        if (collegeName == "zynvo college" || name == "zynvo") {
+            logger.warn(`[${requestId}] Reserved name attempt`, { name, collegeName });
+            res.status(400).json({
+                msg: "Please Sign Up first and verify yourself."
+            });
+            return;
+        }
+
+        logger.info(`[${requestId}] Creating new user`, { email, name });
+
+        const hashedPassword = bcrypt.hashSync(parsedData.data.password, 10);
+        const vToken = genToken();
+
+        const newUser = await prisma.user.create({
+            data: {
+                email: parsedData.data.email,
+                name: parsedData.data.name,
+                password: hashedPassword,
+                collegeName: collegeName,
+                profileAvatar: avatarUrl,
+                vToken: vToken,
+                expiryToken: Math.floor(Date.now() / 1000),
+                ValidFor: 86400000,
+            },
+            select: {
+                id: true,
+                profileAvatar: true,
+                name: true,
+            }
+        });
+
+        const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
+        const emailHTML = getSignupVerificationEmailHTML(parsedData.data.name, url);
+
+        const sendMail = await mail(
+            parsedData.data.name,
+            parsedData.data.email,
+            'One click away from greatness (seriously, just one)',
+            emailHTML
+        );
+
+        if (!sendMail) {
+            logger.error(`[${requestId}] Error sending verification email`, { email });
+            res.status(400).json({
+                msg: "error in sending mail"
+            });
+            return;
+        }
+
+        logger.info(`[${requestId}] User created successfully`, {
+            userId: newUser.id,
+            email
+        });
+
+        const id = newUser.id;
+        const token = jwt.sign({
+            id,
+            email,
+            pfp: newUser.profileAvatar,
+            name: newUser.name
+        }, process.env.JWT_SECRET!);
+
+        res.status(200).json({
+            msg: 'account created',
+            token
+        });
+        return;
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error in signup`, {
+            error: error.message,
+            stack: error.stack,
+            email
+        });
+        console.log(error);
+        res.status(500).json({ msg: 'internal server error' });
+        return;
+    }
+};
+
+
+export const login = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const { email, password } = req.body;
+
+    logger.info(`[${requestId}] POST /login - Starting login`, { email });
+
+    if (!email || !password) {
+        logger.warn(`[${requestId}] Missing email or password`);
+        res.status(400).json({ msg: 'Email and password are required' });
+        return;
+    }
+
+    try {
+        const user = await prisma.user.findUnique({
             where: { email: email },
             select: {
                 id: true,
@@ -46,119 +161,47 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
             }
         });
 
-        console.log("response:", response);
-
-        if (response) {
-            if (!response.isVerified) {
-                logger.warn(`[${requestId}] User not verified`, { email });
-                res.json({
-                    msg: "please verify yourself"
-                });
-                return;
-            }
-
-            if (collegeName !== "zynvo college" || name !== "zynvo") {
-                res.json({
-                    msg: "Please Sign Up first"
-                });
-                return;
-            }
-
-            const userPw = response.password;
-            const id = response.id;
-
-            if (bcrypt.compareSync(password, userPw)) {
-                logger.info(`[${requestId}] Login successful`, { userId: id, email });
-                const token = jwt.sign({
-                    id,
-                    email,
-                    pfp: response.profileAvatar,
-                    name: response.name
-                }, process.env.JWT_SECRET!);
-
-                res.status(200).json({
-                    msg: 'login success',
-                    token,
-                });
-                return;
-            } else {
-                logger.warn(`[${requestId}] Invalid password`, { email });
-                res.status(403).json({
-                    msg: 'Invalid email or password',
-                    token: 'no token',
-                });
-                return;
-            }
-        } else {
-            if (collegeName == "zynvo college" || name == "zynvo") {
-                res.json({
-                    msg: "Please Sign Up first and verify yourself."
-                });
-                return;
-            }
-
-            logger.info(`[${requestId}] Creating new user`, { email, name });
-
-            const hashedPassword = bcrypt.hashSync(parsedData.data.password, 10);
-            const vToken = genToken();
-
-            const newUser = await prisma.user.create({
-                data: {
-                    email: parsedData.data.email,
-                    name: parsedData.data.name,
-                    password: hashedPassword,
-                    collegeName: collegeName,
-                    profileAvatar: avatarUrl,
-                    vToken: vToken,
-                    expiryToken: Math.floor(Date.now() / 1000),
-                    ValidFor: 86400000,
-                },
-                select: {
-                    id: true,
-                    profileAvatar: true,
-                    name: true,
-                }
+        if (!user) {
+            logger.warn(`[${requestId}] User not found`, { email });
+            res.status(404).json({
+                msg: 'Invalid email or password'
             });
+            return;
+        }
 
-            const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
-            const emailHTML = getSignupVerificationEmailHTML(parsedData.data.name, url);
-
-            const sendMail = await mail(
-                parsedData.data.name,
-                parsedData.data.email,
-                'One click away from greatness (seriously, just one)',
-                emailHTML
-            );
-
-            if (!sendMail) {
-                logger.error(`[${requestId}] Error sending verification email`, { email });
-                res.status(400).json({
-                    msg: "error in sending mail"
-                });
-                return;
-            }
-
-            logger.info(`[${requestId}] User created successfully`, {
-                userId: newUser.id,
-                email
+        if (!user.isVerified) {
+            logger.warn(`[${requestId}] User not verified`, { email });
+            res.status(403).json({
+                msg: "please verify yourself"
             });
+            return;
+        }
 
-            const id = newUser.id;
+        if (bcrypt.compareSync(password, user.password)) {
+            logger.info(`[${requestId}] Login successful`, { userId: user.id, email });
+            
             const token = jwt.sign({
-                id,
-                email,
-                pfp: newUser.profileAvatar,
-                name: newUser.name
+                id: user.id,
+                email: user.email,
+                pfp: user.profileAvatar,
+                name: user.name
             }, process.env.JWT_SECRET!);
 
             res.status(200).json({
-                msg: 'account created',
-                token
+                msg: 'login success',
+                token,
+            });
+            return;
+        } else {
+            logger.warn(`[${requestId}] Invalid password`, { email });
+            res.status(403).json({
+                msg: 'Invalid email or password',
+                token: 'no token',
             });
             return;
         }
     } catch (error: any) {
-        logger.error(`[${requestId}] Error in signup/login`, {
+        logger.error(`[${requestId}] Error in login`, {
             error: error.message,
             stack: error.stack,
             email

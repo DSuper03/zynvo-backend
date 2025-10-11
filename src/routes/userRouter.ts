@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { AuthMiddleware } from '../middleware/AuthMiddleware';
+import { cache, purgeCache } from '../middleware/cachelayer';
 import { 
-  signup, 
+  signup,
+  login,
   resendEmail, 
   verifyEmail, 
   resetPassword 
@@ -19,21 +21,19 @@ import {
 
 const router = Router();
 
-// Auth routes
-router.post('/signup', signup);
+router.post('/signup', purgeCache(['users']), signup);
+router.post('/login', login);
 router.post('/ResendEmail', resendEmail);
 router.post('/verify', verifyEmail);
-router.put('/reset-password', AuthMiddleware, resetPassword);
+router.put('/reset-password', AuthMiddleware, purgeCache(['users']), resetPassword);
 
-// User routes
-router.get('/getUser', AuthMiddleware, getUser);
-router.post('/joinClub/:id', AuthMiddleware, joinClub);
-router.get('/isFounder', AuthMiddleware, isFounder);
-router.put('/updateProfile', AuthMiddleware, updateProfile);
-router.get('/getSidebarUser', AuthMiddleware, getSidebarUser);
-router.get('/SearchUser', searchUser);
-router.get('/getPublicUser', AuthMiddleware, getPublicUser);
-router.get('/getAllUsers', getAllUsers);
+router.get('/getUser', AuthMiddleware, cache({ key: 'user', ttl: 600, tags: ['users'] }), getUser);
+router.post('/joinClub/:id', AuthMiddleware, purgeCache(['users', 'clubs']), joinClub);
+router.get('/isFounder', AuthMiddleware, cache({ key: 'founder', ttl: 600, tags: ['users'] }), isFounder);
+router.put('/updateProfile', AuthMiddleware, purgeCache(['users']), updateProfile);
+router.get('/getSidebarUser', AuthMiddleware, cache({ key: 'sidebar-user', ttl: 600, tags: ['users'] }), getSidebarUser);
+router.get('/SearchUser', cache({ key: 'search-user', ttl: 600, tags: ['users'] }), searchUser);
+router.get('/getPublicUser', AuthMiddleware, cache({ key: 'public-user', ttl: 600, tags: ['users'] }), getPublicUser);
+router.get('/getAllUsers', cache({ key: 'all-users', ttl: 600, tags: ['users'] }), getAllUsers);
 
 export const userRouter = router;
-
