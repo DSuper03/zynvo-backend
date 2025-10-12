@@ -102,7 +102,7 @@ export const joinClub = async (req: Request, res: Response): Promise<void> => {
                 userId,
                 currentClub: userClub.clubId
             });
-            res.json({ msg: "you are alredy a part of club, leave that first to join this." });
+            res.json({ msg: "you are already a part of club, leave that first to join this." });
             return;
         }
 
