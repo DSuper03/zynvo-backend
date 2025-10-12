@@ -56,7 +56,7 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
             }
         }
 
-        if (collegeName == "zynvo college" || name == "zynvo") {
+        if (collegeName === "zynvo college" || name === "zynvo") {
             logger.warn(`[${requestId}] Reserved name attempt`, { name, collegeName });
             res.status(400).json({
                 msg: "Please Sign Up first and verify yourself."
