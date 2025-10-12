@@ -375,7 +375,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
     if (!parsedData.success) {
         logger.warn(`[${requestId}] Invalid password format`, { userId: userID });
         res.json({
-            msg: 'invalid passwrd format',
+            msg: 'invalid password format',
         });
         return;
     }
