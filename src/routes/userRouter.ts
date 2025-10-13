@@ -504,6 +504,7 @@ router.post(
         res.json({
           msg: "you are alredy a part of club, leave that first to join this."
         })
+        return;
       }
 
       const JoinClub = await prisma.user.update({
@@ -566,7 +567,7 @@ router.get('/isFounder', AuthMiddleware, async (req: Request, res: Response) => 
 
     if (!club) {
       res.json({
-        msg: "you nihh not a founder"
+        msg: "you not a founder"
       })
       return;
     }
@@ -582,7 +583,7 @@ router.get('/isFounder', AuthMiddleware, async (req: Request, res: Response) => 
 
     if (!event) {
       res.json({
-        msg: "you nihh not a founder"
+        msg: "you not a founder"
       })
       return;
     }

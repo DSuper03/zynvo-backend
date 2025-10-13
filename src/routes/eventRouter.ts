@@ -239,12 +239,6 @@ router.get('/all', async (req: Request, res: Response) => {
       return;
     }
 
-//    const normalized = response.map(e => ({
-//   ...e,
-//   contactPhone: e.contactPhone != null ? String(e.contactPhone) : null,
-// }));
-
-
     res.status(200).json({
       msg: 'found',
       response,
