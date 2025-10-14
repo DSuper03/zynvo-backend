@@ -8,8 +8,7 @@
     "dev": "nodemon --exec ts-node src/index.ts",
     "build": "  tsc -p tsconfig.json",
     "db": "npx prisma generate",
-    "format": "prettier --write .",
-    "seed": "bun run src/db/seed.ts"
+    "format": "prettier --write ."
   },
   "keywords": [],
   "author": "",
