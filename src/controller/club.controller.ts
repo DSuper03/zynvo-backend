@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { logger } from '../utils/logger';
 import prisma from '../db/db';
 import { generateRequestId, sendErrorResponse } from '../utils/helper';
+import { Prisma } from '@prisma/client';
 
 const clubSelectBase = {
     id: true,
@@ -38,8 +39,7 @@ export const getAllClubs = async (req: Request, res: Response): Promise<void> =>
         const skip = (pages - 1) * limit;
 
         logger.info(`[${requestId}] Fetching clubs with pagination`, {
-            page: pages,
-            limit,
+           
             skip
         });
 
@@ -479,7 +479,7 @@ export const createClub = async (req: Request, res: Response): Promise<void> => 
             collegeName: college.collegeName
         });
 
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx:any) => {
             const newClub = await tx.clubs.create({
                 data: {
                     name: name,
