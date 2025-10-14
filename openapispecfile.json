@@ -3,19 +3,24 @@
   "info": {
     "title": "Zynvo API",
     "version": "1.0.0",
-    "description": "API documentation for Zynvo backend"
+    "description": "Complete API documentation for Zynvo backend - A platform for college clubs and events"
   },
   "servers": [
     {
       "url": "http://localhost:8000",
       "description": "Development server"
+    },
+    {
+      "url": "https://zynvo.social",
+      "description": "Production server"
     }
   ],
   "paths": {
     "/api/v1/user/signup": {
       "post": {
         "summary": "Register a new user",
-        "tags": ["User"],
+        "description": "Create a new user account with email verification",
+        "tags": ["Authentication"],
         "requestBody": {
           "required": true,
           "content": {
@@ -24,11 +29,29 @@
                 "type": "object",
                 "required": ["name", "email", "password", "collegeName"],
                 "properties": {
-                  "name": {"type": "string"},
-                  "email": {"type": "string", "format": "email"},
-                  "password": {"type": "string", "format": "password"},
-                  "collegeName": {"type": "string"},
-                  "avatarUrl": {"type": "string"}
+                  "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "john.doe@college.edu"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 6,
+                    "example": "securePassword123"
+                  },
+                  "collegeName": {
+                    "type": "string",
+                    "example": "MIT College"
+                  },
+                  "avatarUrl": {
+                    "type": "string",
+                    "example": "https://example.com/avatar.jpg"
+                  }
                 }
               }
             }
@@ -36,7 +59,32 @@
         },
         "responses": {
           "200": {
-            "description": "Account created successfully"
+            "description": "Account created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "account created"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - User already exists or invalid input"
+          },
+          "409": {
+            "description": "User already exists"
+          },
+          "411": {
+            "description": "Incorrect inputs"
           }
         }
       }
@@ -44,7 +92,8 @@
     "/api/v1/user/login": {
       "post": {
         "summary": "Login a user",
-        "tags": ["User"],
+        "description": "Authenticate an existing user and return JWT token",
+        "tags": ["Authentication"],
         "requestBody": {
           "required": true,
           "content": {
@@ -53,8 +102,16 @@
                 "type": "object",
                 "required": ["email", "password"],
                 "properties": {
-                  "email": {"type": "string", "format": "email"},
-                  "password": {"type": "string", "format": "password"}
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "john.doe@college.edu"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "securePassword123"
+                  }
                 }
               }
             }
@@ -68,12 +125,56 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "msg": {"type": "string"},
-                    "token": {"type": "string"}
+                    "msg": {
+                      "type": "string",
+                      "example": "login success"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
                   }
                 }
               }
             }
+          },
+          "400": {
+            "description": "Missing email or password"
+          },
+          "403": {
+            "description": "User not verified or invalid password"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/api/v1/user/ResendEmail": {
+      "post": {
+        "summary": "Resend verification email",
+        "description": "Request a new verification email",
+        "tags": ["Authentication"],
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "email"
+            },
+            "example": "john.doe@college.edu"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Email sent successfully or user not found"
+          },
+          "400": {
+            "description": "Error sending email"
+          },
+          "500": {
+            "description": "Error updating token"
           }
         }
       }
@@ -81,7 +182,8 @@
     "/api/v1/user/verify": {
       "post": {
         "summary": "Verify user email",
-        "tags": ["User"],
+        "description": "Verify user's email address using verification token",
+        "tags": ["Authentication"],
         "parameters": [
           {
             "name": "vToken",
@@ -89,12 +191,35 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Verification token sent via email"
           }
         ],
         "responses": {
           "200": {
-            "description": "Email verified successfully"
+            "description": "Email verified successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "Verified successfully"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or expired token"
+          },
+          "404": {
+            "description": "Invalid token"
           }
         }
       }
@@ -102,7 +227,8 @@
     "/api/v1/user/reset-password": {
       "put": {
         "summary": "Reset user password",
-        "tags": ["User"],
+        "description": "Change password for authenticated user",
+        "tags": ["Authentication"],
         "security": [{"bearerAuth": []}],
         "requestBody": {
           "required": true,
@@ -112,8 +238,16 @@
                 "type": "object",
                 "required": ["password", "newPassword"],
                 "properties": {
-                  "password": {"type": "string"},
-                  "newPassword": {"type": "string"}
+                  "password": {
+                    "type": "string",
+                    "description": "Current password",
+                    "example": "oldPassword123"
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "description": "New password",
+                    "example": "newPassword456"
+                  }
                 }
               }
             }
@@ -122,6 +256,12 @@
         "responses": {
           "200": {
             "description": "Password updated successfully"
+          },
+          "403": {
+            "description": "Current password is incorrect"
+          },
+          "404": {
+            "description": "User not found"
           }
         }
       }
@@ -129,11 +269,45 @@
     "/api/v1/user/getUser": {
       "get": {
         "summary": "Get user profile",
-        "tags": ["User"],
+        "description": "Get authenticated user's complete profile including events attended and posts",
+        "tags": ["User Management"],
         "security": [{"bearerAuth": []}],
         "responses": {
           "200": {
-            "description": "User profile retrieved successfully"
+            "description": "User profile retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {"type": "string"},
+                        "name": {"type": "string"},
+                        "email": {"type": "string"},
+                        "collegeName": {"type": "string"},
+                        "profileAvatar": {"type": "string"},
+                        "bio": {"type": "string"},
+                        "year": {"type": "string"},
+                        "course": {"type": "string"},
+                        "tags": {"type": "string"},
+                        "clubName": {"type": "string"},
+                        "twitter": {"type": "string"},
+                        "instagram": {"type": "string"},
+                        "linkedin": {"type": "string"},
+                        "isVerified": {"type": "boolean"},
+                        "eventAttended": {"type": "array"},
+                        "CreatePost": {"type": "array"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found"
           }
         }
       }
@@ -141,7 +315,8 @@
     "/api/v1/user/joinClub/{id}": {
       "post": {
         "summary": "Join a club",
-        "tags": ["User"],
+        "description": "Join a specific club by club ID",
+        "tags": ["User Management"],
         "security": [{"bearerAuth": []}],
         "parameters": [
           {
@@ -150,12 +325,238 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Club ID"
           }
         ],
         "responses": {
           "200": {
-            "description": "Club joined successfully"
+            "description": "Club joined successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "yay club joined"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No club found"
+          }
+        }
+      }
+    },
+    "/api/v1/user/isFounder": {
+      "get": {
+        "summary": "Check if user is founder",
+        "description": "Check if authenticated user is founder of a specific event's club",
+        "tags": ["User Management"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User is founder"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/api/v1/user/updateProfile": {
+      "put": {
+        "summary": "Update user profile",
+        "description": "Update authenticated user's profile information",
+        "tags": ["User Management"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bio": {"type": "string"},
+                  "tags": {"type": "string"},
+                  "course": {"type": "string"},
+                  "year": {"type": "string"},
+                  "twitter": {"type": "string"},
+                  "instagram": {"type": "string"},
+                  "linkedin": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated successfully"
+          },
+          "400": {
+            "description": "Error occurred"
+          }
+        }
+      }
+    },
+    "/api/v1/user/getSidebarUser": {
+      "get": {
+        "summary": "Get sidebar user data",
+        "description": "Get minimal user data for sidebar display",
+        "tags": ["User Management"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "User data retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "name": {"type": "string"},
+                        "profileAvatar": {"type": "string"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/api/v1/user/SearchUser": {
+      "get": {
+        "summary": "Search users by name",
+        "description": "Search for users by name (case-insensitive)",
+        "tags": ["User Management"],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "User name to search for"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Users found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {"type": "string"},
+                          "name": {"type": "string"},
+                          "profileAvatar": {"type": "string"},
+                          "collegeName": {"type": "string"}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No users found or name not provided"
+          }
+        }
+      }
+    },
+    "/api/v1/user/getPublicUser": {
+      "get": {
+        "summary": "Get public user profile",
+        "description": "Get public profile of any user by ID",
+        "tags": ["User Management"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "User ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User profile retrieved"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/api/v1/user/getAllUsers": {
+      "get": {
+        "summary": "Get all users",
+        "description": "Get paginated list of all users",
+        "tags": ["User Management"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Users retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Users not found"
           }
         }
       }
@@ -163,7 +564,8 @@
     "/api/v1/post/create": {
       "post": {
         "summary": "Create a new post",
-        "tags": ["Post"],
+        "description": "Create a new post (authenticated users only)",
+        "tags": ["Posts"],
         "security": [{"bearerAuth": []}],
         "requestBody": {
           "required": true,
@@ -173,10 +575,20 @@
                 "type": "object",
                 "required": ["title", "description"],
                 "properties": {
-                  "title": {"type": "string"},
-                  "description": {"type": "string"},
-                  "collegeName": {"type": "string"},
-                  "eventType": {"type": "string"}
+                  "title": {
+                    "type": "string",
+                    "example": "Welcome to Zynvo!"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "This is my first post on Zynvo"
+                  },
+                  "collegeName": {
+                    "type": "string"
+                  },
+                  "eventType": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -184,7 +596,26 @@
         },
         "responses": {
           "200": {
-            "description": "Post created successfully"
+            "description": "Post created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "post created successfully"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "411": {
+            "description": "Incorrect inputs"
           }
         }
       }
@@ -192,7 +623,8 @@
     "/api/v1/post/edit/{id}": {
       "put": {
         "summary": "Edit an existing post",
-        "tags": ["Post"],
+        "description": "Edit a post created by the authenticated user",
+        "tags": ["Posts"],
         "security": [{"bearerAuth": []}],
         "parameters": [
           {
@@ -201,7 +633,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Post ID"
           }
         ],
         "requestBody": {
@@ -211,8 +644,12 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "title": {"type": "string"},
-                  "description": {"type": "string"}
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -221,6 +658,9 @@
         "responses": {
           "200": {
             "description": "Post updated successfully"
+          },
+          "404": {
+            "description": "Post not found"
           }
         }
       }
@@ -228,10 +668,44 @@
     "/api/v1/post/all": {
       "get": {
         "summary": "Get all posts",
-        "tags": ["Post"],
+        "description": "Get paginated list of all posts",
+        "tags": ["Posts"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Posts retrieved successfully"
+            "description": "Posts retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "found"
+                    },
+                    "response": {
+                      "type": "array"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No posts found"
           }
         }
       }
@@ -239,7 +713,8 @@
     "/api/v1/post/get/{id}": {
       "get": {
         "summary": "Get a specific post",
-        "tags": ["Post"],
+        "description": "Get detailed information about a single post",
+        "tags": ["Posts"],
         "security": [{"bearerAuth": []}],
         "parameters": [
           {
@@ -248,12 +723,16 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Post ID"
           }
         ],
         "responses": {
           "200": {
             "description": "Post retrieved successfully"
+          },
+          "404": {
+            "description": "Post not found"
           }
         }
       }
@@ -261,7 +740,8 @@
     "/api/v1/post/delete/{id}": {
       "delete": {
         "summary": "Delete a post",
-        "tags": ["Post"],
+        "description": "Delete a post created by the authenticated user",
+        "tags": ["Posts"],
         "security": [{"bearerAuth": []}],
         "parameters": [
           {
@@ -270,12 +750,19 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Post ID"
           }
         ],
         "responses": {
           "200": {
             "description": "Post deleted successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not post owner"
+          },
+          "404": {
+            "description": "Post not found"
           }
         }
       }
@@ -283,7 +770,8 @@
     "/api/v1/events/event": {
       "post": {
         "summary": "Create a new event",
-        "tags": ["Event"],
+        "description": "Create a new event (club presidents only)",
+        "tags": ["Events"],
         "security": [{"bearerAuth": []}],
         "requestBody": {
           "required": true,
@@ -293,29 +781,102 @@
                 "type": "object",
                 "required": ["eventName", "description", "eventStartDate"],
                 "properties": {
-                  "eventName": {"type": "string"},
-                  "description": {"type": "string"},
-                  "eventStartDate": {"type": "string", "format": "date"},
-                  "eventEndDate": {"type": "string", "format": "date"},
-                  "eventMode": {"type": "string"},
-                  "eventType": {"type": "string"},
-                  "maxTeamSize": {"type": "integer"},
-                  "venue": {"type": "string"},
-                  "eventWebsite": {"type": "string"},
-                  "university": {"type": "string"},
-                  "collegeStudentsOnly": {"type": "boolean"},
-                  "contactEmail": {"type": "string"},
-                  "contactPhone": {"type": "string"},
-                  "noParticipationFee": {"type": "boolean"},
-                  "prizes": {"type": "string"}
+                  "eventName": {
+                    "type": "string",
+                    "example": "Tech Hackathon 2025"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "24-hour coding competition"
+                  },
+                  "eventStartDate": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2025-11-15"
+                  },
+                  "eventEndDate": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2025-11-16"
+                  },
+                  "eventMode": {
+                    "type": "string",
+                    "example": "Hybrid"
+                  },
+                  "eventType": {
+                    "type": "string",
+                    "example": "Competition"
+                  },
+                  "maxTeamSize": {
+                    "type": "integer",
+                    "example": 4
+                  },
+                  "venue": {
+                    "type": "string",
+                    "example": "Main Auditorium"
+                  },
+                  "eventWebsite": {
+                    "type": "string",
+                    "example": "https://event.zynvo.social"
+                  },
+                  "university": {
+                    "type": "string",
+                    "example": "MIT College"
+                  },
+                  "collegeStudentsOnly": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "contactEmail": {
+                    "type": "string",
+                    "example": "contact@event.com"
+                  },
+                  "contactPhone": {
+                    "type": "string",
+                    "example": "1234567890"
+                  },
+                  "noParticipationFee": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "prizes": {
+                    "type": "string",
+                    "example": "1st Prize: $1000"
+                  },
+                  "image": {
+                    "type": "string",
+                    "example": "https://example.com/poster.jpg"
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "Event created successfully"
+          "201": {
+            "description": "Event created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "event created"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - College mismatch or incorrect format"
+          },
+          "403": {
+            "description": "Unauthorized - not a club president"
           }
         }
       }
@@ -323,7 +884,8 @@
     "/api/v1/events/event/{id}": {
       "get": {
         "summary": "Get a specific event",
-        "tags": ["Event"],
+        "description": "Get detailed information about a single event",
+        "tags": ["Events"],
         "security": [{"bearerAuth": []}],
         "parameters": [
           {
@@ -332,12 +894,35 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Event ID"
           }
         ],
         "responses": {
           "200": {
-            "description": "Event retrieved successfully"
+            "description": "Event retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "event found"
+                    },
+                    "response": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Event ID is required"
+          },
+          "404": {
+            "description": "Event not found"
           }
         }
       }
@@ -345,7 +930,8 @@
     "/api/v1/events/eventByClub/{id}": {
       "get": {
         "summary": "Get events by club",
-        "tags": ["Event"],
+        "description": "Get all events organized by a specific club",
+        "tags": ["Events"],
         "security": [{"bearerAuth": []}],
         "parameters": [
           {
@@ -354,12 +940,32 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Club ID"
           }
         ],
         "responses": {
           "200": {
-            "description": "Events retrieved successfully"
+            "description": "Events retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "fetched"
+                    },
+                    "event": {
+                      "type": "array"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No events found for this club"
           }
         }
       }
@@ -367,11 +973,45 @@
     "/api/v1/events/all": {
       "get": {
         "summary": "Get all events",
-        "tags": ["Event"],
+        "description": "Get paginated list of all events with attendees",
+        "tags": ["Events"],
         "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Events retrieved successfully"
+            "description": "Events retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "found"
+                    },
+                    "response": {
+                      "type": "array"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No events found"
           }
         }
       }
@@ -379,7 +1019,8 @@
     "/api/v1/events/registerEvent": {
       "post": {
         "summary": "Register for an event",
-        "tags": ["Event"],
+        "description": "Register authenticated user for an event",
+        "tags": ["Events"],
         "security": [{"bearerAuth": []}],
         "requestBody": {
           "required": true,
@@ -389,7 +1030,10 @@
                 "type": "object",
                 "required": ["eventId"],
                 "properties": {
-                  "eventId": {"type": "string"}
+                  "eventId": {
+                    "type": "string",
+                    "description": "Event ID to register for"
+                  }
                 }
               }
             }
@@ -397,7 +1041,27 @@
         },
         "responses": {
           "200": {
-            "description": "Event registration successful"
+            "description": "Event registration successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "registered successfully"
+                    },
+                    "ForkedUpId": {
+                      "type": "string",
+                      "description": "Unique pass ID for event"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Already registered or invalid user"
           }
         }
       }
@@ -405,7 +1069,8 @@
     "/api/v1/events/addSpeakers": {
       "post": {
         "summary": "Add speakers to an event",
-        "tags": ["Event"],
+        "description": "Add speaker details to an event (club presidents only)",
+        "tags": ["Events"],
         "security": [{"bearerAuth": []}],
         "requestBody": {
           "required": true,
@@ -415,11 +1080,26 @@
                 "type": "object",
                 "required": ["name", "email", "about", "eventId"],
                 "properties": {
-                  "profilePic": {"type": "string"},
-                  "about": {"type": "string"},
-                  "name": {"type": "string"},
-                  "email": {"type": "string"},
-                  "eventId": {"type": "string"}
+                  "profilePic": {
+                    "type": "string",
+                    "example": "https://example.com/speaker.jpg"
+                  },
+                  "about": {
+                    "type": "string",
+                    "example": "Senior Software Engineer at Google"
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "Jane Doe"
+                  },
+                  "email": {
+                    "type": "string",
+                    "example": "jane.doe@example.com"
+                  },
+                  "eventId": {
+                    "type": "string",
+                    "description": "Event ID"
+                  }
                 }
               }
             }
@@ -427,7 +1107,172 @@
         },
         "responses": {
           "200": {
-            "description": "Speaker added successfully"
+            "description": "Speaker added successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "Speaker added"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Unauthorized - not a club president"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/getSpeakers": {
+      "get": {
+        "summary": "Get speakers for an event",
+        "description": "Get all speakers for a specific event",
+        "tags": ["Events"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Speakers retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "speakers are there"
+                    },
+                    "speakers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {"type": "string"},
+                          "name": {"type": "string"},
+                          "email": {"type": "string"},
+                          "about": {"type": "string"},
+                          "profilePic": {"type": "string"},
+                          "eventId": {"type": "string"}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No speakers added for the event"
+          }
+        }
+      }
+    },
+    "/api/v1/events/ver-event": {
+      "get": {
+        "summary": "Verify event registration",
+        "description": "Verify if a user is registered for an event using pass ID",
+        "tags": ["Events"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Unique pass ID (starts with 'Z')"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Registration verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "registered"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Registration not found"
+          },
+          "502": {
+            "description": "Invalid pass ID format"
+          }
+        }
+      }
+    },
+    "/api/v1/events/event-details": {
+      "get": {
+        "summary": "Get event details by pass ID",
+        "description": "Get event details using unique pass ID",
+        "tags": ["Events"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Unique pass ID (starts with 'Z')"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event details retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "eventName": {"type": "string"},
+                        "clubName": {"type": "string"},
+                        "collegeName": {"type": "string"},
+                        "startDate": {"type": "string"},
+                        "profilePic": {"type": "string"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Event details not found"
+          },
+          "502": {
+            "description": "Invalid pass ID format"
           }
         }
       }
@@ -435,7 +1280,8 @@
     "/api/v1/clubs/club": {
       "post": {
         "summary": "Create a new club",
-        "tags": ["Club"],
+        "description": "Create a new club (authenticated users only)",
+        "tags": ["Clubs"],
         "security": [{"bearerAuth": []}],
         "requestBody": {
           "required": true,
@@ -445,14 +1291,46 @@
                 "type": "object",
                 "required": ["name", "collegeName", "description", "FounderEmail"],
                 "properties": {
-                  "name": {"type": "string"},
-                  "collegeName": {"type": "string"},
-                  "description": {"type": "string"},
-                  "type": {"type": "string"},
-                  "FounderEmail": {"type": "string"},
-                  "clubContact": {"type": "string"},
-                  "requirements": {"type": "string"},
-                  "facultyEmail": {"type": "string"}
+                  "name": {
+                    "type": "string",
+                    "example": "Tech Club"
+                  },
+                  "collegeName": {
+                    "type": "string",
+                    "example": "MIT College"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "A club for technology enthusiasts"
+                  },
+                  "type": {
+                    "type": "string",
+                    "example": "Technical"
+                  },
+                  "FounderEmail": {
+                    "type": "string",
+                    "example": "founder@college.edu"
+                  },
+                  "clubContact": {
+                    "type": "string",
+                    "example": "1234567890"
+                  },
+                  "requirements": {
+                    "type": "string",
+                    "example": "Open to all students"
+                  },
+                  "facultyEmail": {
+                    "type": "string",
+                    "example": "faculty@college.edu"
+                  },
+                  "clubLogo": {
+                    "type": "string",
+                    "example": "https://example.com/logo.jpg"
+                  },
+                  "clubBanner": {
+                    "type": "string",
+                    "example": "https://example.com/banner.jpg"
+                  }
                 }
               }
             }
@@ -460,7 +1338,29 @@
         },
         "responses": {
           "200": {
-            "description": "Club created successfully"
+            "description": "Club created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "club created"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - incorrect inputs"
+          },
+          "409": {
+            "description": "Club already exists"
           }
         }
       }
@@ -468,7 +1368,8 @@
     "/api/v1/clubs/getClub": {
       "get": {
         "summary": "Get a specific club",
-        "tags": ["Club"],
+        "description": "Get club details by ID, name, or college name",
+        "tags": ["Clubs"],
         "security": [{"bearerAuth": []}],
         "parameters": [
           {
@@ -476,26 +1377,105 @@
             "in": "query",
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Club ID"
           },
           {
             "name": "name",
             "in": "query",
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Club name"
           },
           {
             "name": "collegeName",
             "in": "query",
             "schema": {
               "type": "string"
+            },
+            "description": "College name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Club retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "fetched"
+                    },
+                    "response": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
             }
+          },
+          "400": {
+            "description": "Bad request - missing query parameters"
+          },
+          "404": {
+            "description": "Club not found"
+          }
+        }
+      }
+    },
+    "/api/v1/clubs/getClubs/{college}": {
+      "get": {
+        "summary": "Get clubs by college",
+        "description": "Get all clubs for a specific college",
+        "tags": ["Clubs"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "college",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "College name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clubs retrieved successfully"
+          },
+          "404": {
+            "description": "No clubs found"
+          }
+        }
+      }
+    },
+    "/api/v1/clubs/{id}": {
+      "get": {
+        "summary": "Get club by ID",
+        "description": "Get detailed club information by ID",
+        "tags": ["Clubs"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Club ID"
           }
         ],
         "responses": {
           "200": {
             "description": "Club retrieved successfully"
+          },
+          "404": {
+            "description": "Club not found"
           }
         }
       }
@@ -503,22 +1483,111 @@
     "/api/v1/clubs/getAll": {
       "get": {
         "summary": "Get all clubs",
-        "tags": ["Club"],
+        "description": "Get paginated list of all clubs",
+        "tags": ["Clubs"],
         "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Clubs retrieved successfully"
+            "description": "Clubs retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "found"
+                    },
+                    "response": {
+                      "type": "array"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No clubs found"
+          }
+        }
+      }
+    },
+    "/api/v1/contact": {
+      "post": {
+        "summary": "Send contact message",
+        "description": "Send a contact/inquiry message",
+        "tags": ["Contact"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "message"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "john@example.com"
+                  },
+                  "message": {
+                    "type": "string",
+                    "example": "I have a question about..."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Message sent successfully"
+          },
+          "400": {
+            "description": "Bad request"
           }
         }
       }
     },
     "/health": {
       "get": {
-        "summary": "Health check endpoint",
-        "tags": ["Health"],
+        "summary": "Health check",
+        "description": "Check if the API server is running",
+        "tags": ["System"],
         "responses": {
           "200": {
-            "description": "API is working properly"
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "good health"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

@@ -1,6 +1,6 @@
 // import { clubType } from '@prisma/client' 
 import { hash } from 'bcryptjs'
-import prisma from '../db'
+import prisma from './db'
 
 
 // enum clubType  {
@@ -17,12 +17,12 @@ async function main() {
   console.log('Starting database seeding...')
 
   // Clear existing data
-  await prisma.userEvents.deleteMany()
-  await prisma.speakers.deleteMany()
-  await prisma.createPost.deleteMany()
-  await prisma.event.deleteMany()
-  await prisma.user.deleteMany()
-  await prisma.clubs.deleteMany()
+  // await prisma.userEvents.deleteMany()
+  // await prisma.speakers.deleteMany()
+  // await prisma.createPost.deleteMany()
+  // await prisma.event.deleteMany()
+  // await prisma.user.deleteMany()
+  // await prisma.clubs.deleteMany()
 
   // Hash password for all users
   const hashedPassword = await hash('password123', 12)
@@ -303,7 +303,7 @@ async function main() {
       collegeStudentsOnly: false,
       participationFee: true,
       contactEmail: 'contact@ai-workshop.com',
-      contactPhone: 5550101
+      contactPhone: "5550101"
     },
     {
       EventName: 'Cultural Fest 2025',
@@ -324,7 +324,7 @@ async function main() {
       collegeStudentsOnly: true,
       participationFee: false,
       contactEmail: 'cultural@stanford.edu',
-      contactPhone: 5550102
+      contactPhone: "5550102"
     },
     {
       EventName: 'Startup Pitch Competition',
@@ -346,7 +346,7 @@ async function main() {
       collegeStudentsOnly: false,
       participationFee: true,
       contactEmail: 'pitch@harvard.edu',
-      contactPhone: 5550103
+      contactPhone: "5550103"
     },
     {
       EventName: 'Poetry Reading Night',
@@ -365,7 +365,8 @@ async function main() {
       startDate: '2025-07-25',
       collegeStudentsOnly: true,
       participationFee: false,
-      contactEmail: 'poetry@berkeley.edu'
+      contactEmail: 'poetry@berkeley.edu',
+      contactPhone: null
     },
     {
       EventName: 'Design Thinking Workshop',
@@ -386,7 +387,7 @@ async function main() {
       collegeStudentsOnly: false,
       participationFee: true,
       contactEmail: 'design@cmu.edu',
-      contactPhone: 5550105
+      contactPhone: "5550105"
     }
   ]
 
