@@ -366,7 +366,7 @@ async function main() {
       collegeStudentsOnly: true,
       participationFee: false,
       contactEmail: 'poetry@berkeley.edu',
-      contactPhone: null
+      contactPhone: "9339759265"
     },
     {
       EventName: 'Design Thinking Workshop',
