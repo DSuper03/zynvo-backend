@@ -1,9 +1,7 @@
-import dotenv from 'dotenv';
 import { NextFunction, Request, Response } from 'express';
 import { logger } from '../utils/logger';
 import jwt from 'jsonwebtoken';
 
-dotenv.config();
 
 declare global {
   namespace Express {
