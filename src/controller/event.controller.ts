@@ -132,7 +132,7 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
                 university: club.collegeName,
                 collegeStudentsOnly: collegeStudentsOnly,
                 contactEmail: contactEmail,
-                contactPhone: contactPhone != null ? String(contactPhone) : null,
+                contactPhone: contactPhone ,
                 participationFee: noParticipationFee,
                 posterUrl: image
             },
@@ -293,20 +293,20 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
             return;
         }
 
-        const normalized = response.map((e: typeof response[0]) => ({
-            ...e,
-            contactPhone: e.contactPhone != null ? String(e.contactPhone) : null,
-        }));
+        // const normalized = response.map((e: typeof response[0]) => ({
+        //     ...e,
+        //     contactPhone: e.contactPhone != null ? String(e.contactPhone) : null,
+        // }));
 
         logger.info(`[${requestId}] Events fetched successfully`, {
-            eventsCount: normalized.length,
+            eventsCount: response.length,
             totalData,
             totalPages: Math.ceil(totalData / limit)
         });
 
         res.status(200).json({
             msg: 'found',
-            response: normalized,
+            response: response,
             totalPages: Math.ceil(totalData / limit)
         });
 

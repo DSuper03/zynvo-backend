@@ -163,7 +163,7 @@ export const isFounder = async (req: Request, res: Response): Promise<void> => {
 
         if (!club) {
             logger.warn(`[${requestId}] User is not a founder`, { userId, email: user.email });
-            res.json({ msg: "you nihh not a founder" });
+            res.json({ msg: "you are not a founder" });
             return;
         }
 
@@ -176,7 +176,7 @@ export const isFounder = async (req: Request, res: Response): Promise<void> => {
 
         if (!event) {
             logger.warn(`[${requestId}] Event not found`, { eventId });
-            res.json({ msg: "you nihh not a founder" });
+            res.json({ msg: "you are  not a founder" });
             return;
         }
 
