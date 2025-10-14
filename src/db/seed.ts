@@ -363,6 +363,7 @@ async function main() {
       clubId: createdClubs[3].id,
       university: colleges[3],
       startDate: '2025-07-25',
+       endDate: '2025-07-25',
       collegeStudentsOnly: true,
       participationFee: false,
       contactEmail: 'poetry@berkeley.edu',
