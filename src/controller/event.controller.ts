@@ -46,7 +46,9 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         contactPhone,
         noParticipationFee,
         prizes,
-        image
+        image,
+        form,
+        fees
     } = req.body;
 
     const userId = req.id;
@@ -134,7 +136,10 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
                 contactEmail: contactEmail,
                 contactPhone: contactPhone ,
                 participationFee: noParticipationFee,
-                posterUrl: image
+                posterUrl: image,
+                eventHeaderImage : image,
+                Form : form ? form : "none",
+                Fees : fees ? fees : "none"
             },
             select: { id: true }
         });

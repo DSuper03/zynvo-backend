@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { logger } from '../utils/logger';
 import prisma from '../db/db';
 import { generateRequestId, sendErrorResponse } from '../utils/helper';
+import { link } from 'fs';
 
 const clubSelectBase = {
     id: true,
@@ -373,7 +374,10 @@ export const createClub = async (req: Request, res: Response): Promise<void> => 
             requirements,
             facultyEmail,
             logo,
-            wings
+            wings,
+            instagram,
+            twitter,
+            linkedin
         } = req.body;
 
         const userId = req.id;
@@ -491,7 +495,10 @@ export const createClub = async (req: Request, res: Response): Promise<void> => 
                     requirements: requirements,
                     facultyEmail: facultyEmail,
                     profilePicUrl: logo,
-                    wings: wings || []
+                    wings: wings || [],
+                    instagram : instagram ? instagram : "none",
+                    twitter : twitter ? twitter : "none",
+                    linkedin : linkedin ? linkedin : "none"
                 },
                 select: { id: true, name: true }
             });
@@ -534,3 +541,78 @@ export const createClub = async (req: Request, res: Response): Promise<void> => 
         sendErrorResponse(res, requestId, 'error creating club', 500, error);
     }
 };
+
+export const updateLink = async (req: Request, res: Response): Promise<void> => {
+    const id = req.id 
+    const clubid = req.params.id as string;
+    const {
+        instagram,
+        twitter,
+        linkedin
+    } =  req.body
+
+    try {
+        const email =  await prisma.user.findUnique({
+            where : {
+                id : id
+            } ,
+            select : {
+                email : true
+            }
+        })  
+        
+        if (!email) {
+            res.status(404).json({
+                msg : "user not found"
+            })
+            return;
+        }
+
+        const club = await prisma.clubs.findUnique({
+            where : {
+                id : clubid
+            }, 
+            select : {
+                founderEmail : true
+            }
+        })
+
+        if (!club || (club.founderEmail != email.email)) {
+            res.status(403).json({
+                msg : "Invalid Founder id"
+            })
+            return;
+        }
+
+
+        const update = await prisma.clubs.update({
+            where : {
+                id : clubid
+            }, 
+            data : {
+                instagram : instagram ? instagram : "",
+                twitter : twitter ? twitter : "",
+                linkedin : linkedin ? linkedin : ""
+            }
+        })
+
+        if(update) {
+            res.status(201).json({
+                msg : "links added"
+            })
+            return;
+         } else {
+            res.status(400).json({
+                msg : "some error occured"
+            })
+            return;
+         }
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({
+            msg : "inetrnal server error"
+        })
+        return;
+    }
+}
