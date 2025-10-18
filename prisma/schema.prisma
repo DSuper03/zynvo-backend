@@ -31,8 +31,8 @@ model User {
   expiryToken   Int 
   ValidFor      Int
   isVerified    Boolean? @default(false)
-  clubName      String?  
-  clubId        String?  
+  clubName      String?  @default("none")
+  clubId        String?  @default("none")
   bio           String?  @default("Zynvo Community Fresher")
   tags          String[] @default([])
   course        String?  @default("")

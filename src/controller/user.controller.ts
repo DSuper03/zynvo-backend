@@ -454,3 +454,45 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
         res.status(500).json({ msg: "internal server error" });
     }
 };
+
+export const leaveClub = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const  userId  = req.id;
+
+    if (!userId) {
+     res.status(400).json({ message: "User ID is required" });
+     return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+     res.status(404).json({ message: "User not found" });
+     return
+    }
+
+    if (!user.clubId || user.clubId === "none") {
+      res.status(400).json({ message: "User is not part of any club" });
+      return
+    }
+
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        clubId: "none",
+        clubName: "none",
+      },
+    });
+
+    res.status(200).json({ message: "Successfully left the club" });
+    return
+  } catch (error) {
+    console.error("Error leaving club:", error);
+   res.status(500).json({ message: "Internal server error" });
+   return
+  }
+}
+
