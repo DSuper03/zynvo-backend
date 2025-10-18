@@ -63,6 +63,9 @@ model clubs{ // same names multiple colleges , same college multiple
   profilePicUrl String? 
   clubContact String @default("none")
   wings         String[] @default([])
+  instagram     String?
+  twitter       String?
+  linkedin      String?
   // is Accepted boolean default false true how , will be changed by us 
   //relations 
   posts    CreatePost[] 
@@ -123,6 +126,8 @@ model event {
   participationFee Boolean @default(false)
   contactEmail String 
   contactPhone String? 
+  Form String?
+  Fees String? @default("none")
   club      clubs  @relation(fields: [clubId], references: [id])
   speakers  speakers[]
   attendees userEvents[]
