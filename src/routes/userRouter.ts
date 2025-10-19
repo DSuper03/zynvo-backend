@@ -16,7 +16,8 @@ import {
   getSidebarUser, 
   searchUser, 
   getPublicUser, 
-  getAllUsers 
+  getAllUsers, 
+  leaveClub
 } from '../controller/user.controller';
 
 const router = Router();
@@ -35,5 +36,6 @@ router.get('/getSidebarUser', AuthMiddleware, cache({ key: 'sidebar-user', ttl: 
 router.get('/SearchUser', cache({ key: 'search-user', ttl: 600, tags: ['users'] }), searchUser);
 router.get('/getPublicUser', AuthMiddleware, cache({ key: 'public-user', ttl: 600, tags: ['users'] }), getPublicUser);
 router.get('/getAllUsers', cache({ key: 'all-users', ttl: 600, tags: ['users'] }), getAllUsers);
+router.put('/leaveClub', AuthMiddleware, leaveClub);
 
 export const userRouter = router;

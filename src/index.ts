@@ -18,8 +18,16 @@ const PORT = 8000;
 app.set('trust proxy', 1);
 
 app.use(express.json());
-app.use(cors());
 
+const FRONTEND_URL = process.env.FE_URL || 'http://localhost:3000';
+app.use(cors({
+  origin: FRONTEND_URL,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+}));
+app.options('*', cors({
+  origin: FRONTEND_URL,
+  credentials: true
+}));
 
 if (process.env.NODE_ENV !== 'production') {
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec, {

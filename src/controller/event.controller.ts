@@ -46,7 +46,9 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         contactPhone,
         noParticipationFee,
         prizes,
-        image
+        image,
+        form,
+        fees
     } = req.body;
 
     const userId = req.id;
@@ -134,7 +136,10 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
                 contactEmail: contactEmail,
                 contactPhone: contactPhone ,
                 participationFee: noParticipationFee,
-                posterUrl: image
+                posterUrl: image,
+                eventHeaderImage : image,
+                Form : form ? form : "none",
+                Fees : fees ? fees : "none"
             },
             select: { id: true }
         });
@@ -631,3 +636,88 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
         sendErrorResponse(res, requestId, 'internal server error', 500);
     }
 };
+
+// should be in admin panel
+export const deleteEvent = async (req : Request, res : Response) => {
+    const id = req.id 
+    const eventId = req.params.eventId;
+    if(!id) {
+        res.status(404).json({
+            msg : "Unauthorized"
+        })
+        return;
+    }
+
+    try {
+        const club = await prisma.event.findUnique({
+            where : {
+                id : eventId
+            }, 
+            select : {
+                clubId : true
+            }
+        })
+
+        if(!club){
+            res.status(404).json({
+                msg : "no such event found"
+            })
+        return;
+        }
+
+        const userEmail = await prisma.user.findUnique({
+            where : {
+                id : id
+            }, 
+            select : {
+                email : true
+            }
+        })
+
+        if(!userEmail){
+            res.status(404).json({
+                msg : "no such user found"
+            })
+        return;
+        }
+
+        const founder = await prisma.clubs.findUnique({
+            where : {
+               id : club.clubId,
+               founderEmail : userEmail.email 
+            }
+        })
+
+       if(!founder){
+            res.status(403).json({
+                msg : "unauthorized access"
+            })
+        return;
+        } else {
+            const del = await prisma.event.delete({
+                where : {
+                    id : eventId
+                }
+            })
+            if(del){
+                res.status(200).json({
+                    msg : "event deleted, refresh page"
+                })
+                return;
+            } else {
+                res.status(501).json({
+                    msg : "some error occured"
+                })
+                return;
+            }
+        }
+
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({
+            msg : "internal server error"
+        })
+        return;
+    }
+}
