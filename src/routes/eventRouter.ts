@@ -10,7 +10,8 @@ import {
   addSpeaker,
   getSpeakers,
   verifyEventRegistration,
-  getEventDetails
+  getEventDetails,
+  deleteEvent
 } from '../controller/event.controller';
 
 const router = Router();
@@ -24,5 +25,6 @@ router.post('/addSpeakers', AuthMiddleware, purgeCache(['events']), addSpeaker);
 router.get('/getSpeakers', cache({ key: 'speakers', ttl: 600, tags: ['events'] }), getSpeakers);
 router.get('/ver-event', cache({ key: 'verify-event', ttl: 600, tags: ['events'] }), verifyEventRegistration);
 router.get('/event-details', cache({ key: 'event-details', ttl: 600, tags: ['events'] }), getEventDetails);
+router.post('/deleteEvent/:eventId', AuthMiddleware, deleteEvent);
 
 export const EventRouter = router;
