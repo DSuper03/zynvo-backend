@@ -617,3 +617,73 @@ export const updateLink = async (req: Request, res: Response): Promise<void> => 
     }
 }
 
+export const addWings =   async (req: Request, res: Response): Promise<void> => {
+    const id = req.id 
+    const clubid = req.params.id as string;
+    const {
+       wings
+    } =  req.body
+
+    try {
+        const email =  await prisma.user.findUnique({
+            where : {
+                id : id
+            } ,
+            select : {
+                email : true
+            }
+        })  
+        
+        if (!email) {
+            res.status(404).json({
+                msg : "user not found"
+            })
+            return;
+        }
+
+        const club = await prisma.clubs.findUnique({
+            where : {
+                id : clubid
+            }, 
+            select : {
+                founderEmail : true
+            }
+        })
+
+        if (!club || (club.founderEmail != email.email)) {
+            res.status(403).json({
+                msg : "Invalid Founder id"
+            })
+            return;
+        }
+
+
+        const update = await prisma.clubs.update({
+            where : {
+                id : clubid
+            }, 
+            data : {
+                wings : wings || []
+            }
+        })
+
+        if(update) {
+            res.status(201).json({
+                msg : "wings added"
+            })
+            return;
+         } else {
+            res.status(400).json({
+                msg : "some error occured"
+            })
+            return;
+         }
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({
+            msg : "inetrnal server error"
+        })
+        return;
+    }
+}
