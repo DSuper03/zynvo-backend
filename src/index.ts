@@ -25,8 +25,7 @@ app.use(cors({
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
 }));
 app.options('*', cors({
-  origin: FRONTEND_URL,
-  credentials: true
+  origin: FRONTEND_URL
 }));
 
 if (process.env.NODE_ENV !== 'production') {
