@@ -110,6 +110,7 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
             msg: 'post created',
             id: post.id,
         });
+        return;
 
     } catch (error: any) {
         logger.error(`[${requestId}] Error creating post`, {
