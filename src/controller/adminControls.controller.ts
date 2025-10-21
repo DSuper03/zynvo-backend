@@ -156,82 +156,180 @@ export const TransferOwnership = async (req: Request, res: Response): Promise<vo
 }
 
 export const addCoreMembers = async (req: Request, res: Response): Promise<void> => {
-    const id =  req.id;
-    const {
-        memberEmail
-    } = req.body 
-    const clubId = req.params.clubId; 
+    const id = req.id;
+    const { coremember1, coremember2, coremember3 } = req.body;
+    const clubId = req.params.clubId;
+
     try {
+         const userEmail = await prisma.user.findUnique({
+            where: { id },
+            select: { email: true, clubName: true }
+        });
 
-        const userEmail = await prisma.user.findUnique({
-            where : {
-                id : id
-            }, 
-            select : {
-                email : true,
-                clubName : true
-            }
-        })
-
-        if(!userEmail) {
-            res.status(404).json({
-                msg : "unauthorized id"
-            })
+        if (!userEmail) {
+            res.status(404).json({ msg: "Unauthorized ID" });
             return;
         }
+
+        
+        const founder = await prisma.clubs.findUnique({
+            where: {
+                id: clubId,
+                founderEmail: userEmail.email,
+            },
+        });
+
+        if (!founder) {
+            res.status(403).json({ msg: "You're not the club president" });
+            return;
+        }
+
+
+        const coreMembers = [coremember1, coremember2, coremember3].filter(Boolean);
+
+
+        const users = await prisma.user.findMany({
+            where: { email: { in: coreMembers } },
+            select: { email: true, clubId: true },
+        });
+
+       
+        const missingMembers = coreMembers.filter(
+            (email) => !users.some((u) => u.email === email)
+        );
+
+        const alreadyInClub = users.filter((u) => u.clubId && u.clubId !== clubId);
+
+        if (missingMembers.length > 0 || alreadyInClub.length > 0) {
+            res.status(400).json({
+                msg: "Some members are invalid or already in another club",
+                missingMembers,
+                alreadyInClub: alreadyInClub.map((u) => u.email),
+            });
+            return;
+        }
+
+        const updates = [
+            prisma.clubs.update({
+                where: { id: clubId },
+                data: {
+                    coremember1: coremember1 || founder.coremember1,
+                    coremember2: coremember2 || founder.coremember2,
+                    coremember3: coremember3 || founder.coremember3,
+                },
+            }),
+            ...coreMembers.map((email) =>
+                prisma.user.update({
+                    where: { email },
+                    data: { clubId, clubName: userEmail.clubName },
+                })
+            ),
+        ];
+
+        await prisma.$transaction(updates);
+
+        res.status(200).json({
+            msg: "Core members added successfully",
+            added: coreMembers,
+        });
+        return
+
+    } catch (error) {
+        console.error("Error adding core members:", error);
+        res.status(500).json({ msg: "Internal server error", error: String(error) });
+    }
+};
+
+export const removeCoreMembers = async (req: Request, res: Response): Promise<void> => {
+    const id = req.id;
+    const { coremember1, coremember2, coremember3 } = req.body;
+    const clubId = req.params.clubId;
+
+    try {
+        const userEmail = await prisma.user.findUnique({
+            where: { id },
+            select: { email: true, clubName: true }
+        });
+
+        if (!userEmail) {
+            res.status(404).json({ msg: "Unauthorized ID" });
+            return;
+        }
+
 
         const founder = await prisma.clubs.findUnique({
-            where : {
-                id : clubId,
-                founderEmail : userEmail.email,
-            }
-        })
-
-        if(!founder){
-            res.status(403).json({
-                msg : "Youre not the club president"
-            })
-            return
-        }
-
-        const isThere = await prisma.user.findUnique({
-            where : {
-                email : memberEmail
-            }, 
-            select : {
-                clubId : true
-            }
+            where: {
+                id: clubId,
+                founderEmail: userEmail.email,
+            },
         });
-        
-        if(!isThere || clubId != null) {
-            res.status(404).json({
-                msg : "The user is not present on zynvo or is part of another club"
-            });
-            return;
-        }
-        
-                const [update, update1] = await prisma.$transaction([
-            prisma.clubs.update({
-            where: { id: clubId },
-            data: { coremember1: email }
-            }),
-            prisma.user.update({
-            where: { email: email },
-            data: {
-                clubId: clubId,
-                clubName: userEmail.clubName
-            }
-            })
-        ]);
 
-        if (!update || !update1) {
-            res.status(502).json({
-            msg: "some error occured"
+        if (!founder) {
+            res.status(403).json({ msg: "You're not the club president" });
+            return;
+        }
+
+        
+        const membersToRemove = [coremember1, coremember2, coremember3].filter(Boolean);
+
+        if (membersToRemove.length === 0) {
+            res.status(400).json({ msg: "No core members provided to remove" });
+            return;
+        }
+
+        
+        const users = await prisma.user.findMany({
+            where: {
+                email: { in: membersToRemove },
+                clubId: clubId
+            },
+            select: { email: true },
+        });
+
+        const validMembers = users.map(u => u.email);
+        const invalidMembers = membersToRemove.filter(email => !validMembers.includes(email));
+
+        if (invalidMembers.length > 0) {
+            res.status(400).json({
+                msg: "Some users are not part of this club",
+                invalidMembers,
             });
             return;
         }
+
         
-    } catch (error) {
+        const newCoreMembers = {
+            coremember1: founder.coremember1 && membersToRemove.includes(founder.coremember1) ? null : founder.coremember1,
+            coremember2: founder.coremember2 && membersToRemove.includes(founder.coremember2) ? null : founder.coremember2,
+            coremember3: founder.coremember3 && membersToRemove.includes(founder.coremember3) ? null : founder.coremember3,
+        };
+
         
+        const updates = [
+            prisma.clubs.update({
+                where: { id: clubId },
+                data: newCoreMembers
+            }),
+            ...validMembers.map(email =>
+                prisma.user.update({
+                    where: { email },
+                    data: {
+                        clubId: null,
+                        clubName: null,
+                    },
+                })
+            )
+        ];
+
+        await prisma.$transaction(updates);
+
+        res.status(200).json({
+            msg: "Core members removed successfully",
+            removed: validMembers,
+        });
+
+    } catch (e) {
+        console.error("Error removing core members:", e);
+        res.status(500).json({ msg: "Internal server error", error: String(e) });
     }
-}
+};
