@@ -71,6 +71,7 @@ model clubs{ // same names multiple colleges , same college multiple
   posts    CreatePost[] 
   members  User[]
   events   event[]
+  announcements clubAnnouncement[]
 }
 
 
@@ -78,7 +79,6 @@ model CreatePost {
   id            String      @id @default(uuid())
   title         String
   description   String
-  //content       String
   image         String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -89,8 +89,6 @@ model CreatePost {
   club          clubs?   @relation(fields: [collegeId], references: [collegeId])
   authorId      String
   author        User     @relation(fields: [authorId], references: [id])
-  //event type in future
- 
 }
 
 model speakers {
@@ -134,6 +132,27 @@ model event {
   club      clubs  @relation(fields: [clubId], references: [id])
   speakers  speakers[]
   attendees userEvents[]
+  announcements eventAnnouncement[]
+}
+
+model eventAnnouncement {
+  id String @id @default(uuid())
+  Title String
+  Description String
+  createdAt DateTime @default(now())
+  updatedAt DateTime 
+  eventId String
+  event     event   @relation(fields: [eventId], references: [id])
+}
+
+model clubAnnouncement {
+  id String @id @default(uuid())
+  Title String
+  Description String
+  createdAt DateTime @default(now())
+  updatedAt DateTime? 
+  clubId String
+  club     clubs   @relation(fields: [clubId], references: [id])
 }
 
 model userEvents {

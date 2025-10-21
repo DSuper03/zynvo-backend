@@ -36,6 +36,8 @@ if (process.env.NODE_ENV !== 'production') {
   }));
 }
 
+//-----------------V1 routes------------------------
+
 app.use('/api/v1/user', limiter);
 app.use('/api/v1/user', userRouter);
 app.use('/api/v1/post', postRouter);
