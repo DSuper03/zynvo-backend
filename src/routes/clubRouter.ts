@@ -17,7 +17,6 @@ router.get('/getClub', AuthMiddleware, getClubByQuery);
 router.get('/getClubs/:college', getClubsByCollege);
 router.get('/:id', AuthMiddleware, getClubById);
 router.post('/club', AuthMiddleware, createClub);
-router.put('/updateLinks/:id', AuthMiddleware, updateLink);
-router.put('/addWings/:id', AuthMiddleware, addWings);
+
 
 export const clubRouter = router;

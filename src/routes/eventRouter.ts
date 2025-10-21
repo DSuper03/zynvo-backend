@@ -24,6 +24,6 @@ router.post('/addSpeakers', AuthMiddleware, addSpeaker);
 router.get('/getSpeakers', getSpeakers);
 router.get('/ver-event', verifyEventRegistration);
 router.get('/event-details', getEventDetails);
-router.post('/deleteEvent/:eventId', AuthMiddleware, deleteEvent);
+
 
 export const EventRouter = router;
