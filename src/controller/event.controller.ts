@@ -48,7 +48,10 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         prizes,
         image,
         form,
-        fees
+        fees,
+        link1,
+        link2,
+        link3
     } = req.body;
 
     const userId = req.id;
@@ -139,7 +142,10 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
                 posterUrl: image,
                 eventHeaderImage : image,
                 Form : form ? form : "none",
-                Fees : fees ? fees : "none"
+                Fees : fees ? fees : "none",
+                link1 : link1 ? link1 : null,
+                link2 : link2 ? link2 : null,
+                link3 : link3 ? link3 : null
             },
             select: { id: true }
         });
@@ -637,3 +643,46 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
     }
 };
 
+export const eventAttendees = async (req : Request, res : Response) => {
+    const eventId = req.params.id
+    if(!eventId) {
+        res.status(404).json({
+            msg : "no event id mentioned"
+        })
+        return;
+    }
+    try {
+        const event = await prisma.userEvents.findMany({
+            where : {
+               eventId : eventId
+            }, 
+            select : {
+                user : {
+                    select : {
+                        profileAvatar : true, 
+                        name : true
+                    }
+                }
+            }
+        })
+
+        if(!event) {
+            res.status(404).json({
+                msg : "no event found"
+            })
+            return;
+        }
+
+        res.status(200).json({
+            msg : "users fetched",
+            event
+        })
+        return
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({
+            msg : "internal server error"
+        })
+        return;
+    }
+}

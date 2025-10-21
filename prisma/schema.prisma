@@ -128,6 +128,9 @@ model event {
   contactPhone String? 
   Form String?
   Fees String? @default("none")
+  link1 String? 
+  link2 String?
+  link3 String?
   club      clubs  @relation(fields: [clubId], references: [id])
   speakers  speakers[]
   attendees userEvents[]
