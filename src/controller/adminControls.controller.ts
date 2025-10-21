@@ -333,3 +333,233 @@ export const removeCoreMembers = async (req: Request, res: Response): Promise<vo
         res.status(500).json({ msg: "Internal server error", error: String(e) });
     }
 };
+
+export const addWings =   async (req: Request, res: Response): Promise<void> => {
+    const id = req.id 
+    const clubid = req.params.id as string;
+    const {
+       wings
+    } =  req.body
+
+    try {
+        const email =  await prisma.user.findUnique({
+            where : {
+                id : id
+            } ,
+            select : {
+                email : true
+            }
+        })  
+        
+        if (!email) {
+            res.status(404).json({
+                msg : "user not found"
+            })
+            return;
+        }
+
+        const club = await prisma.clubs.findUnique({
+            where : {
+                id : clubid
+            }, 
+            select : {
+                founderEmail : true
+            }
+        })
+
+        if (!club || (club.founderEmail != email.email)) {
+            res.status(403).json({
+                msg : "Invalid Founder id"
+            })
+            return;
+        }
+
+
+        const update = await prisma.clubs.update({
+            where : {
+                id : clubid
+            }, 
+            data : {
+                wings : wings || []
+            }
+        })
+
+        if(update) {
+            res.status(201).json({
+                msg : "wings added"
+            })
+            return;
+         } else {
+            res.status(400).json({
+                msg : "some error occured"
+            })
+            return;
+         }
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({
+            msg : "inetrnal server error"
+        })
+        return;
+    }
+}
+
+export const updateLink = async (req: Request, res: Response): Promise<void> => {
+    const id = req.id 
+    const clubid = req.params.id as string;
+    const {
+        instagram,
+        twitter,
+        linkedin
+    } =  req.body
+
+    try {
+        const email =  await prisma.user.findUnique({
+            where : {
+                id : id
+            } ,
+            select : {
+                email : true
+            }
+        })  
+        
+        if (!email) {
+            res.status(404).json({
+                msg : "user not found"
+            })
+            return;
+        }
+
+        const club = await prisma.clubs.findUnique({
+            where : {
+                id : clubid
+            }, 
+            select : {
+                founderEmail : true
+            }
+        })
+
+        if (!club || (club.founderEmail != email.email)) {
+            res.status(403).json({
+                msg : "Invalid Founder id"
+            })
+            return;
+        }
+
+
+        const update = await prisma.clubs.update({
+            where : {
+                id : clubid
+            }, 
+            data : {
+                instagram : instagram ? instagram : "",
+                twitter : twitter ? twitter : "",
+                linkedin : linkedin ? linkedin : ""
+            }
+        })
+
+        if(update) {
+            res.status(201).json({
+                msg : "links added"
+            })
+            return;
+         } else {
+            res.status(400).json({
+                msg : "some error occured"
+            })
+            return;
+         }
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({
+            msg : "inetrnal server error"
+        })
+        return;
+    }
+}
+
+export const deleteEvent = async (req : Request, res : Response) => {
+    const id = req.id 
+    const eventId = req.params.eventId;
+    if(!id) {
+        res.status(404).json({
+            msg : "Unauthorized"
+        })
+        return;
+    }
+
+    try {
+        const club = await prisma.event.findUnique({
+            where : {
+                id : eventId
+            }, 
+            select : {
+                clubId : true
+            }
+        })
+
+        if(!club){
+            res.status(404).json({
+                msg : "no such event found"
+            })
+        return;
+        }
+
+        const userEmail = await prisma.user.findUnique({
+            where : {
+                id : id
+            }, 
+            select : {
+                email : true
+            }
+        })
+
+        if(!userEmail){
+            res.status(404).json({
+                msg : "no such user found"
+            })
+        return;
+        }
+
+        const founder = await prisma.clubs.findUnique({
+            where : {
+               id : club.clubId,
+               founderEmail : userEmail.email 
+            }
+        })
+
+       if(!founder){
+            res.status(403).json({
+                msg : "unauthorized access"
+            })
+        return;
+        } else {
+            const del = await prisma.event.delete({
+                where : {
+                    id : eventId
+                }
+            })
+            if(del){
+                res.status(200).json({
+                    msg : "event deleted, refresh page"
+                })
+                return;
+            } else {
+                res.status(501).json({
+                    msg : "some error occured"
+                })
+                return;
+            }
+        }
+
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({
+            msg : "internal server error"
+        })
+        return;
+    }
+}

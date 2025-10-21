@@ -6,8 +6,6 @@ import {
   getClubsByCollege,
   getClubById,
   createClub,
-  updateLink,
-  addWings
 } from '../controller/club.controller';
 
 const router = Router();

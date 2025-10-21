@@ -10,7 +10,6 @@ import {
   getSpeakers,
   verifyEventRegistration,
   getEventDetails,
-  deleteEvent
 } from '../controller/event.controller';
 
 const router = Router();
