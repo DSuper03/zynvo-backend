@@ -15,6 +15,7 @@ export const cache = (options: CacheOptions) => {
             const cached = await redis.get(cacheKey);
             if (cached) {
                  res.json(JSON.parse(cached));
+                 return;
             }
 
             const originalJson = res.json;
