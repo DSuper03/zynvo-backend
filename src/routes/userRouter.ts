@@ -28,7 +28,7 @@ router.post('/ResendEmail', resendEmail);
 router.post('/verify', verifyEmail);
 router.put('/reset-password', AuthMiddleware, resetPassword);
 
-router.get('/getUser', AuthMiddleware, cache({ key: 'user', ttl: 600, tags: ['users'] }), getUser);
+router.get('/getUser', AuthMiddleware, getUser);
 router.post('/joinClub/:id', AuthMiddleware, joinClub);
 router.get('/isFounder', AuthMiddleware, isFounder);
 router.put('/updateProfile', AuthMiddleware, updateProfile);
