@@ -48,7 +48,10 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         prizes,
         image,
         form,
-        fees
+        fees,
+        link1,
+        link2,
+        link3
     } = req.body;
 
     const userId = req.id;
@@ -139,7 +142,10 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
                 posterUrl: image,
                 eventHeaderImage : image,
                 Form : form ? form : "none",
-                Fees : fees ? fees : "none"
+                Fees : fees ? fees : "none",
+                link1 : link1 ? link1 : null,
+                link2 : link2 ? link2 : null,
+                link3 : link3 ? link3 : null
             },
             select: { id: true }
         });
@@ -637,82 +643,41 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
     }
 };
 
-// should be in admin panel
-export const deleteEvent = async (req : Request, res : Response) => {
-    const id = req.id 
-    const eventId = req.params.eventId;
-    if(!id) {
+export const eventAttendees = async (req : Request, res : Response) => {
+    const eventId = req.params.id
+    if(!eventId) {
         res.status(404).json({
-            msg : "Unauthorized"
+            msg : "no event id mentioned"
         })
         return;
     }
-
     try {
-        const club = await prisma.event.findUnique({
+        const event = await prisma.userEvents.findMany({
             where : {
-                id : eventId
+               eventId : eventId
             }, 
             select : {
-                clubId : true
-            }
-        })
-
-        if(!club){
-            res.status(404).json({
-                msg : "no such event found"
-            })
-        return;
-        }
-
-        const userEmail = await prisma.user.findUnique({
-            where : {
-                id : id
-            }, 
-            select : {
-                email : true
-            }
-        })
-
-        if(!userEmail){
-            res.status(404).json({
-                msg : "no such user found"
-            })
-        return;
-        }
-
-        const founder = await prisma.clubs.findUnique({
-            where : {
-               id : club.clubId,
-               founderEmail : userEmail.email 
-            }
-        })
-
-       if(!founder){
-            res.status(403).json({
-                msg : "unauthorized access"
-            })
-        return;
-        } else {
-            const del = await prisma.event.delete({
-                where : {
-                    id : eventId
+                user : {
+                    select : {
+                        profileAvatar : true, 
+                        name : true
+                    }
                 }
-            })
-            if(del){
-                res.status(200).json({
-                    msg : "event deleted, refresh page"
-                })
-                return;
-            } else {
-                res.status(501).json({
-                    msg : "some error occured"
-                })
-                return;
             }
+        })
+
+        if(!event) {
+            res.status(404).json({
+                msg : "no event found"
+            })
+            return;
         }
 
-
+        res.status(200).json({
+            msg : "users fetched",
+            event
+        })
+        return
     } catch (error) {
         console.log(error);
         res.status(500).json({

@@ -6,9 +6,8 @@ import {
   getClubsByCollege,
   getClubById,
   createClub,
-  updateLink,
-  addWings
 } from '../controller/club.controller';
+import { getClubAllannouncements } from '../controller/club.ann.controller';
 
 const router = Router();
 
@@ -17,7 +16,6 @@ router.get('/getClub', AuthMiddleware, getClubByQuery);
 router.get('/getClubs/:college', getClubsByCollege);
 router.get('/:id', AuthMiddleware, getClubById);
 router.post('/club', AuthMiddleware, createClub);
-router.put('/updateLinks/:id', AuthMiddleware, updateLink);
-router.put('/addWings/:id', AuthMiddleware, addWings);
 
+router.get('/getAnn/:clubId',AuthMiddleware, getClubAllannouncements);
 export const clubRouter = router;

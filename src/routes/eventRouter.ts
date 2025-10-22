@@ -10,8 +10,8 @@ import {
   getSpeakers,
   verifyEventRegistration,
   getEventDetails,
-  deleteEvent
 } from '../controller/event.controller';
+import {  getAllannouncements } from '../controller/event.ann.controller';
 
 const router = Router();
 
@@ -24,6 +24,7 @@ router.post('/addSpeakers', AuthMiddleware, addSpeaker);
 router.get('/getSpeakers', getSpeakers);
 router.get('/ver-event', verifyEventRegistration);
 router.get('/event-details', getEventDetails);
-router.post('/deleteEvent/:eventId', AuthMiddleware, deleteEvent);
+router.get('/getAnn/:eventId',AuthMiddleware, getAllannouncements);
+
 
 export const EventRouter = router;
