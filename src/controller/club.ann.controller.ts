@@ -135,7 +135,7 @@ export const updateClubAnnouncement = async(req : Request, res : Response) => {
 
   const updateData: any = {};
 
-  updateData.updatedAt = Date.now()
+  updateData.updatedAt = new Date()
   if (Title) updateData.Title = Title;
   if (Description) updateData.Description = Description;
 
