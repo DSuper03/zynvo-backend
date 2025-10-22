@@ -1,5 +1,5 @@
 
-//============================ event Announcements CRUD ===============================
+//============================ club Announcements CRUD ================================
 
 import prisma from '../db/db';
 import { Request, Response } from "express"
