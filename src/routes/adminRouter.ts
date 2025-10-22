@@ -10,7 +10,7 @@ router.put('/updateClubLinks/:id', AuthMiddleware, updateLink);
 router.put('/addWings/:id', AuthMiddleware, addWings);
 router.post('/deleteEvent/:eventId', AuthMiddleware, deleteEvent);
 router.post('/removeMember/:clubId', AuthMiddleware, removeMember);
-router.post('/addCoreMemberes/:clubId', AuthMiddleware, addCoreMembers);
+router.post('/addCoreMembers/:clubId', AuthMiddleware, addCoreMembers);
 router.post('/removeCoremembers/:clubId', AuthMiddleware, removeCoreMembers);
 router.put('/transferOwnership/:clubId', AuthMiddleware, TransferOwnership);
 router.put('/updateEventLinks/:eventId', AuthMiddleware, updateEventLink);
