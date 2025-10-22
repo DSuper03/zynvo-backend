@@ -80,7 +80,7 @@ export const createClubAnnouncement = async(req : Request, res : Response) => {
 
 }
 
-export const getClubAllannouncemts = async(req : Request, res : Response) => {
+export const getClubAllannouncements = async(req : Request, res : Response) => {
   const clubId = req.params.clubId as string
   if(!clubId){
     res.status(404).json({
