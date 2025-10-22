@@ -140,7 +140,7 @@ model eventAnnouncement {
   Title String
   Description String
   createdAt DateTime @default(now())
-  updatedAt DateTime 
+  updatedAt DateTime?
   eventId String
   event     event   @relation(fields: [eventId], references: [id])
 }
