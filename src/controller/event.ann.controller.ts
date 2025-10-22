@@ -81,7 +81,7 @@ export const createAnnouncement = async(req : Request, res : Response) => {
 
 }
 
-export const getAllannouncemts = async(req : Request, res : Response) => {
+export const getAllannouncements = async(req : Request, res : Response) => {
     const eventId = req.params.eventId as string;
 
     try {
