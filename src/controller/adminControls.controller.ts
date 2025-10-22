@@ -544,14 +544,12 @@ export const deleteEvent = async (req : Request, res : Response) => {
     }
 }
 
-// under progress
 export const updateEventLink = async (req: Request, res: Response): Promise<void> => {
     const id = req.id;
-    const eventId = req.params.id as string;
+    const eventId = req.params.eventId as string;
     const { link1, link2, link3 } = req.body;
 
     try {
-        // 1️⃣ Verify requesting user
         const user = await prisma.user.findUnique({
             where: { id },
             select: { email: true }
@@ -562,7 +560,6 @@ export const updateEventLink = async (req: Request, res: Response): Promise<void
             return;
         }
 
-        // 2️⃣ Verify event ownership (founder or creator of event)
         const event = await prisma.event.findUnique({
             where: { id: eventId },
         });
@@ -572,7 +569,20 @@ export const updateEventLink = async (req: Request, res: Response): Promise<void
             return;
         }
 
-        // 3️⃣ Build dynamic update object
+        const founder = await prisma.clubs.findUnique({
+            where : {
+                id : event.clubId,
+                founderEmail : user.email
+            }
+        })
+
+        if(!founder) {
+            res.status(403).json({
+                msg : "you're forbidden sir"
+            })
+            return;
+        }
+
         const updateData: any = {};
         if (link1) updateData.link1 = link1;
         if (link2) updateData.link2 = link2;
@@ -583,16 +593,24 @@ export const updateEventLink = async (req: Request, res: Response): Promise<void
             return;
         }
 
-        // 4️⃣ Update the event
+
         const updatedEvent = await prisma.event.update({
             where: { id: eventId },
             data: updateData,
         });
 
+        if(!updatedEvent){
+            res.status(400).json({
+                msg : "Some error occured"
+            })
+            return;
+        }
+
         res.status(200).json({
             msg: "Event links updated successfully",
             updated: updateData,
         });
+        return;
 
     } catch (error) {
         console.error("Error updating event links:", error);
