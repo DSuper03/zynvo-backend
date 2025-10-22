@@ -399,7 +399,7 @@ export const addWings =   async (req: Request, res: Response): Promise<void> => 
     } catch (error) {
         console.log(error)
         res.status(500).json({
-            msg : "inetrnal server error"
+            msg : "internal server error"
         })
         return;
     }
