@@ -236,8 +236,10 @@ export const deleteAnnouncement = async(req : Request, res : Response) => {
         });
 
         res.status(200).json({ msg: "announcement deleted" });
+        return;
     } catch (error) {
         console.log(error);
         res.status(500).json({ msg: "internal server error" });
+        return;
     }
 }
