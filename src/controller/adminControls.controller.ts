@@ -406,79 +406,59 @@ export const addWings =   async (req: Request, res: Response): Promise<void> => 
 }
 
 export const updateLink = async (req: Request, res: Response): Promise<void> => {
-    const id = req.id 
+    const id = req.id;
     const clubid = req.params.id as string;
-    const {
-        instagram,
-        twitter,
-        linkedin
-    } =  req.body
+    const { instagram, twitter, linkedin } = req.body;
 
     try {
-        const email =  await prisma.user.findUnique({
-            where : {
-                id : id
-            } ,
-            select : {
-                email : true
-            }
-        })  
-        
+        const email = await prisma.user.findUnique({
+            where: { id },
+            select: { email: true }
+        });
+
         if (!email) {
-            res.status(404).json({
-                msg : "user not found"
-            })
+            res.status(404).json({ msg: "User not found" });
             return;
         }
 
         const club = await prisma.clubs.findUnique({
-            where : {
-                id : clubid
-            }, 
-            select : {
-                founderEmail : true
-            }
-        })
+            where: { id: clubid },
+            select: { founderEmail: true }
+        });
 
-        if (!club || (club.founderEmail != email.email)) {
-            res.status(403).json({
-                msg : "Invalid Founder id"
-            })
+        if (!club || club.founderEmail !== email.email) {
+            res.status(403).json({ msg: "Invalid founder ID" });
             return;
         }
 
+        const updateData: any = {};
+        if (instagram) updateData.instagram = instagram;
+        if (twitter) updateData.twitter = twitter;
+        if (linkedin) updateData.linkedin = linkedin;
 
+        // 4️⃣ No valid fields provided
+        if (Object.keys(updateData).length === 0) {
+            res.status(400).json({ msg: "No social links provided to update" });
+            return;
+        }
+
+        // 5️⃣ Perform update
         const update = await prisma.clubs.update({
-            where : {
-                id : clubid
-            }, 
-            data : {
-                instagram : instagram ? instagram : "",
-                twitter : twitter ? twitter : "",
-                linkedin : linkedin ? linkedin : ""
-            }
-        })
+            where: { id: clubid },
+            data: updateData
+        });
 
-        if(update) {
-            res.status(201).json({
-                msg : "links added"
-            })
-            return;
-         } else {
-            res.status(400).json({
-                msg : "some error occured"
-            })
-            return;
-         }
+        res.status(200).json({
+            msg: "Social links updated successfully",
+            updated: updateData
+        });
 
     } catch (error) {
-        console.log(error)
-        res.status(500).json({
-            msg : "inetrnal server error"
-        })
-        return;
+        console.error("Error updating links:", error);
+        res.status(500).json({ msg: "Internal server error", error: String(error) });
     }
-}
+};
+
 
 export const deleteEvent = async (req : Request, res : Response) => {
     const id = req.id 
@@ -563,3 +543,59 @@ export const deleteEvent = async (req : Request, res : Response) => {
         return;
     }
 }
+
+// under progress
+export const updateEventLink = async (req: Request, res: Response): Promise<void> => {
+    const id = req.id;
+    const eventId = req.params.id as string;
+    const { link1, link2, link3 } = req.body;
+
+    try {
+        // 1️⃣ Verify requesting user
+        const user = await prisma.user.findUnique({
+            where: { id },
+            select: { email: true }
+        });
+
+        if (!user) {
+            res.status(404).json({ msg: "User not found" });
+            return;
+        }
+
+        // 2️⃣ Verify event ownership (founder or creator of event)
+        const event = await prisma.event.findUnique({
+            where: { id: eventId },
+        });
+
+        if (!event) {
+            res.status(403).json({ msg: "Unauthorized: You are not the event creator" });
+            return;
+        }
+
+        // 3️⃣ Build dynamic update object
+        const updateData: any = {};
+        if (link1) updateData.link1 = link1;
+        if (link2) updateData.link2 = link2;
+        if (link3) updateData.link3 = link3;
+
+        if (Object.keys(updateData).length === 0) {
+            res.status(400).json({ msg: "No links provided to update" });
+            return;
+        }
+
+        // 4️⃣ Update the event
+        const updatedEvent = await prisma.event.update({
+            where: { id: eventId },
+            data: updateData,
+        });
+
+        res.status(200).json({
+            msg: "Event links updated successfully",
+            updated: updateData,
+        });
+
+    } catch (error) {
+        console.error("Error updating event links:", error);
+        res.status(500).json({ msg: "Internal server error", error: String(error) });
+    }
+};

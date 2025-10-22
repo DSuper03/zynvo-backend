@@ -24,10 +24,7 @@ router.post('/addSpeakers', AuthMiddleware, addSpeaker);
 router.get('/getSpeakers', getSpeakers);
 router.get('/ver-event', verifyEventRegistration);
 router.get('/event-details', getEventDetails);
-
-router.post('/createAnn/:eventId',AuthMiddleware, createAnnouncement);
 router.get('/getAnn/:eventId',AuthMiddleware, getAllannouncemts);
-router.put('/UpdateAnn/:eventId',AuthMiddleware, updateAnnouncement);
-router.delete('/DeleteAnn/:eventId',AuthMiddleware, deleteAnnouncement);
+
 
 export const EventRouter = router;
