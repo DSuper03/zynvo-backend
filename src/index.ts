@@ -20,7 +20,9 @@ app.set('trust proxy', 1);
 
 app.use(express.json());
 
-const FRONTEND_URL = process.env.FE_URL || 'http://localhost:3000';
+const FE_URL = process.env.FE_URL as string
+
+const FRONTEND_URL = [ FE_URL,  'http://localhost:3000'];
 app.use(cors({
   origin: FRONTEND_URL,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
