@@ -496,3 +496,44 @@ export const leaveClub = async (req: Request, res: Response): Promise<void> => {
   }
 }
 
+export const isClubAdmin = async(req : Request, res: Response) : Promise<void> => {
+    const id = req.id
+    try {
+        const userDetails = await prisma.user.findUnique({
+            where : {
+                id : id
+            }
+        })
+        if(!userDetails) {
+            res.status(404).json({
+                msg : "Invalid user"
+            })
+            console.log("user not found");
+            return;
+        } 
+        if (!userDetails.clubId || !userDetails.email) {
+            res.status(400).json({
+                msg : "No club joined"
+            })
+            return;
+        }
+
+        const clubFounder = await prisma.clubs.findUnique({
+            where : {
+                id : userDetails.clubId,
+                founderEmail : userDetails.email
+            }
+        })
+
+        res.status(200).json({
+            founder : clubFounder ? true : false,
+        })
+        return;
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({
+            msg : "some error occured in server"
+        })
+        return;
+    }
+} 
