@@ -526,7 +526,8 @@ export const isClubAdmin = async(req : Request, res: Response) : Promise<void> =
         })
 
         res.status(200).json({
-            founder : clubFounder ? true : false,
+            msg : "Fetched",
+            founder : clubFounder ? 'true' : 'false'
         })
         return;
     } catch (error) {
