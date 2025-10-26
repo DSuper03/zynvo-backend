@@ -17,7 +17,8 @@ import {
   searchUser, 
   getPublicUser, 
   getAllUsers, 
-  leaveClub
+  leaveClub,
+  isClubAdmin
 } from '../controller/user.controller';
 
 const router = Router();
@@ -37,5 +38,6 @@ router.get('/SearchUser', cache({ key: 'search-user', ttl: 600, tags: ['users'] 
 router.get('/getPublicUser', AuthMiddleware, cache({ key: 'public-user', ttl: 600, tags: ['users'] }), getPublicUser);
 router.get('/getAllUsers', cache({ key: 'all-users', ttl: 600, tags: ['users'] }), getAllUsers);
 router.put('/leaveClub', AuthMiddleware, leaveClub);
+router.get('/isClubAdmin',AuthMiddleware, isClubAdmin);
 
 export const userRouter = router;
