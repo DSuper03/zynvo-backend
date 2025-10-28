@@ -432,9 +432,9 @@ export const updateLink = async (req: Request, res: Response): Promise<void> => 
         }
 
         const updateData: any = {};
-        if (instagram) updateData.instagram = instagram;
-        if (twitter) updateData.twitter = twitter;
-        if (linkedin) updateData.linkedin = linkedin;
+        if (instagram != '') updateData.instagram = instagram;
+        if (twitter != '') updateData.twitter = twitter;
+        if (linkedin != '') updateData.linkedin = linkedin;
 
         // 4️⃣ No valid fields provided
         if (Object.keys(updateData).length === 0) {
