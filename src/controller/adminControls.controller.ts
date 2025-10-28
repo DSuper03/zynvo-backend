@@ -3,9 +3,8 @@ import prisma from '../db/db';
 
 export const removeMember = async (req: Request, res: Response): Promise<void> => {
     const id =  req.id;
-    //members is array
     const {
-        members
+        member
     } = req.body 
     const clubId = req.params.clubId; 
     try {
@@ -40,9 +39,9 @@ export const removeMember = async (req: Request, res: Response): Promise<void> =
             return
         }
 
-        const removed = await prisma.user.updateMany({
+        const removed = await prisma.user.update({
             where : {
-                id : members
+                id : member
             },
             data : {
                 clubName : null,
