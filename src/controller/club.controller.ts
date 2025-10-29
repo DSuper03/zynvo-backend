@@ -317,6 +317,36 @@ export const getClubById = async (req: Request, res: Response): Promise<void> =>
                 requirements: true,
                 facultyEmail: true,
                 wings: true,
+                coremember1: true,
+                coremember2: true,
+                coremember3: true,
+                instagram: true,
+                twitter: true,
+                linkedin: true,
+                 announcements : {
+                            select : {
+                                id : true,
+                                Title : true,
+                                Description : true
+                        }
+                    },
+                events : {
+                    select : {
+                        id : true,
+                        EventName : true,
+                        Venue : true,
+                        startDate : true,
+                        endDate : true,
+                        posterUrl : true,
+                        announcements : {
+                            select : {
+                                id : true,
+                                Title : true,
+                                Description : true
+                        }
+                    }
+                } 
+            },
                 members: {
                     select: {
                         id: true,
