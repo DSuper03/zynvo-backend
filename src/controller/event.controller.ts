@@ -25,6 +25,9 @@ const eventSelectBase = {
     participationFee: true,
     posterUrl: true,
     createdAt: true,
+    link1 : true,
+    link2 : true,
+    link3 : true
 } as const;
 
 export const createEvent = async (req: Request, res: Response): Promise<void> => {
