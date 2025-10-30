@@ -27,6 +27,7 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
                 profileAvatar: true,
                 name: true,
                 clubName: true,
+                clubId: true,
                 email: true,
                 isVerified: true,
                 eventAttended: {
