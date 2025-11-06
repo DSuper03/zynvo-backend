@@ -85,6 +85,7 @@ model CreatePost {
   published     Boolean  @default(false)
   collegeName   String   @default("zync college")
   clubName      String   @default("zync club")
+  upvotes       Int      @default(0)
   collegeId     String?
   club          clubs?   @relation(fields: [collegeId], references: [collegeId])
   authorId      String
