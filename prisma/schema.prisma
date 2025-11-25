@@ -43,7 +43,7 @@ model User {
   // event         event?  @relation(fields: [eventAttended], references: [id])
   club          clubs?       @relation(fields: [clubId], references: [id])
   CreatePost    CreatePost[]
-
+  postUpvotes   PostUpvote[]
 }
 
 model clubs{ // same names multiple colleges , same college multiple
@@ -88,6 +88,7 @@ model CreatePost {
   club          clubs?   @relation(fields: [collegeId], references: [collegeId])
   authorId      String
   author        User     @relation(fields: [authorId], references: [id])
+  upvotes       PostUpvote[]
 }
 
 model speakers {
@@ -163,4 +164,16 @@ model userEvents {
   joinedAt  DateTime @default(now())
 
   @@id([userId, eventId]) // Composite primary key
+}
+
+model PostUpvote {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post      CreatePost @relation(fields: [postId], references: [id])
+  user      User       @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId])
 }
