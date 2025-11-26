@@ -1,5 +1,5 @@
 //============================ event Announcements CRUD ===============================
-import prisma from '../db/db';
+import { prisma } from '../db/db';
 import { Request, Response } from "express"
 
 export const createAnnouncement = async(req : Request, res : Response) => {

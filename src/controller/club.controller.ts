@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { logger } from '../utils/logger';
-import prisma from '../db/db';
+import { prisma } from '../db/db';
 import { generateRequestId, sendErrorResponse } from '../utils/helper';
 import { link } from 'fs';
 
@@ -513,7 +513,7 @@ export const createClub = async (req: Request, res: Response): Promise<void> => 
             collegeName: college.collegeName
         });
 
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx : any) => {
             const newClub = await tx.clubs.create({
                 data: {
                     name: name,

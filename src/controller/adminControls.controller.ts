@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import prisma from '../db/db';
+import { prisma } from '../db/db';
 
 export const removeMember = async (req: Request, res: Response): Promise<void> => {
     const id =  req.id;
@@ -194,16 +194,16 @@ export const addCoreMembers = async (req: Request, res: Response): Promise<void>
 
        
         const missingMembers = coreMembers.filter(
-            (email) => !users.some((u) => u.email === email)
+            (email) => !users.some((u : any) => u.email === email)
         );
 
-        const alreadyInClub = users.filter((u) => u.clubId && u.clubId !== clubId);
+        const alreadyInClub = users.filter((u : any) => u.clubId && u.clubId !== clubId);
 
         if (missingMembers.length > 0 || alreadyInClub.length > 0) {
             res.status(400).json({
                 msg: "Some members are invalid or already in another club",
                 missingMembers,
-                alreadyInClub: alreadyInClub.map((u) => u.email),
+                alreadyInClub: alreadyInClub.map((u : any) => u.email),
             });
             return;
         }
@@ -285,7 +285,7 @@ export const removeCoreMembers = async (req: Request, res: Response): Promise<vo
             select: { email: true },
         });
 
-        const validMembers = users.map(u => u.email);
+        const validMembers = users.map((u : any) => u.email);
         const invalidMembers = membersToRemove.filter(email => !validMembers.includes(email));
 
         if (invalidMembers.length > 0) {
@@ -309,7 +309,7 @@ export const removeCoreMembers = async (req: Request, res: Response): Promise<vo
                 where: { id: clubId },
                 data: newCoreMembers
             }),
-            ...validMembers.map(email =>
+            ...validMembers.map((email : any) =>
                 prisma.user.update({
                     where: { email },
                     data: {
