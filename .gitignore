@@ -6,3 +6,4 @@ pnpm-debug.log
 yarn-debug.log*
 pnpm-error.log*
 todo.txt
+src/generated/

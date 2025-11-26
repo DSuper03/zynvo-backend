@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { logger } from '../utils/logger';
-import prisma from '../db/db';
+import { prisma } from '../db/db';
 import { signupSchema, newPWschema } from '../types/formtypes';
 import { generateRequestId } from '../utils/helper';
 import bcrypt from 'bcrypt';

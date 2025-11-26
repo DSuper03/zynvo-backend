@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { logger } from '../utils/logger';
-import prisma from '../db/db';
+import { prisma } from '../db/db';
 import { EventSchema } from '../types/formtypes';
 import { generateRequestId, generateUUID, sendErrorResponse } from '../utils/helper';
 

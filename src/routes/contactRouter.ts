@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 import mail from '../utils/nodemailer';
 import cmail from '../utils/contactMailer';
 import { AuthMiddleware } from '../middleware/AuthMiddleware';
-import prisma from '../db/db';
+import { prisma } from '../db/db';
 
 const router = Router();
 
