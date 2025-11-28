@@ -14,7 +14,7 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
         const user = await prisma.user.findUnique({
             cacheStrategy : {
                 swr : 200, 
-                tags : [`user-${userId}`]
+                tags : [`user${userId}`]
             },
             where: { id: userId },
             select: {
@@ -238,7 +238,7 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
             select: { id: true }
         });
 
-        await prisma.$accelerate.invalidate({tags : [`user-${userId}`]});
+        await prisma.$accelerate.invalidate({tags : [`user${userId}`]});
 
         logger.info(`[${requestId}] Profile updated successfully`, { userId: update.id });
 
@@ -482,8 +482,8 @@ export const leaveClub = async (req: Request, res: Response): Promise<void> => {
       where: { id: userId },
     });
 
-    await prisma.$accelerate.invalidate({tags : [`user-${userId}`]});
-    
+    await prisma.$accelerate.invalidate({tags : [`user${userId}`]});
+
     if (!user) {
      res.status(404).json({ msg: "User not found" });
      return
