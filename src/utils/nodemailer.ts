@@ -11,7 +11,7 @@ export default async function mail(
   sgMail.setApiKey(Api_key);
   const msg = {
     to: email, // Change to your recipient
-    from: 'debonir001@gmail.com', // Change to your verified sender
+    from: 'dsuper03@zynvo.social', // Change to your verified sender
     subject: subject,
     text: `Zynvo it.`,
     html: html,
