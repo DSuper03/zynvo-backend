@@ -46,6 +46,10 @@ export const getAllClubs = async (req: Request, res: Response): Promise<void> =>
 
         const [resp, totalData] = await Promise.all([
             prisma.clubs.findMany({
+                cacheStrategy : {
+                    swr : 60,
+                    tags : ['clubsList']
+                },
                 skip,
                 take: limit,
                 select: clubSelectWithMembers,
@@ -544,6 +548,8 @@ export const createClub = async (req: Request, res: Response): Promise<void> => 
 
             return { club: newClub, founderUpdated: !!updatedFounder };
         });
+
+        await prisma.$accelerate.invalidate({tags : ['clubsList']});
 
         logger.info(`[${requestId}] Club creation completed successfully`, {
             clubId: result.club.id,

@@ -12,6 +12,10 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
 
     try {
         const user = await prisma.user.findUnique({
+            cacheStrategy : {
+                swr : 200, 
+                tags : [`user-${userId}`]
+            },
             where: { id: userId },
             select: {
                 collegeName: true,
@@ -234,6 +238,8 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
             select: { id: true }
         });
 
+        await prisma.$accelerate.invalidate({tags : [`user-${userId}`]});
+
         logger.info(`[${requestId}] Profile updated successfully`, { userId: update.id });
 
         res.status(200).json({ msg: "Profile updated successfully" });
@@ -256,6 +262,9 @@ export const getSidebarUser = async (req: Request, res: Response): Promise<void>
 
     try {
         const data = await prisma.user.findUnique({
+            cacheStrategy : {
+                swr : 120
+            },
             where: { id: userId },
             select: {
                 name: true,
@@ -413,6 +422,10 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
     try {
         const [users, totalData] = await Promise.all([
             prisma.user.findMany({
+                cacheStrategy: {
+                    swr: 60,
+                    tags : ['usersList']
+                },
                 take: limit,
                 skip,
                 orderBy: { createdAt: "desc" },
@@ -469,6 +482,8 @@ export const leaveClub = async (req: Request, res: Response): Promise<void> => {
       where: { id: userId },
     });
 
+    await prisma.$accelerate.invalidate({tags : [`user-${userId}`]});
+    
     if (!user) {
      res.status(404).json({ msg: "User not found" });
      return
