@@ -314,3 +314,44 @@ export const deletePost = async (req: Request, res: Response): Promise<void> => 
         }
     }
 };
+
+export const toggleUpvotePost = async (req: Request, res: Response): Promise<void> => 
+ {
+    try {
+        const postId = req.params.id;
+  const userId = req.id;
+  const existing = await prisma.postUpvote.findUnique({
+    where: {
+      postId_userId: { postId, userId },
+    },
+  });
+
+  if (existing) {
+
+    await prisma.postUpvote.delete({
+      where: {
+        postId_userId: { postId, userId },
+      },
+    });
+    res.status(200).json({
+        msg : "upvote removed"
+    })
+    return;
+  }
+
+  await prisma.postUpvote.create({
+    data: { postId, userId },
+  });
+
+  res.status(200).json({
+        msg : "upvote removed"
+    })
+    return;
+    } catch (error) {
+        console.log("error" , error)
+        res.status(500).json({
+            msg : "internal server error"
+        })
+    }
+ 
+}

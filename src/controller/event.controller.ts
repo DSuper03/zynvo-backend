@@ -282,24 +282,25 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
 
         const [response, totalData] = await Promise.all([
             prisma.event.findMany({
-                take: limit,
-                skip,
-                orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip,
+            orderBy: { createdAt: 'asc' },
+            select: {
+                ...eventSelectBase,
+                attendees: {
                 select: {
-                    ...eventSelectBase,
-                    attendees: {
-                        select: {
-                            user: {
-                                select: {
-                                    name: true,
-                                },
-                            },
-                        },
+                    user: {
+                    select: {
+                        name: true,
                     },
-                }
+                    },
+                },
+                },
+            },
             }),
-            prisma.event.count()
+            prisma.event.count(),
         ]);
+
 
         if (!response || response.length === 0) {
             logger.warn(`[${requestId}] No events found`);
@@ -307,10 +308,6 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
             return;
         }
 
-        // const normalized = response.map((e: typeof response[0]) => ({
-        //     ...e,
-        //     contactPhone: e.contactPhone != null ? String(e.contactPhone) : null,
-        // }));
 
         logger.info(`[${requestId}] Events fetched successfully`, {
             eventsCount: response.length,
