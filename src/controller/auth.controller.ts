@@ -346,11 +346,13 @@ export const verifyEmail = async (req: Request, res: Response): Promise<void> =>
                 msg: 'Verified successfully',
                 token,
             });
+            return;
         } else {
             logger.warn(`[${requestId}] Token expired`, { userId: user.id });
             res.status(400).json({
                 msg: 'expired',
             });
+            return;
         }
     } catch (error: any) {
         logger.error(`[${requestId}] Error verifying email`, {
