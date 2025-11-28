@@ -22,7 +22,7 @@ app.use(express.json());
 
 const FE_URL = process.env.FE_URL as string
 
-const FRONTEND_URL = [ FE_URL,  'localhost:3000', 'https://zynvo.social', 'https://zynvo-main.vercel.app'];
+const FRONTEND_URL = [ FE_URL,  'http://localhost:3000', 'https://zynvo.social', 'https://zynvo-main.vercel.app'];
 app.use(cors({
   origin: FRONTEND_URL,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
