@@ -7,14 +7,14 @@ import { generateRequestId } from '../utils/helper';
 export const getUser = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const userId = req.id;
-
     logger.info(`[${requestId}] GET /getUser - Starting request`, { userId });
 
     try {
         const user = await prisma.user.findUnique({
             cacheStrategy : {
-                swr : 200, 
-                tags : [`user${userId}`]
+                ttl: 300, 
+                swr: 60,  
+                tags : [`user${userId}`] 
             },
             where: { id: userId },
             select: {
