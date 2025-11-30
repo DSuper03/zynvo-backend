@@ -153,7 +153,7 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
             select: { id: true }
         });
 
-            await prisma.$accelerate.invalidate({tags : ['eventsList']});
+
 
         logger.info(`[${requestId}] Event created successfully`, {
             eventId: response.id,
@@ -191,9 +191,6 @@ export const getEventById = async (req: Request, res: Response): Promise<void> =
         }
 
         const response = await prisma.event.findUnique({
-            cacheStrategy : {
-                swr : 200,
-            },
             where: { id: eventId },
             select: eventSelectBase,
         });
@@ -288,10 +285,6 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
 
         const [response, totalData] = await Promise.all([
             prisma.event.findMany({
-            cacheStrategy : {
-                swr : 60,
-                tags : ['eventsList']
-            },
             take: limit,
             skip,
             orderBy: { createdAt: 'desc' },
@@ -391,7 +384,7 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             }
         });
 
-        await prisma.$accelerate.invalidate({tags : [`eventAttendees-${eventId}`]});
+       
 
         logger.info(`[${requestId}] User registered successfully`, {
             userId,
@@ -665,10 +658,6 @@ export const eventAttendees = async (req : Request, res : Response) => {
     }
     try {
         const event = await prisma.userEvents.findMany({
-            cacheStrategy : {
-                swr : 100, 
-                tags : [`eventAttendees-${eventId}`]
-            },
             where : {
                eventId : eventId
             }, 
