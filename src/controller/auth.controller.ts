@@ -87,7 +87,6 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
             }
         });
 
-        await prisma.$accelerate.invalidate({tags : ['usersList']});
 
         const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
         const emailHTML = getSignupVerificationEmailHTML(parsedData.data.name, url);

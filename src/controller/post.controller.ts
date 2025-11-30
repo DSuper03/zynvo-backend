@@ -101,7 +101,7 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
             select: { id: true }
         });
 
-        await prisma.$accelerate.invalidate({tags : ['postsList']});
+   
 
         logger.info(`[${requestId}] Post created successfully`, {
             postId: post.id,
@@ -192,10 +192,6 @@ export const getAllPosts = async (req: Request, res: Response): Promise<void> =>
 
         const [posts, totalData] = await Promise.all([
             prisma.createPost.findMany({
-                cacheStrategy : {
-                    swr : 60,
-                    tags : ['postsList']
-                },
                 skip,
                 take: limit,
                 orderBy: { createdAt: 'desc' },
@@ -300,7 +296,7 @@ export const deletePost = async (req: Request, res: Response): Promise<void> => 
             select: { id: true }
         });
 
-        await prisma.$accelerate.invalidate({tags : ['postsList']});
+     
 
         logger.info(`[${requestId}] Post deleted successfully`, { postId: post.id });
 
@@ -341,7 +337,7 @@ export const toggleUpvotePost = async (req: Request, res: Response): Promise<voi
         postId_userId: { postId, userId },
       },
     });
-    await prisma.$accelerate.invalidate({tags : ['postsList']});
+   
     res.status(200).json({
         msg : "upvote removed"
     })
