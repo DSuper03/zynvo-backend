@@ -7,7 +7,8 @@ import {
   getAllPosts,
   getPostById,
   deletePost,
-  toggleUpvotePost
+  toggleUpvotePost,
+  toggleDownvotePost
 } from '../controller/post.controller';
 
 const router = Router();
@@ -18,5 +19,6 @@ router.get('/all', cache({ key: 'all-posts', ttl: 600, tags: ['posts'] }), getAl
 router.get('/get/:id', AuthMiddleware, getPostById);
 router.delete('/delete/:id', AuthMiddleware, purgeCache(['posts']), deletePost);
 router.post('/upvote/:id', AuthMiddleware, toggleUpvotePost);
+router.post('/downvote/:id', AuthMiddleware, toggleDownvotePost);
 
 export const postRouter = router;

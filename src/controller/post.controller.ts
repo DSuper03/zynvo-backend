@@ -374,3 +374,58 @@ export const toggleUpvotePost = async (req: Request, res: Response): Promise<voi
     }
  
 }
+
+export const toggleDownvotePost = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const postId = req.params.id;
+        const userId = req.id;
+
+        const existing = await prisma.postDownvote.findUnique({
+            where: {
+                postId_userId: { postId, userId },
+            },
+        });
+
+        if (existing) {
+            const downvote = await prisma.postDownvote.delete({
+                where: {
+                    postId_userId: { postId, userId },
+                },
+            });
+
+            if (!downvote) {
+                res.status(400).json({
+                    msg: "unable to remove downvote"
+                });
+                return;
+            }
+
+            res.status(200).json({
+                msg: "downvote removed"
+            });
+            return;
+        }
+
+        const downvote = await prisma.postDownvote.create({
+            data: { postId, userId },
+        });
+
+        if (!downvote) {
+            res.status(400).json({
+                msg: "unable to downvote"
+            });
+            return;
+        }
+
+        res.status(200).json({
+            msg: "downvote added"
+        });
+        return;
+
+    } catch (error) {
+        console.log("error", error);
+        res.status(500).json({
+            msg: "internal server error"
+        });
+    }
+};
