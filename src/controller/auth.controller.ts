@@ -8,6 +8,8 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import mail from '../utils/nodemailer';
 import { getSignupVerificationEmailHTML, getResendVerificationEmailHTML } from '../utils/authEmail';
+import { generateRandomPassword } from '../utils/autoPW';
+import { generatePasswordEmailHtml } from '../utils/pwEmail';
 
 
 const genToken = (): string => {
@@ -420,7 +422,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
             const update = await prisma.user.update({
                 where: { id: user.id },
                 data: {
-                    password: bcrypt.hashSync(parsedData.data.password, 10),
+                    password: bcrypt.hashSync(newPassword, 10),
                 },
                 select: { id: true }
             });
@@ -445,5 +447,95 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
             userId: userID
         });
         res.status(500).json({ msg: 'internal server error' });
+    }
+};
+
+export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const email = req.body.email as string;
+
+    logger.info(`[${requestId}] POST /forgot-password - Starting request`, { email });
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { email: email },
+            select: {
+                id: true,
+                name: true,
+            }
+        });
+
+        if (!user) {
+            logger.warn(`[${requestId}] User not found`, { email });
+            res.status(404).json({
+                msg: 'no such user exists',
+            });
+            return;
+        }
+
+        const tempPassword = generateRandomPassword();
+        const hashedTempPassword = bcrypt.hashSync(tempPassword, 10);
+
+        try {
+            const updated = await prisma.$transaction(async (tx) => {
+                const upd = await tx.user.update({
+                    where: { email: email },
+                    data: {
+                        password: hashedTempPassword,
+                    },
+                    select: {
+                        id: true,
+                        name: true,
+                    }
+                });
+
+                if (!upd || !upd.id || !upd.name) {
+                    throw new Error('UPDATE_FAILED');
+                }
+
+                const sendMail = await mail(
+                    upd.name,
+                    email,
+                    'Your Temporary Password for Zynvo Account',
+                    generatePasswordEmailHtml(upd.name, tempPassword)
+                );
+
+                if (!sendMail) {
+                    throw new Error('MAIL_FAILED');
+                }
+
+                return upd;
+            });
+
+            logger.info(`[${requestId}] Temporary password sent`, { userId: updated.id, email });
+            res.status(200).json({
+                msg: 'temporary password sent to your email',
+            });
+            return;
+        } catch (err: any) {
+            if (err?.message === 'MAIL_FAILED') {
+                logger.error(`[${requestId}] Error sending temporary password email`, { email });
+                res.status(400).json({
+                    msg: 'error in sending mail'
+                });
+                return;
+            }
+            if (err?.message === 'UPDATE_FAILED') {
+                logger.error(`[${requestId}] Error updating temporary password`, { email });
+                res.status(500).json({
+                    msg: 'error updating password'
+                });
+                return;
+            }
+            throw err;
+        }
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error in forgot password`, {
+            error: error.message,
+            stack: error.stack,
+            email
+        });
+        res.status(500).json({ msg: 'internal server error' });
+        return
     }
 };

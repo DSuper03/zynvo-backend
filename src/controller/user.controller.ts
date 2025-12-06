@@ -121,6 +121,7 @@ export const joinClub = async (req: Request, res: Response): Promise<void> => {
         });
 
         res.status(200).json({ msg: 'yay club joined' });
+        return;
     } catch (error: any) {
         logger.error(`[${requestId}] Error joining club`, {
             error: error.message,
