@@ -69,8 +69,10 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
         const hashedPassword = bcrypt.hashSync(parsedData.data.password, 10);
         const vToken = genToken();
 
-        const newUser = await prisma.user.create({
-            data: {
+        try {
+            const newUser = await prisma.$transaction(async (tx) => {
+            const created = await tx.user.create({
+                data: {
                 email: parsedData.data.email,
                 name: parsedData.data.name,
                 password: hashedPassword,
@@ -79,51 +81,61 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
                 vToken: vToken,
                 expiryToken: Math.floor(Date.now() / 1000),
                 ValidFor: 86400000,
-            },
-            select: {
+                },
+                select: {
                 id: true,
                 profileAvatar: true,
                 name: true,
+                }
+            });
+
+            const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
+            const emailHTML = getSignupVerificationEmailHTML(parsedData.data.name, url);
+
+            // If mail fails, throw to rollback the transaction
+            const sendMail = await mail(
+                parsedData.data.name,
+                parsedData.data.email,
+                'One click away from greatness (seriously, just one)',
+                emailHTML
+            );
+
+            if (!sendMail) {
+                throw new Error('MAIL_FAILED');
             }
-        });
 
+            return created;
+            });
 
-        const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
-        const emailHTML = getSignupVerificationEmailHTML(parsedData.data.name, url);
+            logger.info(`[${requestId}] User created successfully`, {
+            userId: newUser.id,
+            email
+            });
 
-        const sendMail = await mail(
-            parsedData.data.name,
-            parsedData.data.email,
-            'One click away from greatness (seriously, just one)',
-            emailHTML
-        );
+            const id = newUser.id;
+            const token = jwt.sign({
+            id,
+            email,
+            pfp: newUser.profileAvatar,
+            name: newUser.name
+            }, process.env.JWT_SECRET!);
 
-        if (!sendMail) {
+            res.status(200).json({
+            msg: 'account created',
+            token
+            });
+            return;
+        } catch (err: any) {
+            if ((err as Error).message === 'MAIL_FAILED') {
             logger.error(`[${requestId}] Error sending verification email`, { email });
             res.status(400).json({
                 msg: "error in sending mail"
             });
             return;
+            }
+            // rethrow so outer catch can handle other errors
+            throw err;
         }
-
-        logger.info(`[${requestId}] User created successfully`, {
-            userId: newUser.id,
-            email
-        });
-
-        const id = newUser.id;
-        const token = jwt.sign({
-            id,
-            email,
-            pfp: newUser.profileAvatar,
-            name: newUser.name
-        }, process.env.JWT_SECRET!);
-
-        res.status(200).json({
-            msg: 'account created',
-            token
-        });
-        return;
     } catch (error: any) {
         logger.error(`[${requestId}] Error in signup`, {
             error: error.message,

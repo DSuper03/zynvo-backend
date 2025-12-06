@@ -332,11 +332,18 @@ export const toggleUpvotePost = async (req: Request, res: Response): Promise<voi
 
   if (existing) {
 
-    await prisma.postUpvote.delete({
+   const upvote =  await prisma.postUpvote.delete({
       where: {
         postId_userId: { postId, userId },
       },
     });
+
+    if(!upvote) {
+        res.status(400).json({
+            msg : "unable to remove upvote"
+        })
+        return;
+    }
    
     res.status(200).json({
         msg : "upvote removed"
@@ -344,9 +351,16 @@ export const toggleUpvotePost = async (req: Request, res: Response): Promise<voi
     return;
   }
 
-  await prisma.postUpvote.create({
+  const upvote = await prisma.postUpvote.create({
     data: { postId, userId },
   });
+
+  if(!upvote) {
+        res.status(400).json({
+            msg : "unable to upvote"
+        })
+        return;
+    }
 
   res.status(200).json({
         msg : "upvote removed"
