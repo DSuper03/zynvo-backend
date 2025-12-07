@@ -8,6 +8,8 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import mail from '../utils/nodemailer';
 import { getSignupVerificationEmailHTML, getResendVerificationEmailHTML } from '../utils/authEmail';
+import { generateRandomPassword } from '../utils/autoPW';
+import { generatePasswordEmailHtml } from '../utils/pwEmail';
 
 
 const genToken = (): string => {
@@ -69,8 +71,10 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
         const hashedPassword = bcrypt.hashSync(parsedData.data.password, 10);
         const vToken = genToken();
 
-        const newUser = await prisma.user.create({
-            data: {
+        try {
+            const newUser = await prisma.$transaction(async (tx) => {
+            const created = await tx.user.create({
+                data: {
                 email: parsedData.data.email,
                 name: parsedData.data.name,
                 password: hashedPassword,
@@ -79,51 +83,61 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
                 vToken: vToken,
                 expiryToken: Math.floor(Date.now() / 1000),
                 ValidFor: 86400000,
-            },
-            select: {
+                },
+                select: {
                 id: true,
                 profileAvatar: true,
                 name: true,
+                }
+            });
+
+            const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
+            const emailHTML = getSignupVerificationEmailHTML(parsedData.data.name, url);
+
+            // If mail fails, throw to rollback the transaction
+            const sendMail = await mail(
+                parsedData.data.name,
+                parsedData.data.email,
+                'One click away from greatness (seriously, just one)',
+                emailHTML
+            );
+
+            if (!sendMail) {
+                throw new Error('MAIL_FAILED');
             }
-        });
 
+            return created;
+            });
 
-        const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
-        const emailHTML = getSignupVerificationEmailHTML(parsedData.data.name, url);
+            logger.info(`[${requestId}] User created successfully`, {
+            userId: newUser.id,
+            email
+            });
 
-        const sendMail = await mail(
-            parsedData.data.name,
-            parsedData.data.email,
-            'One click away from greatness (seriously, just one)',
-            emailHTML
-        );
+            const id = newUser.id;
+            const token = jwt.sign({
+            id,
+            email,
+            pfp: newUser.profileAvatar,
+            name: newUser.name
+            }, process.env.JWT_SECRET!);
 
-        if (!sendMail) {
+            res.status(200).json({
+            msg: 'account created',
+            token
+            });
+            return;
+        } catch (err: any) {
+            if ((err as Error).message === 'MAIL_FAILED') {
             logger.error(`[${requestId}] Error sending verification email`, { email });
             res.status(400).json({
                 msg: "error in sending mail"
             });
             return;
+            }
+            // rethrow so outer catch can handle other errors
+            throw err;
         }
-
-        logger.info(`[${requestId}] User created successfully`, {
-            userId: newUser.id,
-            email
-        });
-
-        const id = newUser.id;
-        const token = jwt.sign({
-            id,
-            email,
-            pfp: newUser.profileAvatar,
-            name: newUser.name
-        }, process.env.JWT_SECRET!);
-
-        res.status(200).json({
-            msg: 'account created',
-            token
-        });
-        return;
     } catch (error: any) {
         logger.error(`[${requestId}] Error in signup`, {
             error: error.message,
@@ -408,7 +422,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
             const update = await prisma.user.update({
                 where: { id: user.id },
                 data: {
-                    password: bcrypt.hashSync(parsedData.data.password, 10),
+                    password: bcrypt.hashSync(newPassword, 10),
                 },
                 select: { id: true }
             });
@@ -433,5 +447,95 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
             userId: userID
         });
         res.status(500).json({ msg: 'internal server error' });
+    }
+};
+
+export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const email = req.body.email as string;
+
+    logger.info(`[${requestId}] POST /forgot-password - Starting request`, { email });
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { email: email },
+            select: {
+                id: true,
+                name: true,
+            }
+        });
+
+        if (!user) {
+            logger.warn(`[${requestId}] User not found`, { email });
+            res.status(404).json({
+                msg: 'no such user exists',
+            });
+            return;
+        }
+
+        const tempPassword = generateRandomPassword();
+        const hashedTempPassword = bcrypt.hashSync(tempPassword, 10);
+
+        try {
+            const updated = await prisma.$transaction(async (tx) => {
+                const upd = await tx.user.update({
+                    where: { email: email },
+                    data: {
+                        password: hashedTempPassword,
+                    },
+                    select: {
+                        id: true,
+                        name: true,
+                    }
+                });
+
+                if (!upd || !upd.id || !upd.name) {
+                    throw new Error('UPDATE_FAILED');
+                }
+
+                const sendMail = await mail(
+                    upd.name,
+                    email,
+                    'Your Temporary Password for Zynvo Account',
+                    generatePasswordEmailHtml(upd.name, tempPassword)
+                );
+
+                if (!sendMail) {
+                    throw new Error('MAIL_FAILED');
+                }
+
+                return upd;
+            });
+
+            logger.info(`[${requestId}] Temporary password sent`, { userId: updated.id, email });
+            res.status(200).json({
+                msg: 'temporary password sent to your email',
+            });
+            return;
+        } catch (err: any) {
+            if (err?.message === 'MAIL_FAILED') {
+                logger.error(`[${requestId}] Error sending temporary password email`, { email });
+                res.status(400).json({
+                    msg: 'error in sending mail'
+                });
+                return;
+            }
+            if (err?.message === 'UPDATE_FAILED') {
+                logger.error(`[${requestId}] Error updating temporary password`, { email });
+                res.status(500).json({
+                    msg: 'error updating password'
+                });
+                return;
+            }
+            throw err;
+        }
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error in forgot password`, {
+            error: error.message,
+            stack: error.stack,
+            email
+        });
+        res.status(500).json({ msg: 'internal server error' });
+        return
     }
 };

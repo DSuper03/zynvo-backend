@@ -6,7 +6,8 @@ import {
   login,
   resendEmail, 
   verifyEmail, 
-  resetPassword 
+  resetPassword, 
+  forgotPassword
 } from '../controller/auth.controller';
 import { 
   getUser, 
@@ -27,6 +28,7 @@ router.post('/signup', signup);
 router.post('/login', login);
 router.post('/ResendEmail', resendEmail);
 router.post('/verify', verifyEmail);
+router.post('/forgot', forgotPassword);
 router.put('/reset-password', AuthMiddleware, resetPassword);
 
 router.get('/getUser', AuthMiddleware, getUser);

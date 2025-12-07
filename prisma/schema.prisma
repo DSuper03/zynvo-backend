@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -41,10 +40,10 @@ model User {
   linkedin      String? @default("")
   instagram     String? @default("")
   eventAttended userEvents[]
-  // event         event?  @relation(fields: [eventAttended], references: [id])
   club          clubs?       @relation(fields: [clubId], references: [id])
   CreatePost    CreatePost[]
   postUpvotes   PostUpvote[]
+  postDownvotes PostDownvote[]
 }
 
 model clubs{ // same names multiple colleges , same college multiple
@@ -90,6 +89,7 @@ model CreatePost {
   authorId      String
   author        User     @relation(fields: [authorId], references: [id])
   upvotes       PostUpvote[]
+  downvotes     PostDownvote[]
 }
 
 model speakers {
@@ -168,6 +168,18 @@ model userEvents {
 }
 
 model PostUpvote {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post      CreatePost @relation(fields: [postId], references: [id])
+  user      User       @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId])
+}
+
+model PostDownvote {
   id        String   @id @default(uuid())
   postId    String
   userId    String
