@@ -429,3 +429,49 @@ export const toggleDownvotePost = async (req: Request, res: Response): Promise<v
         });
     }
 };
+
+export const getPostUpvotes = async (req : Request, res: Response): Promise<void> => {
+    try {
+        const postId = req.params.id;
+
+        const upvotes = await prisma.postUpvote.findMany({
+            where: { postId },
+            select: {
+                userId: true,
+            },
+        });
+
+        res.status(200).json({
+            msg: "upvotes fetched",
+            upvotes: upvotes.map((upvote) => upvote.userId),
+        });
+    } catch (error) {
+        console.log("error", error);
+        res.status(500).json({
+            msg: "internal server error"
+        });
+    }
+};
+
+export const getPostDownvotes = async (req : Request, res: Response): Promise<void> => {
+    try {
+        const postId = req.params.id;
+
+        const downvotes = await prisma.postDownvote.findMany({
+            where: { postId },
+            select: {
+                userId: true,
+            },
+        });
+
+        res.status(200).json({
+            msg: "downvotes fetched",
+            downvotes: downvotes.map((downvote) => downvote.userId),
+        });
+    } catch (error) {
+        console.log("error", error);
+        res.status(500).json({
+            msg: "internal server error"
+        });
+    }
+};
