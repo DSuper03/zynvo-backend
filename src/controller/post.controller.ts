@@ -202,7 +202,9 @@ export const getAllPosts = async (req: Request, res: Response): Promise<void> =>
                             profileAvatar: true,
                             name: true,
                         }
-                    }
+                    },
+                    upvotes : true,
+                    downvotes : true
                 },
             }),
             prisma.createPost.count()
