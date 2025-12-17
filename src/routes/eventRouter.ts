@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { AuthMiddleware } from '../middleware/AuthMiddleware';
+import { AuthMiddleware, ClubHeadAuthMiddleware } from '../middleware/AuthMiddleware';
 import {
   createEvent,
   getEventById,
@@ -11,7 +11,17 @@ import {
   verifyEventRegistration,
   getEventDetails,
 } from '../controller/event.controller';
-import {  getAllannouncements } from '../controller/event.ann.controller';
+import { 
+  getAllannouncements, 
+  createAnnouncement, 
+  updateAnnouncement, 
+  deleteAnnouncement 
+} from '../controller/event.ann.controller';
+import{addToGallery,
+    getEventGallery,
+    updateGalleryItem,
+    deleteGalleryItem
+} from '../controller/event.controller';
 
 const router = Router();
 
@@ -25,6 +35,12 @@ router.get('/getSpeakers', getSpeakers);
 router.get('/ver-event', verifyEventRegistration);
 router.get('/event-details', getEventDetails);
 router.get('/getAnn/:eventId',AuthMiddleware, getAllannouncements);
-
+router.post('/announcement/:eventId', ClubHeadAuthMiddleware, createAnnouncement);
+router.put('/announcement/:eventId', ClubHeadAuthMiddleware, updateAnnouncement);
+router.delete('/announcement/:eventId', ClubHeadAuthMiddleware, deleteAnnouncement);
+router.post('/:eventId/gallery', ClubHeadAuthMiddleware, addToGallery);
+router.get('/:eventId/gallery', getEventGallery);
+router.put('/:eventId/gallery', ClubHeadAuthMiddleware, updateGalleryItem);
+router.delete('/:eventId/gallery', ClubHeadAuthMiddleware, deleteGalleryItem);
 
 export const EventRouter = router;
