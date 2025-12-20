@@ -266,6 +266,45 @@
         }
       }
     },
+    "/api/v1/user/forgot": {
+      "post": {
+        "summary": "Request temporary password",
+        "description": "Send a temporary password to the user's registered email address.",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "john.doe@college.edu"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Temporary password sent to email"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "400": {
+            "description": "Error sending email"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
     "/api/v1/user/getUser": {
       "get": {
         "summary": "Get user profile",
@@ -561,6 +600,67 @@
         }
       }
     },
+    "/api/v1/user/leaveClub": {
+      "put": {
+        "summary": "Leave current club",
+        "description": "Remove the authenticated user from their current club.",
+        "tags": ["User Management"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Successfully left the club"
+          },
+          "400": {
+            "description": "User is not part of any club or bad request"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/v1/user/isClubAdmin": {
+      "get": {
+        "summary": "Check if user is club admin",
+        "description": "Returns whether the authenticated user is the founder/admin of their joined club.",
+        "tags": ["User Management"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Check completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {
+                      "type": "string",
+                      "example": "Fetched"
+                    },
+                    "founder": {
+                      "type": "string",
+                      "example": "true"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "User has not joined any club"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
     "/api/v1/post/create": {
       "post": {
         "summary": "Create a new post",
@@ -760,6 +860,56 @@
           },
           "403": {
             "description": "Unauthorized - not post owner"
+          },
+          "404": {
+            "description": "Post not found"
+          }
+        }
+      }
+    },
+    "/api/v1/post/upvote/{id}": {
+      "post": {
+        "summary": "Toggle upvote on a post",
+        "description": "Upvote or remove upvote from a specific post for the authenticated user.",
+        "tags": ["Posts"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Post ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upvote toggled successfully"
+          },
+          "404": {
+            "description": "Post not found"
+          }
+        }
+      }
+    },
+    "/api/v1/post/downvote/{id}": {
+      "post": {
+        "summary": "Toggle downvote on a post",
+        "description": "Downvote or remove downvote from a specific post for the authenticated user.",
+        "tags": ["Posts"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Post ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Downvote toggled successfully"
           },
           "404": {
             "description": "Post not found"
@@ -1277,6 +1427,31 @@
         }
       }
     },
+    "/api/v1/events/getAnn/{eventId}": {
+      "get": {
+        "summary": "Get all announcements for an event",
+        "description": "Fetch all announcements linked to a specific event.",
+        "tags": ["Event Announcements"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Announcements fetched successfully"
+          },
+          "404": {
+            "description": "Event or announcements not found"
+          }
+        }
+      }
+    },
     "/api/v1/clubs/club": {
       "post": {
         "summary": "Create a new club",
@@ -1526,10 +1701,35 @@
         }
       }
     },
-    "/api/v1/contact": {
+    "/api/v1/clubs/getAnn/{clubId}": {
+      "get": {
+        "summary": "Get all announcements for a club",
+        "description": "Fetch all announcements linked to a specific club.",
+        "tags": ["Club Announcements"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Club ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Announcements fetched successfully"
+          },
+          "404": {
+            "description": "Club or announcements not found"
+          }
+        }
+      }
+    },
+    "/api/v1/contact/contact": {
       "post": {
         "summary": "Send contact message",
-        "description": "Send a contact/inquiry message",
+        "description": "Send a contact/inquiry message to the Zynvo team.",
         "tags": ["Contact"],
         "requestBody": {
           "required": true,
@@ -1537,7 +1737,7 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["name", "email", "message"],
+                "required": ["name", "email", "subject", "message"],
                 "properties": {
                   "name": {
                     "type": "string",
@@ -1547,6 +1747,10 @@
                     "type": "string",
                     "format": "email",
                     "example": "john@example.com"
+                  },
+                  "subject": {
+                    "type": "string",
+                    "example": "Question about an event"
                   },
                   "message": {
                     "type": "string",
@@ -1562,8 +1766,547 @@
             "description": "Message sent successfully"
           },
           "400": {
-            "description": "Bad request"
+            "description": "Bad request or error sending message"
           }
+        }
+      }
+    },
+    "/api/v1/contact/feedback": {
+      "post": {
+        "summary": "Send authenticated user feedback",
+        "description": "Authenticated users can send detailed feedback including category and suggested improvements.",
+        "tags": ["Feedback"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["subject", "category", "description"],
+                "properties": {
+                  "subject": {"type": "string", "example": "Feature feedback"},
+                  "category": {"type": "string", "example": "UX"},
+                  "description": {"type": "string", "example": "I liked ..."},
+                  "improvements": {"type": "string", "example": "It would be better if ..."}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Feedback sent successfully"},
+          "400": {"description": "Bad request"},
+          "402": {"description": "Invalid user"},
+          "404": {"description": "User not found"}
+        }
+      }
+    },
+    "/api/v2/admin/updateClubLinks/{id}": {
+      "put": {
+        "summary": "Update club social links",
+        "description": "Update Instagram, Twitter, and LinkedIn links for a club (founder only).",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "instagram": {"type": "string"},
+                  "twitter": {"type": "string"},
+                  "linkedin": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Social links updated successfully"},
+          "400": {"description": "No social links provided"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "User or club not found"}
+        }
+      }
+    },
+    "/api/v2/admin/addWings/{id}": {
+      "put": {
+        "summary": "Add or update club wings",
+        "description": "Set the list of wings (sub-teams) for a club (founder only).",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "wings": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "example": ["Tech", "Design"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {"description": "Wings added"},
+          "400": {"description": "Error updating wings"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "User or club not found"}
+        }
+      }
+    },
+    "/api/v2/admin/deleteEvent/{eventId}": {
+      "post": {
+        "summary": "Delete an event (admin)",
+        "description": "Delete a specific event if the authenticated user is the corresponding club founder.",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {"description": "Event deleted"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "Event or user not found"}
+        }
+      }
+    },
+    "/api/v2/admin/removeMember/{clubId}": {
+      "post": {
+        "summary": "Remove member from club",
+        "description": "Remove a member from the club (founder only).",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["member"],
+                "properties": {
+                  "member": {"type": "string", "description": "User ID of member to remove"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Member removed"},
+          "400": {"description": "Error removing member"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "User or club not found"}
+        }
+      }
+    },
+    "/api/v2/admin/addCoreMembers/{clubId}": {
+      "post": {
+        "summary": "Add core members to club",
+        "description": "Add up to three core members to a club (founder only).",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "coremember1": {"type": "string"},
+                  "coremember2": {"type": "string"},
+                  "coremember3": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Core members added"},
+          "400": {"description": "Some members invalid or already in another club"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "User or club not found"}
+        }
+      }
+    },
+    "/api/v2/admin/removeCoremembers/{clubId}": {
+      "post": {
+        "summary": "Remove core members from club",
+        "description": "Remove one or more core members from a club (founder only).",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "coremember1": {"type": "string"},
+                  "coremember2": {"type": "string"},
+                  "coremember3": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Core members removed"},
+          "400": {"description": "Some users are not part of this club or invalid input"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "User or club not found"}
+        }
+      }
+    },
+    "/api/v2/admin/transferOwnership/{clubId}": {
+      "put": {
+        "summary": "Transfer club ownership",
+        "description": "Transfer club founder role to another user by email.",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": {"type": "string", "format": "email"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {"description": "Founder updated"},
+          "400": {"description": "Invalid target user"},
+          "403": {"description": "Requesting user is not founder"},
+          "404": {"description": "User or club not found"}
+        }
+      }
+    },
+    "/api/v2/admin/updateEventLinks/{eventId}": {
+      "put": {
+        "summary": "Update event external links",
+        "description": "Update external links for an event such as registration or website URLs (founder only).",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Event ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Event links updated"},
+          "400": {"description": "Bad request"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "Event or user not found"}
+        }
+      }
+    },
+    "/api/v2/admin/createAnn/{clubId}": {
+      "post": {
+        "summary": "Create club announcement",
+        "description": "Create a new announcement for a club (founder only).",
+        "tags": ["Club Announcements"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["Title", "Description"],
+                "properties": {
+                  "Title": {"type": "string"},
+                  "Description": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {"description": "Announcement published"},
+          "400": {"description": "Error creating announcement"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "User or club not found"}
+        }
+      }
+    },
+    "/api/v2/admin/UpdateAnn/{clubId}": {
+      "put": {
+        "summary": "Update club announcement",
+        "description": "Update an existing club announcement (founder only).",
+        "tags": ["Club Announcements"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Club ID"
+          },
+          {
+            "name": "annId",
+            "in": "query",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Announcement ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Title": {"type": "string"},
+                  "Description": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Announcement updated"},
+          "400": {"description": "Failed to update"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "User, club, or announcement not found"}
+        }
+      }
+    },
+    "/api/v2/admin/DeleteAnn/{clubId}": {
+      "delete": {
+        "summary": "Delete club announcement",
+        "description": "Delete an existing club announcement (founder only).",
+        "tags": ["Club Announcements"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Club ID"
+          },
+          {
+            "name": "annId",
+            "in": "query",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Announcement ID"
+          }
+        ],
+        "responses": {
+          "200": {"description": "Announcement deleted"},
+          "400": {"description": "Failed to delete"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "User, club, or announcement not found"}
+        }
+      }
+    },
+    "/api/v2/admin/createEventAnn/{eventId}": {
+      "post": {
+        "summary": "Create event announcement",
+        "description": "Create a new announcement for an event (club founder only).",
+        "tags": ["Event Announcements"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Event ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["Title", "Description"],
+                "properties": {
+                  "Title": {"type": "string"},
+                  "Description": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Announcement published"},
+          "400": {"description": "Error creating announcement"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "User or event not found"}
+        }
+      }
+    },
+    "/api/v2/admin/UpdateEventAnn/{eventId}": {
+      "put": {
+        "summary": "Update event announcement",
+        "description": "Update an existing event announcement (club founder only).",
+        "tags": ["Event Announcements"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Event ID"
+          },
+          {
+            "name": "annId",
+            "in": "query",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Announcement ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Title": {"type": "string"},
+                  "Description": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Announcement updated"},
+          "400": {"description": "Error updating announcement"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "User, event, or announcement not found"}
+        }
+      }
+    },
+    "/api/v2/admin/DeleteEventAnn/{eventId}": {
+      "delete": {
+        "summary": "Delete event announcement",
+        "description": "Delete an existing event announcement (club founder only).",
+        "tags": ["Event Announcements"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Event ID"
+          },
+          {
+            "name": "annId",
+            "in": "query",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Announcement ID"
+          }
+        ],
+        "responses": {
+          "200": {"description": "Announcement deleted"},
+          "400": {"description": "Error deleting announcement"},
+          "403": {"description": "User is not club founder"},
+          "404": {"description": "User, event, or announcement not found"}
         }
       }
     },
