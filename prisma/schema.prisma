@@ -134,12 +134,23 @@ model event {
   speakers  speakers[]
   attendees userEvents[]
   announcements eventAnnouncement[]
+  galleries eventGallery[]
 }
 
 model eventAnnouncement {
   id String @id @default(uuid())
   Title String
   Description String
+  createdAt DateTime @default(now())
+  updatedAt DateTime?
+  eventId String
+  event     event   @relation(fields: [eventId], references: [id])
+}
+
+model eventGallery {
+  id String @id @default(uuid())
+  imageUrl String
+  caption String?
   createdAt DateTime @default(now())
   updatedAt DateTime?
   eventId String

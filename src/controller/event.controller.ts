@@ -691,3 +691,278 @@ export const eventAttendees = async (req : Request, res : Response) => {
         return;
     }
 }
+
+
+export const addToGallery = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const eventId = req.params.eventId as string;
+    const userId = req.id;
+
+    try {
+        const { imageUrl, caption } = req.body;
+
+        if (!imageUrl) {
+            sendErrorResponse(res, requestId, 'Image URL is required', 400);
+            return;
+        }
+
+        // Verify event exists
+        const event = await prisma.event.findUnique({
+            where: { id: eventId }
+        });
+
+        if (!event) {
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        // Verify user is the club head
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user) {
+            sendErrorResponse(res, requestId, 'User not found', 404);
+            return;
+        }
+
+        const club = await prisma.clubs.findFirst({
+            where: {
+                id: event.clubId,
+                founderEmail: user.email
+            }
+        });
+
+        if (!club) {
+            sendErrorResponse(res, requestId, 'Access denied. Only club heads can add gallery images', 403);
+            return;
+        }
+
+        const galleryItem = await prisma.eventGallery.create({
+            data: {
+                imageUrl,
+                caption: caption || '',
+                eventId
+            }
+        });
+
+        logger.info(`[${requestId}] Gallery item added successfully`, {
+            galleryId: galleryItem.id,
+            eventId,
+            userId
+        });
+
+        res.status(201).json({
+            msg: 'Image added to gallery',
+            data: galleryItem
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error adding to gallery`, {
+            error: error.message,
+            eventId,
+            userId
+        });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+export const getEventGallery = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const eventId = req.params.eventId as string;
+
+    try {
+        const event = await prisma.event.findUnique({
+            where: { id: eventId }
+        });
+
+        if (!event) {
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        const galleryItems = await prisma.eventGallery.findMany({
+            where: { eventId },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.status(200).json({
+            msg: 'Gallery fetched successfully',
+            data: galleryItems
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error fetching gallery`, {
+            error: error.message,
+            eventId
+        });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+export const updateGalleryItem = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const eventId = req.params.eventId as string;
+    const galleryId = req.query.galleryId as string;
+    const userId = req.id;
+
+    try {
+        if (!galleryId) {
+            sendErrorResponse(res, requestId, 'Gallery ID is required in query parameters', 400);
+            return;
+        }
+
+        const { imageUrl, caption } = req.body;
+
+        const event = await prisma.event.findUnique({
+            where: { id: eventId }
+        });
+
+        if (!event) {
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        // Verify user is the club head
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user) {
+            sendErrorResponse(res, requestId, 'User not found', 404);
+            return;
+        }
+
+        const club = await prisma.clubs.findFirst({
+            where: {
+                id: event.clubId,
+                founderEmail: user.email
+            }
+        });
+
+        if (!club) {
+            sendErrorResponse(res, requestId, 'Access denied. Only club heads can update gallery images', 403);
+            return;
+        }
+
+        const existingItem = await prisma.eventGallery.findFirst({
+            where: {
+                id: galleryId,
+                eventId
+            }
+        });
+
+        if (!existingItem) {
+            sendErrorResponse(res, requestId, 'Gallery item not found for this event', 404);
+            return;
+        }
+
+        const updatedItem = await prisma.eventGallery.update({
+            where: { id: galleryId },
+            data: {
+                imageUrl: imageUrl ?? existingItem.imageUrl,
+                caption: caption !== undefined ? caption : existingItem.caption
+            }
+        });
+
+        logger.info(`[${requestId}] Gallery item updated successfully`, {
+            galleryId,
+            eventId,
+            userId
+        });
+
+        res.status(200).json({
+            msg: 'Gallery item updated',
+            data: updatedItem
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error updating gallery item`, {
+            error: error.message,
+            galleryId,
+            eventId,
+            userId
+        });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+export const deleteGalleryItem = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const eventId = req.params.eventId as string;
+    const galleryId = req.query.galleryId as string;
+    const userId = req.id;
+
+    try {
+        if (!galleryId) {
+            sendErrorResponse(res, requestId, 'Gallery ID is required in query parameters', 400);
+            return;
+        }
+
+        const event = await prisma.event.findUnique({
+            where: { id: eventId }
+        });
+
+        if (!event) {
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        // Verify user is the club head
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user) {
+            sendErrorResponse(res, requestId, 'User not found', 404);
+            return;
+        }
+
+        const club = await prisma.clubs.findFirst({
+            where: {
+                id: event.clubId,
+                founderEmail: user.email
+            }
+        });
+
+        if (!club) {
+            sendErrorResponse(res, requestId, 'Access denied. Only club heads can delete gallery images', 403);
+            return;
+        }
+
+        const existingItem = await prisma.eventGallery.findFirst({
+            where: {
+                id: galleryId,
+                eventId
+            }
+        });
+
+        if (!existingItem) {
+            sendErrorResponse(res, requestId, 'Gallery item not found for this event', 404);
+            return;
+        }
+
+        await prisma.eventGallery.delete({
+            where: { id: galleryId }
+        });
+
+        logger.info(`[${requestId}] Gallery item deleted successfully`, {
+            galleryId,
+            eventId,
+            userId
+        });
+
+        res.status(200).json({
+            msg: 'Gallery item deleted successfully'
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error deleting gallery item`, {
+            error: error.message,
+            galleryId,
+            eventId,
+            userId
+        });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};

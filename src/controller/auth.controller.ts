@@ -72,7 +72,7 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
         const vToken = genToken();
 
         try {
-            const newUser = await prisma.$transaction(async (tx) => {
+            const newUser = await prisma.$transaction(async (tx:any) => {
             const created = await tx.user.create({
                 data: {
                 email: parsedData.data.email,
@@ -477,7 +477,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
         const hashedTempPassword = bcrypt.hashSync(tempPassword, 10);
 
         try {
-            const updated = await prisma.$transaction(async (tx) => {
+            const updated = await prisma.$transaction(async (tx:any) => {
                 const upd = await tx.user.update({
                     where: { email: email },
                     data: {
