@@ -30,7 +30,7 @@ export const ClubHeadAuthMiddleware = async (
     const token = authHeader.split(' ')[1];
     if (!token) {
       res.status(401).json({
-        message: 'Please signin ,Unauthorized',
+        message: 'Please signin, Unauthorized',
       });
       return;
     }
