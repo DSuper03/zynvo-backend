@@ -86,7 +86,7 @@ export const ClubHeadAuthMiddleware = async (
   } catch (error) {
     console.log(error);
     res.status(401).json({
-      msg: 'error occured in processing token, either token not found or is invalid.',
+      msg: 'error occurred in processing token, either token not found or is invalid.',
     });
   }
 };
@@ -132,7 +132,7 @@ export const AuthMiddleware = async (
   } catch (error) {
     console.log(error);
     res.status(401).json({
-      msg: 'error occured in processing token, either token not found or is invalid.',
+      msg: 'error occurred in processing token, either token not found or is invalid.',
     });
   }
 };
