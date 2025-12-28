@@ -51,6 +51,9 @@
     "prettier": "^3.5.3",
     "prisma": "^7.0.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "tsx": "^4.21.0"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }
