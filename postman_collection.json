@@ -2,105 +2,960 @@
   "info": {
     "name": "Zynvo Backend API",
     "_postman_id": "zynvo-backend-collection",
-    "description": "Postman collection for Zynvo backend API",
+    "description": "Postman collection for Zynvo backend API (v1 & v2)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "token",
+      "value": ""
+    }
+  ],
   "item": [
     {
-      "name": "User Signup",
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"password\": \"Password123!\",\n  \"collegeName\": \"MIT\"\n}"
+      "name": "User",
+      "item": [
+        {
+          "name": "Signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"password\": \"Password123!\",\n  \"collegeName\": \"Test College\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "signup"]
+            }
+          }
         },
-        "url": { "raw": "http://localhost:8000/api/v1/user/signup", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "user", "signup"] }
-      }
-    },
-    {
-      "name": "User Login",
-      "request": {
-        "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Password123!\"\n}"
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "login"]
+            }
+          }
         },
-        "url": { "raw": "http://localhost:8000/api/v1/user/login", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "user", "login"] }
-      }
-    },
-    {
-      "name": "Create Club",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" },
-          { "key": "Authorization", "value": "Bearer {{token}}" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"name\": \"Test Club\",\n  \"collegeName\": \"MIT\",\n  \"description\": \"A test club\",\n  \"type\": \"Technology\",\n  \"FounderEmail\": \"founder@example.com\",\n  \"clubContact\": \"+1-555-0101\",\n  \"requirements\": \"None\",\n  \"facultyEmail\": \"faculty@example.com\"\n}"
+        {
+          "name": "Resend Verification Email",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/ResendEmail?email=test@example.com",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "ResendEmail"],
+              "query": [
+                {"key": "email", "value": "test@example.com"}
+              ]
+            }
+          }
         },
-        "url": { "raw": "http://localhost:8000/api/v1/clubs/club", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "clubs", "club"] }
-      }
-    },
-    {
-      "name": "Get All Clubs",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{token}}" }
-        ],
-        "url": { "raw": "http://localhost:8000/api/v1/clubs/getAll", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "clubs", "getAll"] }
-      }
-    },
-    {
-      "name": "Create Event",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" },
-          { "key": "Authorization", "value": "Bearer {{token}}" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"eventName\": \"Test Event\",\n  \"description\": \"A test event\",\n  \"eventStartDate\": \"2025-08-01\",\n  \"eventEndDate\": \"2025-08-02\",\n  \"eventMode\": \"Offline\",\n  \"eventType\": \"Workshop\",\n  \"maxTeamSize\": 5,\n  \"venue\": \"MIT Auditorium\",\n  \"eventWebsite\": \"https://example.com\",\n  \"university\": \"MIT\",\n  \"collegeStudentsOnly\": true,\n  \"contactEmail\": \"event@example.com\",\n  \"contactPhone\": \"1234567890\",\n  \"noParticipationFee\": true,\n  \"prizes\": \"Trophy\"\n}"
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/verify?vToken=sampleToken",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "verify"],
+              "query": [
+                {"key": "vToken", "value": "sampleToken"}
+              ]
+            }
+          }
         },
-        "url": { "raw": "http://localhost:8000/api/v1/events/event", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "events", "event"] }
-      }
-    },
-    {
-      "name": "Get All Events",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Authorization", "value": "Bearer {{token}}" }
-        ],
-        "url": { "raw": "http://localhost:8000/api/v1/events/all", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "events", "all"] }
-      }
-    },
-    {
-      "name": "Create Post",
-      "request": {
-        "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" },
-          { "key": "Authorization", "value": "Bearer {{token}}" }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"title\": \"Test Post\",\n  \"description\": \"This is a test post.\"\n}"
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/forgot",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "forgot"]
+            }
+          }
         },
-        "url": { "raw": "http://localhost:8000/api/v1/post/create", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "post", "create"] }
-      }
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"OldPass123!\",\n  \"newPassword\": \"NewPass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "reset-password"]
+            }
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/getUser",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "getUser"]
+            }
+          }
+        },
+        {
+          "name": "Join Club",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/joinClub/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "joinClub", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Leave Club",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/leaveClub",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "leaveClub"]
+            }
+          }
+        },
+        {
+          "name": "Is Founder (Event)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/isFounder?id=:eventId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "isFounder"],
+              "query": [
+                {"key": "id", "value": ":eventId"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Is Club Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/isClubAdmin",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "isClubAdmin"]
+            }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bio\": \"My bio\",\n  \"tags\": \"tech, design\",\n  \"course\": \"CSE\",\n  \"year\": \"2\",\n  \"twitter\": \"https://twitter.com/user\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/updateProfile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "updateProfile"]
+            }
+          }
+        },
+        {
+          "name": "Get Sidebar User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/getSidebarUser",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "getSidebarUser"]
+            }
+          }
+        },
+        {
+          "name": "Search User",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/SearchUser?name=John",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "SearchUser"],
+              "query": [
+                {"key": "name", "value": "John"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Public User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/getPublicUser?id=:userId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "getPublicUser"],
+              "query": [
+                {"key": "id", "value": ":userId"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/user/getAllUsers?page=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "user", "getAllUsers"],
+              "query": [
+                {"key": "page", "value": "1"}
+              ]
+            }
+          }
+        }
+      ]
     },
     {
-      "name": "Get All Posts",
-      "request": {
-        "method": "GET",
-        "url": { "raw": "http://localhost:8000/api/v1/post/all", "protocol": "http", "host": ["localhost"], "port": "8000", "path": ["api", "v1", "post", "all"] }
-      }
+      "name": "Posts",
+      "item": [
+        {
+          "name": "Create Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Post\",\n  \"description\": \"This is a test post.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/post/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "post", "create"]
+            }
+          }
+        },
+        {
+          "name": "Edit Post",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Title\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/post/edit/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "post", "edit", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Get All Posts",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/post/all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "post", "all"]
+            }
+          }
+        },
+        {
+          "name": "Get Post By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/post/get/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "post", "get", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Delete Post",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/post/delete/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "post", "delete", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Upvote Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/post/upvote/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "post", "upvote", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Downvote Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/post/downvote/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "post", "downvote", ":id"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "item": [
+        {
+          "name": "Create Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventName\": \"Test Event\",\n  \"description\": \"A test event\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/event",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "events", "event"]
+            }
+          }
+        },
+        {
+          "name": "Get Event By ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/event/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "events", "event", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Get Events By Club",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/eventByClub/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "events", "eventByClub", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Get All Events",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "events", "all"]
+            }
+          }
+        },
+        {
+          "name": "Register For Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \":eventId\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/registerEvent",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "events", "registerEvent"]
+            }
+          }
+        },
+        {
+          "name": "Add Speakers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \":eventId\",\n  \"speakers\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/addSpeakers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "events", "addSpeakers"]
+            }
+          }
+        },
+        {
+          "name": "Get Speakers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/getSpeakers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "events", "getSpeakers"]
+            }
+          }
+        },
+        {
+          "name": "Verify Event Registration",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/ver-event?id=:passId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "events", "ver-event"],
+              "query": [
+                {"key": "id", "value": ":passId"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Event Details By Pass",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/event-details?id=:passId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "events", "event-details"],
+              "query": [
+                {"key": "id", "value": ":passId"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Event Announcements",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/events/getAnn/:eventId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "events", "getAnn", ":eventId"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Clubs",
+      "item": [
+        {
+          "name": "Create Club",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Club\",\n  \"collegeName\": \"Test College\",\n  \"description\": \"A test club\",\n  \"FounderEmail\": \"founder@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clubs/club",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "clubs", "club"]
+            }
+          }
+        },
+        {
+          "name": "Get Club By Query",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clubs/getClub?id=:clubId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "clubs", "getClub"],
+              "query": [
+                {"key": "id", "value": ":clubId", "disabled": false}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Clubs By College",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clubs/getClubs/:college",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "clubs", "getClubs", ":college"]
+            }
+          }
+        },
+        {
+          "name": "Get Club By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clubs/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "clubs", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Get All Clubs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clubs/getAll?page=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "clubs", "getAll"],
+              "query": [
+                {"key": "page", "value": "1"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Club Announcements",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clubs/getAnn/:clubId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "clubs", "getAnn", ":clubId"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contact & Feedback",
+      "item": [
+        {
+          "name": "Contact Us",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"subject\": \"General query\",\n  \"message\": \"Hello!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/contact/contact",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "contact", "contact"]
+            }
+          }
+        },
+        {
+          "name": "Send Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"Feedback subject\",\n  \"category\": \"UX\",\n  \"description\": \"Feedback text\",\n  \"improvements\": \"Optional suggestions\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/contact/feedback",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "contact", "feedback"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin (v2)",
+      "item": [
+        {
+          "name": "Update Club Links",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instagram\": \"https://instagram.com/club\",\n  \"twitter\": \"https://twitter.com/club\",\n  \"linkedin\": \"https://linkedin.com/company/club\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/updateClubLinks/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "updateClubLinks", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Add Wings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"wings\": [\"Tech\", \"Design\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/addWings/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "addWings", ":id"]
+            }
+          }
+        },
+        {
+          "name": "Delete Event (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/deleteEvent/:eventId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "deleteEvent", ":eventId"]
+            }
+          }
+        },
+        {
+          "name": "Remove Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member\": \":userId\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/removeMember/:clubId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "removeMember", ":clubId"]
+            }
+          }
+        },
+        {
+          "name": "Add Core Members",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coremember1\": \"a@example.com\",\n  \"coremember2\": \"b@example.com\",\n  \"coremember3\": \"c@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/addCoreMembers/:clubId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "addCoreMembers", ":clubId"]
+            }
+          }
+        },
+        {
+          "name": "Remove Core Members",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coremember1\": \"a@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/removeCoremembers/:clubId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "removeCoremembers", ":clubId"]
+            }
+          }
+        },
+        {
+          "name": "Transfer Ownership",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newfounder@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/transferOwnership/:clubId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "transferOwnership", ":clubId"]
+            }
+          }
+        },
+        {
+          "name": "Update Event Links",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrationLink\": \"https://example.com/register\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/updateEventLinks/:eventId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "updateEventLinks", ":eventId"]
+            }
+          }
+        },
+        {
+          "name": "Create Club Announcement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Title\": \"Announcement title\",\n  \"Description\": \"Announcement text\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/createAnn/:clubId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "createAnn", ":clubId"]
+            }
+          }
+        },
+        {
+          "name": "Update Club Announcement",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Title\": \"Updated title\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/UpdateAnn/:clubId?annId=:annId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "UpdateAnn", ":clubId"],
+              "query": [
+                {"key": "annId", "value": ":annId"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Club Announcement",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/DeleteAnn/:clubId?annId=:annId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "DeleteAnn", ":clubId"],
+              "query": [
+                {"key": "annId", "value": ":annId"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Event Announcement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Title\": \"Announcement\",\n  \"Description\": \"Announcement text\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/createEventAnn/:eventId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "createEventAnn", ":eventId"]
+            }
+          }
+        },
+        {
+          "name": "Update Event Announcement",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Title\": \"Updated\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/UpdateEventAnn/:eventId?annId=:annId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "UpdateEventAnn", ":eventId"],
+              "query": [
+                {"key": "annId", "value": ":annId"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Event Announcement",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/admin/DeleteEventAnn/:eventId?annId=:annId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "admin", "DeleteEventAnn", ":eventId"],
+              "query": [
+                {"key": "annId", "value": ":annId"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
     }
   ]
 }

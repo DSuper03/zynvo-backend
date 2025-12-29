@@ -7,3 +7,4 @@ yarn-debug.log*
 pnpm-error.log*
 todo.txt
 src/generated/
+prisma/seed.ts
