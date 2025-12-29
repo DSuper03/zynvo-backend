@@ -334,40 +334,65 @@ export const toggleUpvotePost = async (req: Request, res: Response): Promise<voi
 
   if (existing) {
 
-   const upvote =  await prisma.postUpvote.delete({
-      where: {
-        postId_userId: { postId, userId },
-      },
-    });
+const [deletedUpvote, upvoteCount, downvotesCount] = await prisma.$transaction([
+  prisma.postUpvote.delete({
+    where: { postId_userId: { postId, userId } },
+  }),
+  prisma.postUpvote.count({
+    where: { postId },
+  }),
+  prisma.postDownvote.count({
+    where: { postId },
+  }),
+]);
 
-    if(!upvote) {
-        res.status(400).json({
-            msg : "unable to remove upvote"
-        })
-        return;
-    }
-   
-    res.status(200).json({
-        msg : "upvote removed"
-    })
-    return;
+if (!deletedUpvote) {
+  res.status(400).json({
+    msg: "unable to remove upvote"
+  });
+  return;
+}
+
+res.status(200).json({
+  msg: "upvote removed",
+  upvoteCount: upvoteCount,
+  downvoteCount: downvotesCount
+});
+return;
   }
 
-  const upvote = await prisma.postUpvote.create({
-    data: { postId, userId },
-  });
+const result = await prisma.$transaction(async (tx) => {
+    //remove any existing downvote by this user on the same post
+    await tx.postDownvote.deleteMany({
+        where: { postId, userId },
+    });
 
-  if(!upvote) {
-        res.status(400).json({
-            msg : "unable to upvote"
-        })
-        return;
-    }
+    const upvote = await tx.postUpvote.create({
+        data: { postId, userId },
+    });
 
-  res.status(200).json({
-        msg : "upvote removed"
-    })
+    const upvoteCount = await tx.postUpvote.count({
+        where: { postId },
+    });
+
+    const downvotesCount = await tx.postDownvote.count({
+        where: { postId},
+    });
+
+    return { upvote, upvoteCount ,downvotesCount };
+});
+
+if (!result || !result.upvote) {
+    res.status(400).json({ msg: "unable to upvote" });
     return;
+}
+
+res.status(200).json({
+    msg: "upvote added",
+    upvoteCount: result.upvoteCount,
+    downvoteCount: result.downvotesCount
+});
+return;
     } catch (error) {
         console.log("error" , error)
         res.status(500).json({
