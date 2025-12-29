@@ -414,41 +414,54 @@ export const toggleDownvotePost = async (req: Request, res: Response): Promise<v
         });
 
         if (existing) {
-            const downvote = await prisma.postDownvote.delete({
-                where: {
-                    postId_userId: { postId, userId },
-                },
-            });
+            const [deletedDownvote, upvoteCount, downvoteCount] = await prisma.$transaction([
+                prisma.postDownvote.delete({
+                    where: { postId_userId: { postId, userId } },
+                }),
+                prisma.postUpvote.count({ where: { postId } }),
+                prisma.postDownvote.count({ where: { postId } }),
+            ]);
 
-            if (!downvote) {
-                res.status(400).json({
-                    msg: "unable to remove downvote"
-                });
+            if (!deletedDownvote) {
+                res.status(400).json({ msg: "unable to remove downvote" });
                 return;
             }
 
             res.status(200).json({
-                msg: "downvote removed"
+                msg: "downvote removed",
+                upvoteCount,
+                downvoteCount,
             });
             return;
         }
 
-        const downvote = await prisma.postDownvote.create({
-            data: { postId, userId },
+        const result = await prisma.$transaction(async (tx) => {
+            // remove any existing upvote by this user on the same post
+            await tx.postUpvote.deleteMany({
+                where: { postId, userId },
+            });
+
+            const downvote = await tx.postDownvote.create({
+                data: { postId, userId },
+            });
+
+            const upvoteCount = await tx.postUpvote.count({ where: { postId } });
+            const downvoteCount = await tx.postDownvote.count({ where: { postId } });
+
+            return { downvote, upvoteCount, downvoteCount };
         });
 
-        if (!downvote) {
-            res.status(400).json({
-                msg: "unable to downvote"
-            });
+        if (!result || !result.downvote) {
+            res.status(400).json({ msg: "unable to downvote" });
             return;
         }
 
         res.status(200).json({
-            msg: "downvote added"
+            msg: "downvote added",
+            upvoteCount: result.upvoteCount,
+            downvoteCount: result.downvoteCount,
         });
         return;
-
     } catch (error) {
         console.log("error", error);
         res.status(500).json({
