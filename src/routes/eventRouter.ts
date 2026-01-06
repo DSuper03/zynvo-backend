@@ -1,5 +1,7 @@
 import { Router } from 'express';
-import { AuthMiddleware, ClubHeadAuthMiddleware } from '../middleware/AuthMiddleware';
+import { AuthMiddleware } from '../middleware/AuthMiddleware';
+import { ClubHeadAuthMiddleware } from '../middleware/ClubHeadAuthMiddleware';
+import { AdminCoreAuthMiddleware } from '../middleware/AdminCoreAuthMiddleware';
 import {
   createEvent,
   getEventById,
@@ -9,6 +11,7 @@ import {
   addSpeaker,
   getSpeakers,
   verifyEventRegistration,
+  eventAttendees,
   getEventDetails,
 } from '../controller/event.controller';
 import { 
@@ -34,6 +37,7 @@ router.post('/addSpeakers', AuthMiddleware, addSpeaker);
 router.get('/getSpeakers', getSpeakers);
 router.get('/ver-event', verifyEventRegistration);
 router.get('/event-details', getEventDetails);
+router.get('/participants/:id', AuthMiddleware, AdminCoreAuthMiddleware, eventAttendees);
 router.get('/getAnn/:eventId',AuthMiddleware, getAllannouncements);
 router.post('/announcement/:eventId', ClubHeadAuthMiddleware, createAnnouncement);
 router.put('/announcement/:eventId', ClubHeadAuthMiddleware, updateAnnouncement);
