@@ -651,7 +651,7 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
 export const eventAttendees = async (req : Request, res : Response) => {
     const eventId = req.params.id;
     if (!eventId) {
-        res.status(400).json({ msg: 'Event id required' });
+        res.status(400).json({ msg: 'Event ID required' });
         return;
     }
 
