@@ -23,7 +23,7 @@ export const AdminCoreAuthMiddleware = async (
 
     const eventId = (req.params.id || req.params.eventId) as string;
     if (!eventId) {
-      res.status(400).json({ msg: 'Event id required' });
+      res.status(400).json({ msg: 'Event ID required' });
       return;
     }
 
