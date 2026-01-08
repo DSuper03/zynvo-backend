@@ -34,7 +34,7 @@ router.get('/event/:id', getEventById);
 router.get('/eventByClub/:id', AuthMiddleware, getEventsByClub);
 router.get('/all', getAllEvents);
 router.post('/registerEvent', AuthMiddleware, registerForEvent);
-router.post('/addSpeakers',SpecificClubHeadAuthMiddleware, AuthMiddleware, addSpeaker);
+router.post('/addSpeakers', SpecificClubHeadAuthMiddleware, addSpeaker);
 router.get('/getSpeakers', getSpeakers);
 router.get('/ver-event', verifyEventRegistration);
 router.get('/event-details', getEventDetails);
