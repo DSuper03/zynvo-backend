@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { EventSchema } from '../types/formtypes';
 import { generateRequestId, generateUUID, sendErrorResponse } from '../utils/helper';
+import { Prisma } from '../generated/prisma/client';
 
 const eventSelectBase = {
     id: true,
@@ -648,102 +649,175 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
     }
 };
 
-export const eventAttendees = async (req : Request, res : Response) => {
-    const eventId = req.params.id;
-    if (!eventId) {
-        res.status(400).json({ msg: 'Event id required' });
-        return;
-    }
 
-    try {
-        const page = parseInt((req.query.page as string) || '1', 10);
-        const limit = parseInt((req.query.limit as string) || '50', 10);
-        const skip = (Math.max(page, 1) - 1) * Math.max(limit, 1);
+export const eventAttendees = async (req: Request, res: Response) => {
+  const eventId = req.params.eventId;
+  if (!eventId) {
+    res.status(400).json({ message: "Event id required" });
+    return;
+  }
 
-        const participants = await prisma.userEvents.findMany({
-            where: { eventId },
-            take: limit,
-            skip,
-            orderBy: { joinedAt: 'desc' },
-            select: {
-                joinedAt: true,
-                uniquePassId: true,
-                user: {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                        profileAvatar: true,
-                        collegeName: true,
-                        course: true,
-                        year: true,
-                        tags: true
-                    }
-                }
+  try {
+    const format = req.query.format as string;
+    if (format === "csv") {
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="participants_${eventId}.csv"`
+      );
+
+      // UTF-8 BOM (Excel compatibility)
+      res.write("\uFEFF");
+
+      const headers = [
+        "User ID",
+        "Name",
+        "Email",
+        "Profile Avatar",
+        "College",
+        "Course",
+        "Year",
+        "Tags",
+        "Joined At",
+        "Pass ID"
+      ];
+
+      const escapeCsv = (v: any) => {
+        if (v == null) return "";
+        const s = String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+
+      // write header
+      res.write(headers.map(escapeCsv).join(",") + "\n");
+
+      const batchSize = 500;
+      let lastJoinedAt: Date | null = null;
+
+      while (true) {
+        const batch: Prisma.userEventsGetPayload<{
+          select: {
+            joinedAt: true;
+            uniquePassId: true;
+            user: {
+              select: {
+                id: true;
+                name: true;
+                email: true;
+                profileAvatar: true;
+                collegeName: true;
+                course: true;
+                year: true;
+                tags: true;
+              };
+            };
+          };
+        }>[] = await prisma.userEvents.findMany({
+          where: {
+            eventId,
+            ...(lastJoinedAt && { joinedAt: { lt: lastJoinedAt } })
+          },
+          take: batchSize,
+          orderBy: { joinedAt: "desc" },
+          select: {
+            joinedAt: true,
+            uniquePassId: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                profileAvatar: true,
+                collegeName: true,
+                course: true,
+                year: true,
+                tags: true
+              }
             }
+          }
         });
 
-        const total = await prisma.userEvents.count({ where: { eventId } });
 
-        if ((req.query.format as string) === 'csv') {
-            // Build CSV
-            const headers = [
-                'User ID',
-                'Name',
-                'Email',
-                'Profile Avatar',
-                'College',
-                'Course',
-                'Year',
-                'Tags',
-                'Joined At',
-                'Pass ID'
-            ];
+        if (batch.length === 0) break;
 
-            const rows = participants.map(p => {
-                const u = p.user;
-                const tags = Array.isArray(u.tags) ? u.tags.join(';') : '';
-                return [u.id || '', u.name || '', u.email || '', u.profileAvatar || '', u.collegeName || '', u.course || '', u.year || '', tags, p.joinedAt.toISOString(), p.uniquePassId || ''];
-            });
+        for (const p of batch) {
+          const u = p.user;
+          const tags = Array.isArray(u.tags) ? u.tags.join(";") : "";
 
-            const escapeCsv = (v: any) => {
-                if (v == null) return '';
-                const s = String(v);
-                if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-                    return '"' + s.replace(/"/g, '""') + '"';
-                }
-                return s;
-            };
+          const row = [
+            u.id ?? "",
+            u.name ?? "",
+            u.email ?? "",
+            u.profileAvatar ?? "",
+            u.collegeName ?? "",
+            u.course ?? "",
+            u.year ?? "",
+            tags,
+            p.joinedAt.toISOString(),
+            p.uniquePassId ?? ""
+          ];
 
-            const csv = [headers.map(escapeCsv).join(','), ...rows.map(r => r.map(escapeCsv).join(','))].join('\n');
-
-            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-            res.setHeader('Content-Disposition', `attachment; filename="participants_${eventId}.csv"`);
-            res.status(200).send('\uFEFF' + csv);
-            return;
+          res.write(row.map(escapeCsv).join(",") + "\n");
         }
 
-        res.status(200).json({
-            msg: 'participants fetched',
-            data: participants.map(p => ({
-                joinedAt: p.joinedAt,
-                passId: p.uniquePassId,
-                user: p.user
-            })),
-            pagination: {
-                page: Math.max(page, 1),
-                limit: Math.max(limit, 1),
-                total,
-                totalPages: Math.ceil(total / Math.max(limit, 1))
-            }
-        });
-        return;
-    } catch (error: any) {
-        console.error(error);
-        res.status(500).json({ msg: 'internal server error' });
-        return;
+        lastJoinedAt = batch[batch.length - 1].joinedAt;
+      }
+
+      res.end();
+      return;
     }
-}
+
+      // NORMAL PAGINATED JSON
+
+    const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit as string) || 50, 1);
+    const skip = (page - 1) * limit;
+
+    const [participants, total] = await Promise.all([
+      prisma.userEvents.findMany({
+        where: { eventId },
+        take: limit,
+        skip,
+        orderBy: { joinedAt: "desc" },
+        select: {
+          joinedAt: true,
+          uniquePassId: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              profileAvatar: true,
+              collegeName: true,
+              course: true,
+              year: true,
+              tags: true
+            }
+          }
+        }
+      }),
+      prisma.userEvents.count({ where: { eventId } })
+    ]);
+
+    res.status(200).json({
+      msg: "participants fetched",
+      data: participants.map(p => ({
+        joinedAt: p.joinedAt,
+        passId: p.uniquePassId,
+        user: p.user
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "internal server error" });
+  }
+};
 
 
 export const addToGallery = async (req: Request, res: Response): Promise<void> => {

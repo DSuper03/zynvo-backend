@@ -11,25 +11,25 @@ export const AdminCoreAuthMiddleware = async (
     // Expect AuthMiddleware to have already set req.id
     const userId = req.id;
     if (!userId) {
-      res.status(401).json({ msg: 'Please login' });
+      res.status(401).json({ message: 'Please login' });
       return;
     }
 
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
     if (!user || !user.email) {
-      res.status(404).json({ msg: 'User not found' });
+      res.status(404).json({ message: 'User not found' });
       return;
     }
 
     const eventId = (req.params.id || req.params.eventId) as string;
     if (!eventId) {
-      res.status(400).json({ msg: 'Event id required' });
+      res.status(400).json({ message: 'Event id required' });
       return;
     }
 
     const event = await prisma.event.findUnique({ where: { id: eventId }, select: { clubId: true } });
     if (!event) {
-      res.status(404).json({ msg: 'Event not found' });
+      res.status(404).json({ message: 'Event not found' });
       return;
     }
 
@@ -39,7 +39,7 @@ export const AdminCoreAuthMiddleware = async (
     });
 
     if (!club) {
-      res.status(404).json({ msg: 'Club not found' });
+      res.status(404).json({ message: 'Club not found' });
       return;
     }
 
@@ -59,11 +59,11 @@ export const AdminCoreAuthMiddleware = async (
       return;
     }
 
-    res.status(403).json({ msg: 'Access denied' });
+    res.status(403).json({ message: 'Access denied' });
     return;
   } catch (error) {
     console.error(error);
-    res.status(500).json({ msg: 'Internal server error' });
+    res.status(500).json({ m: 'Internal server error' });
   }
 };
 
