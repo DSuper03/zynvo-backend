@@ -658,7 +658,7 @@ export const eventAttendees = async (req: Request, res: Response) => {
   }
 
   try {
-    const format = req.query.format as string;
+    const format = req.query.format as string | undefined;
     if (format === "csv") {
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader(
