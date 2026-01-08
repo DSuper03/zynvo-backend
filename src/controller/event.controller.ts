@@ -770,7 +770,9 @@ export const eventAttendees = async (req: Request, res: Response) => {
       // NORMAL PAGINATED JSON
 
     const page = Math.max(parseInt(req.query.page as string) || 1, 1);
-    const limit = Math.max(parseInt(req.query.limit as string) || 50, 1);
+    const rawLimit = parseInt(req.query.limit as string);
+    const MAX_LIMIT = 100;
+    const limit = Math.min(Math.max(rawLimit || 50, 1), MAX_LIMIT);
     const skip = (page - 1) * limit;
 
     const [participants, total] = await Promise.all([
