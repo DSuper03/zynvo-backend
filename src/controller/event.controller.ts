@@ -651,6 +651,7 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
 
 
 export const eventAttendees = async (req: Request, res: Response) => {
+  const requestId = generateRequestId();
   const eventId = req.params.eventId;
   if (!eventId) {
     res.status(400).json({ message: "Event id required" });
@@ -660,110 +661,135 @@ export const eventAttendees = async (req: Request, res: Response) => {
   try {
     const format = req.query.format as string | undefined;
     if (format === "csv") {
+      // Pre-validate that the event exists before starting the stream
+      const eventExists = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { id: true }
+      });
+
+      if (!eventExists) {
+        res.status(404).json({ message: "Event not found" });
+        return;
+      }
+
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader(
         "Content-Disposition",
         `attachment; filename="participants_${eventId}.csv"`
       );
 
-      // UTF-8 BOM (Excel compatibility)
-      res.write("\uFEFF");
+      try {
+        // UTF-8 BOM (Excel compatibility)
+        res.write("\uFEFF");
 
-      const headers = [
-        "User ID",
-        "Name",
-        "Email",
-        "Profile Avatar",
-        "College",
-        "Course",
-        "Year",
-        "Tags",
-        "Joined At",
-        "Pass ID"
-      ];
+        const headers = [
+          "User ID",
+          "Name",
+          "Email",
+          "Profile Avatar",
+          "College",
+          "Course",
+          "Year",
+          "Tags",
+          "Joined At",
+          "Pass ID"
+        ];
 
-      const escapeCsv = (v: any) => {
-        if (v == null) return "";
-        const s = String(v);
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-      };
+        const escapeCsv = (v: any) => {
+          if (v == null) return "";
+          const s = String(v);
+          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        };
 
-      // write header
-      res.write(headers.map(escapeCsv).join(",") + "\n");
+        // write header
+        res.write(headers.map(escapeCsv).join(",") + "\n");
 
-      const batchSize = 500;
-      let lastJoinedAt: Date | null = null;
+        const batchSize = 500;
+        let lastJoinedAt: Date | null = null;
 
-      while (true) {
-        const batch: Prisma.userEventsGetPayload<{
-          select: {
-            joinedAt: true;
-            uniquePassId: true;
-            user: {
-              select: {
-                id: true;
-                name: true;
-                email: true;
-                profileAvatar: true;
-                collegeName: true;
-                course: true;
-                year: true;
-                tags: true;
+        while (true) {
+          const batch: Prisma.userEventsGetPayload<{
+            select: {
+              joinedAt: true;
+              uniquePassId: true;
+              user: {
+                select: {
+                  id: true;
+                  name: true;
+                  email: true;
+                  profileAvatar: true;
+                  collegeName: true;
+                  course: true;
+                  year: true;
+                  tags: true;
+                };
               };
             };
-          };
-        }>[] = await prisma.userEvents.findMany({
-          where: {
-            eventId,
-            ...(lastJoinedAt && { joinedAt: { lt: lastJoinedAt } })
-          },
-          take: batchSize,
-          orderBy: { joinedAt: "desc" },
-          select: {
-            joinedAt: true,
-            uniquePassId: true,
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                profileAvatar: true,
-                collegeName: true,
-                course: true,
-                year: true,
-                tags: true
+          }>[] = await prisma.userEvents.findMany({
+            where: {
+              eventId,
+              ...(lastJoinedAt && { joinedAt: { lt: lastJoinedAt } })
+            },
+            take: batchSize,
+            orderBy: { joinedAt: "desc" },
+            select: {
+              joinedAt: true,
+              uniquePassId: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  profileAvatar: true,
+                  collegeName: true,
+                  course: true,
+                  year: true,
+                  tags: true
+                }
               }
             }
+          });
+
+
+          if (batch.length === 0) break;
+
+          for (const p of batch) {
+            const u = p.user;
+            const tags = Array.isArray(u.tags) ? u.tags.join(";") : "";
+
+            const row = [
+              u.id ?? "",
+              u.name ?? "",
+              u.email ?? "",
+              u.profileAvatar ?? "",
+              u.collegeName ?? "",
+              u.course ?? "",
+              u.year ?? "",
+              tags,
+              p.joinedAt.toISOString(),
+              p.uniquePassId ?? ""
+            ];
+
+            res.write(row.map(escapeCsv).join(",") + "\n");
           }
-        });
 
-
-        if (batch.length === 0) break;
-
-        for (const p of batch) {
-          const u = p.user;
-          const tags = Array.isArray(u.tags) ? u.tags.join(";") : "";
-
-          const row = [
-            u.id ?? "",
-            u.name ?? "",
-            u.email ?? "",
-            u.profileAvatar ?? "",
-            u.collegeName ?? "",
-            u.course ?? "",
-            u.year ?? "",
-            tags,
-            p.joinedAt.toISOString(),
-            p.uniquePassId ?? ""
-          ];
-
-          res.write(row.map(escapeCsv).join(",") + "\n");
+          lastJoinedAt = batch[batch.length - 1].joinedAt;
         }
 
-        lastJoinedAt = batch[batch.length - 1].joinedAt;
+        res.end();
+      } catch (streamError: any) {
+        // Error during streaming - headers already sent, log the error
+        logger.error(`[${requestId}] Error during CSV streaming`, {
+          requestId,
+          eventId,
+          error: streamError.message,
+          stack: streamError.stack
+        });
+        // Attempt to end the response if possible
+        if (!res.writableEnded) {
+          res.end();
+        }
       }
-
-      res.end();
       return;
     }
 
