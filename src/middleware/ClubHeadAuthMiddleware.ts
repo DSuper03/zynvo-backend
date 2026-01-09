@@ -15,7 +15,7 @@ declare global {
   }
 }
 
-
+// middleware to authenticate user as club head (founder of a club)
 
 export const ClubHeadAuthMiddleware = async (
   req: Request,

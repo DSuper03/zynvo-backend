@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { EventSchema } from '../types/formtypes';
 import { generateRequestId, generateUUID, sendErrorResponse } from '../utils/helper';
+import { Prisma } from '../generated/prisma/client';
 
 const eventSelectBase = {
     id: true,
@@ -648,49 +649,203 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
     }
 };
 
-export const eventAttendees = async (req : Request, res : Response) => {
-    const eventId = req.params.id
-    if(!eventId) {
-        res.status(404).json({
-            msg : "no event id mentioned"
-        })
-        return;
-    }
-    try {
-        const event = await prisma.userEvents.findMany({
-            where : {
-               eventId : eventId
-            }, 
-            select : {
-                user : {
-                    select : {
-                        profileAvatar : true, 
-                        name : true
-                    }
-                }
-            }
-        })
 
-        if(!event) {
-            res.status(404).json({
-                msg : "no event found"
-            })
-            return;
+export const eventAttendees = async (req: Request, res: Response) => {
+  const requestId = generateRequestId();
+  const eventId = req.params.eventId;
+  if (!eventId) {
+    res.status(400).json({ message: "Event id required" });
+    return;
+  }
+
+  try {
+    const format = req.query.format as string | undefined;
+    if (format === "csv") {
+      // Pre-validate that the event exists before starting the stream
+      const eventExists = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { id: true }
+      });
+
+      if (!eventExists) {
+        res.status(404).json({ message: "Event not found" });
+        return;
+      }
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="participants_${eventId}.csv"`
+      );
+
+      try {
+        // UTF-8 BOM (Excel compatibility)
+        res.write("\uFEFF");
+
+        const headers = [
+          "User ID",
+          "Name",
+          "Email",
+          "Profile Avatar",
+          "College",
+          "Course",
+          "Year",
+          "Tags",
+          "Joined At",
+          "Pass ID"
+        ];
+
+        const escapeCsv = (v: any) => {
+          if (v == null) return "";
+          const s = String(v);
+          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+        };
+
+        // write header
+        res.write(headers.map(escapeCsv).join(",") + "\n");
+
+        const batchSize = 500;
+        let lastJoinedAt: Date | null = null;
+
+        while (true) {
+          const batch: Prisma.userEventsGetPayload<{
+            select: {
+              joinedAt: true;
+              uniquePassId: true;
+              user: {
+                select: {
+                  id: true;
+                  name: true;
+                  email: true;
+                  profileAvatar: true;
+                  collegeName: true;
+                  course: true;
+                  year: true;
+                  tags: true;
+                };
+              };
+            };
+          }>[] = await prisma.userEvents.findMany({
+            where: {
+              eventId,
+              ...(lastJoinedAt && { joinedAt: { lt: lastJoinedAt } })
+            },
+            take: batchSize,
+            orderBy: { joinedAt: "desc" },
+            select: {
+              joinedAt: true,
+              uniquePassId: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  profileAvatar: true,
+                  collegeName: true,
+                  course: true,
+                  year: true,
+                  tags: true
+                }
+              }
+            }
+          });
+
+
+          if (batch.length === 0) break;
+
+          for (const p of batch) {
+            const u = p.user;
+            const tags = Array.isArray(u.tags) ? u.tags.join(";") : "";
+
+            const row = [
+              u.id ?? "",
+              u.name ?? "",
+              u.email ?? "",
+              u.profileAvatar ?? "",
+              u.collegeName ?? "",
+              u.course ?? "",
+              u.year ?? "",
+              tags,
+              p.joinedAt.toISOString(),
+              p.uniquePassId ?? ""
+            ];
+
+            res.write(row.map(escapeCsv).join(",") + "\n");
+          }
+
+          lastJoinedAt = batch[batch.length - 1].joinedAt;
         }
 
-        res.status(200).json({
-            msg : "users fetched",
-            event
-        })
-        return
-    } catch (error) {
-        console.log(error);
-        res.status(500).json({
-            msg : "internal server error"
-        })
-        return;
+        res.end();
+      } catch (streamError: any) {
+        // Error during streaming - headers already sent, log the error
+        logger.error(`[${requestId}] Error during CSV streaming`, {
+          requestId,
+          eventId,
+          error: streamError.message,
+          stack: streamError.stack
+        });
+        // Attempt to end the response if possible
+        if (!res.writableEnded) {
+          res.end();
+        }
+      }
+      return;
     }
-}
+
+      // NORMAL PAGINATED JSON
+
+    const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+    const rawLimit = parseInt(req.query.limit as string);
+    const MAX_LIMIT = 100;
+    const limit = Math.min(Math.max(rawLimit || 50, 1), MAX_LIMIT);
+    const skip = (page - 1) * limit;
+
+    const [participants, total] = await Promise.all([
+      prisma.userEvents.findMany({
+        where: { eventId },
+        take: limit,
+        skip,
+        orderBy: { joinedAt: "desc" },
+        select: {
+          joinedAt: true,
+          uniquePassId: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              profileAvatar: true,
+              collegeName: true,
+              course: true,
+              year: true,
+              tags: true
+            }
+          }
+        }
+      }),
+      prisma.userEvents.count({ where: { eventId } })
+    ]);
+
+    res.status(200).json({
+      msg: "participants fetched",
+      data: participants.map(p => ({
+        joinedAt: p.joinedAt,
+        passId: p.uniquePassId,
+        user: p.user
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "internal server error" });
+  }
+};
 
 
 export const addToGallery = async (req: Request, res: Response): Promise<void> => {
