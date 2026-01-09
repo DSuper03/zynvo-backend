@@ -651,6 +651,7 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
 
 
 export const eventAttendees = async (req: Request, res: Response) => {
+  const requestId = generateRequestId();
   const eventId = req.params.eventId;
   if (!eventId) {
     res.status(400).json({ message: "Event id required" });
@@ -778,7 +779,8 @@ export const eventAttendees = async (req: Request, res: Response) => {
         res.end();
       } catch (streamError: any) {
         // Error during streaming - headers already sent, log the error
-        logger.error("Error during CSV streaming", {
+        logger.error(`[${requestId}] Error during CSV streaming`, {
+          requestId,
           eventId,
           error: streamError.message,
           stack: streamError.stack
