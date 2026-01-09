@@ -776,9 +776,13 @@ export const eventAttendees = async (req: Request, res: Response) => {
         }
 
         res.end();
-      } catch (streamError) {
+      } catch (streamError: any) {
         // Error during streaming - headers already sent, log the error
-        console.error("Error during CSV streaming:", streamError);
+        logger.error("Error during CSV streaming", {
+          eventId,
+          error: streamError.message,
+          stack: streamError.stack
+        });
         // Attempt to end the response if possible
         if (!res.writableEnded) {
           res.end();
