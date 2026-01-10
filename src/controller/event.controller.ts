@@ -673,11 +673,9 @@ export const eventAttendees = async (req: Request, res: Response) => {
         "User ID",
         "Name",
         "Email",
-        "Profile Avatar",
         "College",
         "Course",
         "Year",
-        "Tags",
         "Joined At",
         "Pass ID"
       ];
@@ -704,11 +702,9 @@ export const eventAttendees = async (req: Request, res: Response) => {
                 id: true;
                 name: true;
                 email: true;
-                profileAvatar: true;
                 collegeName: true;
                 course: true;
                 year: true;
-                tags: true;
               };
             };
           };
@@ -742,17 +738,14 @@ export const eventAttendees = async (req: Request, res: Response) => {
 
         for (const p of batch) {
           const u = p.user;
-          const tags = Array.isArray(u.tags) ? u.tags.join(";") : "";
 
           const row = [
             u.id ?? "",
             u.name ?? "",
             u.email ?? "",
-            u.profileAvatar ?? "",
             u.collegeName ?? "",
             u.course ?? "",
             u.year ?? "",
-            tags,
             p.joinedAt.toISOString(),
             p.uniquePassId ?? ""
           ];
@@ -789,11 +782,11 @@ export const eventAttendees = async (req: Request, res: Response) => {
               id: true,
               name: true,
               email: true,
-              profileAvatar: true,
+              
               collegeName: true,
               course: true,
               year: true,
-              tags: true
+              
             }
           }
         }
