@@ -18,7 +18,7 @@ const genToken = (): string => {
 
 export const signup = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
-    const { name, email, collegeName, password } = req.body;
+    const { name, email, collegeName, password, phone } = req.body;
     const avatarUrl = req.body.avatarUrl;
 
     logger.info(`[${requestId}] POST /signup - Starting signup`, {
@@ -80,6 +80,7 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
                 password: hashedPassword,
                 collegeName: collegeName,
                 profileAvatar: avatarUrl,
+                phone: parsedData.data.phone || "",
                 vToken: vToken,
                 expiryToken: Math.floor(Date.now() / 1000),
                 ValidFor: 86400000,

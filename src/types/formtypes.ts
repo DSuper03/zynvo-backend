@@ -10,6 +10,7 @@ export const signupSchema = z.object({
     // .regex(/[\W_]/, 'Password must contain at least one special character'),
   email: z.string().email('invalid email id'),
   name: z.string(),
+  phone: z.string().optional(),
 });
 
 export const newPWschema = z.object({
