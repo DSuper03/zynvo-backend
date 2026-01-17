@@ -35,4 +35,12 @@ export const ClubSchema = z.object({
 export const EventSchema = z.object({
   eventName: z.string(),
   description: z.string().optional(),
+  whatsappLink: z.string().optional(),
+  form: z.string().optional(),
+  link1: z.string().optional(),
+  link2: z.string().optional(),
+  link3: z.string().optional(),
+  fees: z.string().optional(),
+  image: z.string().optional(),
+  contactPhone: z.string().optional(),
 });

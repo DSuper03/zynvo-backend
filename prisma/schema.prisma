@@ -131,6 +131,7 @@ model event {
   link1 String? 
   link2 String?
   link3 String?
+  whatsappLink String? @default("")
   club      clubs  @relation(fields: [clubId], references: [id])
   speakers  speakers[]
   attendees userEvents[]

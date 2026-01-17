@@ -28,7 +28,8 @@ const eventSelectBase = {
     createdAt: true,
     link1 : true,
     link2 : true,
-    link3 : true
+    link3 : true,
+    whatsappLink: true
 } as const;
 
 export const createEvent = async (req: Request, res: Response): Promise<void> => {
@@ -55,7 +56,8 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         fees,
         link1,
         link2,
-        link3
+        link3,
+        whatsappLink
     } = req.body;
 
     const userId = req.id;
@@ -149,7 +151,8 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
                 Fees : fees ? fees : "none",
                 link1 : link1 ? link1 : null,
                 link2 : link2 ? link2 : null,
-                link3 : link3 ? link3 : null
+                link3 : link3 ? link3 : null,
+                whatsappLink: whatsappLink || ""
             },
             select: { id: true }
         });
