@@ -739,11 +739,9 @@ export const eventAttendees = async (req: Request, res: Response) => {
                 id: true,
                 name: true,
                 email: true,
-                profileAvatar: true,
                 collegeName: true,
                 course: true,
-                year: true,
-                tags: true
+                year: true
               }
             }
           }
