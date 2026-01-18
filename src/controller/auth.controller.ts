@@ -80,6 +80,7 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
                 password: hashedPassword,
                 collegeName: collegeName,
                 profileAvatar: avatarUrl,
+                phone: parsedData.data.phone || "",
                 vToken: vToken,
                 expiryToken: Math.floor(Date.now() / 1000),
                 ValidFor: 86400000,

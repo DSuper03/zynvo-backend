@@ -10,6 +10,7 @@ export const signupSchema = z.object({
     // .regex(/[\W_]/, 'Password must contain at least one special character'),
   email: z.string().email('invalid email id'),
   name: z.string(),
+  phone: z.string().optional(),
 });
 
 export const newPWschema = z.object({
@@ -34,4 +35,12 @@ export const ClubSchema = z.object({
 export const EventSchema = z.object({
   eventName: z.string(),
   description: z.string().optional(),
+  whatsappLink: z.string().optional(),
+  form: z.string().optional(),
+  link1: z.string().optional(),
+  link2: z.string().optional(),
+  link3: z.string().optional(),
+  fees: z.string().optional(),
+  image: z.string().optional(),
+  contactPhone: z.string().optional(),
 });

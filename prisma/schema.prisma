@@ -36,6 +36,7 @@ model User {
   tags          String[] @default([])
   course        String?  @default("")
   year          String?  @default("")
+  phone         String?  @default("")
   twitter       String? @default("")
   linkedin      String? @default("")
   instagram     String? @default("")
@@ -130,6 +131,7 @@ model event {
   link1 String? 
   link2 String?
   link3 String?
+  whatsappLink String? @default("")
   club      clubs  @relation(fields: [clubId], references: [id])
   speakers  speakers[]
   attendees userEvents[]

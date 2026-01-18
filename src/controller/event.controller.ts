@@ -28,7 +28,8 @@ const eventSelectBase = {
     createdAt: true,
     link1 : true,
     link2 : true,
-    link3 : true
+    link3 : true,
+    whatsappLink: true
 } as const;
 
 export const createEvent = async (req: Request, res: Response): Promise<void> => {
@@ -55,7 +56,8 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         fees,
         link1,
         link2,
-        link3
+        link3,
+        whatsappLink
     } = req.body;
 
     const userId = req.id;
@@ -149,7 +151,8 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
                 Fees : fees ? fees : "none",
                 link1 : link1 ? link1 : null,
                 link2 : link2 ? link2 : null,
-                link3 : link3 ? link3 : null
+                link3 : link3 ? link3 : null,
+                whatsappLink: whatsappLink || ""
             },
             select: { id: true }
         });
@@ -682,18 +685,16 @@ export const eventAttendees = async (req: Request, res: Response) => {
         // UTF-8 BOM (Excel compatibility)
         res.write("\uFEFF");
 
-        const headers = [
-          "User ID",
-          "Name",
-          "Email",
-          "Profile Avatar",
-          "College",
-          "Course",
-          "Year",
-          "Tags",
-          "Joined At",
-          "Pass ID"
-        ];
+      const headers = [
+        "User ID",
+        "Name",
+        "Email",
+        "College",
+        "Course",
+        "Year",
+        "Joined At",
+        "Pass ID"
+      ];
 
         const escapeCsv = (v: any) => {
           if (v == null) return "";
@@ -707,68 +708,61 @@ export const eventAttendees = async (req: Request, res: Response) => {
         const batchSize = 500;
         let lastJoinedAt: Date | null = null;
 
-        while (true) {
-          const batch: Prisma.userEventsGetPayload<{
-            select: {
-              joinedAt: true;
-              uniquePassId: true;
-              user: {
-                select: {
-                  id: true;
-                  name: true;
-                  email: true;
-                  profileAvatar: true;
-                  collegeName: true;
-                  course: true;
-                  year: true;
-                  tags: true;
-                };
+      while (true) {
+        const batch: Prisma.userEventsGetPayload<{
+          select: {
+            joinedAt: true;
+            uniquePassId: true;
+            user: {
+              select: {
+                id: true;
+                name: true;
+                email: true;
+                collegeName: true;
+                course: true;
+                year: true;
               };
             };
-          }>[] = await prisma.userEvents.findMany({
-            where: {
-              eventId,
-              ...(lastJoinedAt && { joinedAt: { lt: lastJoinedAt } })
-            },
-            take: batchSize,
-            orderBy: { joinedAt: "desc" },
-            select: {
-              joinedAt: true,
-              uniquePassId: true,
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                  profileAvatar: true,
-                  collegeName: true,
-                  course: true,
-                  year: true,
-                  tags: true
-                }
+          };
+        }>[] = await prisma.userEvents.findMany({
+          where: {
+            eventId,
+            ...(lastJoinedAt && { joinedAt: { lt: lastJoinedAt } })
+          },
+          take: batchSize,
+          orderBy: { joinedAt: "desc" },
+          select: {
+            joinedAt: true,
+            uniquePassId: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                collegeName: true,
+                course: true,
+                year: true
               }
             }
-          });
+          }
+        });
 
 
           if (batch.length === 0) break;
 
-          for (const p of batch) {
-            const u = p.user;
-            const tags = Array.isArray(u.tags) ? u.tags.join(";") : "";
+        for (const p of batch) {
+          const u = p.user;
 
-            const row = [
-              u.id ?? "",
-              u.name ?? "",
-              u.email ?? "",
-              u.profileAvatar ?? "",
-              u.collegeName ?? "",
-              u.course ?? "",
-              u.year ?? "",
-              tags,
-              p.joinedAt.toISOString(),
-              p.uniquePassId ?? ""
-            ];
+          const row = [
+            u.id ?? "",
+            u.name ?? "",
+            u.email ?? "",
+            u.collegeName ?? "",
+            u.course ?? "",
+            u.year ?? "",
+            p.joinedAt.toISOString(),
+            p.uniquePassId ?? ""
+          ];
 
             res.write(row.map(escapeCsv).join(",") + "\n");
           }
@@ -815,11 +809,11 @@ export const eventAttendees = async (req: Request, res: Response) => {
               id: true,
               name: true,
               email: true,
-              profileAvatar: true,
+              
               collegeName: true,
               course: true,
               year: true,
-              tags: true
+              
             }
           }
         }
