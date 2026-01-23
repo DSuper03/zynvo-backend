@@ -29,7 +29,7 @@ import{addToGallery,
 
 const router = Router();
 
-router.post('/event', AuthMiddleware, createEvent);
+router.post('/event', AuthMiddleware, AdminCoreAuthMiddleware, createEvent);
 router.get('/event/:id', getEventById);
 router.get('/eventByClub/:id', AuthMiddleware, getEventsByClub);
 router.get('/all', getAllEvents);

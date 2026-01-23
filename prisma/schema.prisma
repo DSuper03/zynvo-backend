@@ -132,9 +132,12 @@ model event {
   link2 String?
   link3 String?
   whatsappLink String? @default("")
+  isPaidEvent Boolean @default(false)
+  qrCodeUrl String? @default("")
   club      clubs  @relation(fields: [clubId], references: [id])
   speakers  speakers[]
   attendees userEvents[]
+  payments  eventPayment[]
   announcements eventAnnouncement[]
   galleries eventGallery[]
 }
@@ -176,8 +179,25 @@ model userEvents {
   eventId   String
   uniquePassId String? @default("none")
   joinedAt  DateTime @default(now())
+  payment   eventPayment?
 
   @@id([userId, eventId]) // Composite primary key
+}
+
+model eventPayment {
+  id String @id @default(uuid())
+  userId String
+  eventId String
+  paymentScreenshotUrl String
+  isVerified Boolean @default(false)
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  userEvent userEvents @relation(fields: [userId, eventId], references: [userId, eventId], onDelete: Cascade)
+  event event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
 }
 
 model PostUpvote {
