@@ -111,11 +111,14 @@ model event {
   eventHeaderImage String? @default("none")
   EventName String @unique
   description String
+  tagline String? @default("")
   prizes String @default("no prizes given")
   TeamSize Int @default(1)
   Venue String @default("")
   EventUrl String? @default("")
   applicationStatus String @default("open") // open/ closed , frontend par button hoga jo ki core member click krke isko close kr skta hai as desired.
+  applicationStartDate String? @default("")
+  applicationEndDate String? @default("")
   clubName  String
   clubId    String
   university String 
@@ -132,12 +135,11 @@ model event {
   link2 String?
   link3 String?
   whatsappLink String? @default("")
-  isPaidEvent Boolean @default(false)
+  isPaid Boolean @default(false)
   qrCodeUrl String? @default("")
   club      clubs  @relation(fields: [clubId], references: [id])
   speakers  speakers[]
   attendees userEvents[]
-  payments  eventPayment[]
   announcements eventAnnouncement[]
   galleries eventGallery[]
 }
@@ -179,26 +181,13 @@ model userEvents {
   eventId   String
   uniquePassId String? @default("none")
   joinedAt  DateTime @default(now())
-  payment   eventPayment?
+  paymentScreenshotUrl String? @default("")
+  paymentStatus String @default("CONFIRMED") // PENDING, CONFIRMED, APPROVED, REJECTED
+  paymentVerifiedAt DateTime?
 
   @@id([userId, eventId]) // Composite primary key
 }
 
-model eventPayment {
-  id String @id @default(uuid())
-  userId String
-  eventId String
-  paymentScreenshotUrl String
-  isVerified Boolean @default(false)
-  verifiedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  userEvent userEvents @relation(fields: [userId, eventId], references: [userId, eventId], onDelete: Cascade)
-  event event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, eventId])
-}
 
 model PostUpvote {
   id        String   @id @default(uuid())
