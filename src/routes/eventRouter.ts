@@ -14,6 +14,8 @@ import {
   verifyEventRegistration,
   eventAttendees,
   getEventDetails,
+  verifyPayment,
+  getPaidEventPayments,
 } from '../controller/event.controller';
 import { 
   getAllannouncements, 
@@ -29,7 +31,7 @@ import{addToGallery,
 
 const router = Router();
 
-router.post('/event', AuthMiddleware, createEvent);
+router.post('/event', AuthMiddleware, ClubHeadAuthMiddleware, createEvent);
 router.get('/event/:id', getEventById);
 router.get('/eventByClub/:id', AuthMiddleware, getEventsByClub);
 router.get('/all', getAllEvents);
@@ -39,6 +41,8 @@ router.get('/getSpeakers', getSpeakers);
 router.get('/ver-event', verifyEventRegistration);
 router.get('/event-details', getEventDetails);
 router.get('/participants/:eventId', AuthMiddleware, AdminCoreAuthMiddleware, eventAttendees);
+router.post('/verifyPayment', AuthMiddleware, ClubHeadAuthMiddleware, verifyPayment);
+router.get('/paidEventPayments/:eventId', AuthMiddleware, ClubHeadAuthMiddleware, getPaidEventPayments);
 router.get('/getAnn/:eventId',AuthMiddleware, getAllannouncements);
 router.post('/announcement/:eventId',AuthMiddleware, SpecificClubHeadAuthMiddleware, createAnnouncement);
 router.put('/announcement/:eventId',AuthMiddleware, SpecificClubHeadAuthMiddleware, updateAnnouncement);

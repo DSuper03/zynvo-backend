@@ -9,6 +9,7 @@ const eventSelectBase = {
     id: true,
     EventName: true,
     description: true,
+    tagline: true,
     EventMode: true,
     EventType: true,
     EventUrl: true,
@@ -19,6 +20,8 @@ const eventSelectBase = {
     prizes: true,
     startDate: true,
     endDate: true,
+    applicationStartDate: true,
+    applicationEndDate: true,
     university: true,
     collegeStudentsOnly: true,
     contactEmail: true,
@@ -29,7 +32,9 @@ const eventSelectBase = {
     link1 : true,
     link2 : true,
     link3 : true,
-    whatsappLink: true
+    whatsappLink: true,
+    isPaid: true,
+    qrCodeUrl: true
 } as const;
 
 export const createEvent = async (req: Request, res: Response): Promise<void> => {
@@ -57,7 +62,16 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         link1,
         link2,
         link3,
-        whatsappLink
+        whatsappLink,
+        isPaid,
+        qrCodeUrl,
+        isPaidEvent,
+        paymentAmount,
+        paymentQRCode,
+        tagline,
+        applicationStartDate,
+        applicationEndDate,
+        coreTeamOnly
     } = req.body;
 
     const userId = req.id;
@@ -65,7 +79,14 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
     logger.info(`[${requestId}] POST /event - Starting event creation`, {
         userId,
         eventName,
-        university
+        university,
+        isPaid: isPaid,
+        qrCodeUrl: qrCodeUrl,
+        fees: fees,
+        bodyIsPaid: req.body.isPaid,
+        bodyQrCode: req.body.qrCodeUrl,
+        bodyFees: req.body.fees,
+        fullBody: JSON.stringify(req.body)
     });
 
     const parsedData = EventSchema.safeParse(req.body);
@@ -130,6 +151,7 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
             data: {
                 EventName: parsedData.data.eventName,
                 description: parsedData.data.description || '',
+                tagline: parsedData.data.tagline || '',
                 EventMode: eventMode,
                 EventType: eventType,
                 EventUrl: eventWebsite || '',
@@ -140,19 +162,23 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
                 prizes: prizes || '',
                 startDate: eventStartDate,
                 endDate: eventEndDate,
+                applicationStartDate: parsedData.data.applicationStartDate || '',
+                applicationEndDate: parsedData.data.applicationEndDate || '',
                 university: club.collegeName,
                 collegeStudentsOnly: collegeStudentsOnly,
                 contactEmail: contactEmail,
-                contactPhone: contactPhone ,
+                contactPhone: parsedData.data.contactPhone || contactPhone || '',
                 participationFee: noParticipationFee,
-                posterUrl: image,
-                eventHeaderImage : image,
-                Form : form ? form : "none",
-                Fees : fees ? fees : "none",
-                link1 : link1 ? link1 : null,
-                link2 : link2 ? link2 : null,
-                link3 : link3 ? link3 : null,
-                whatsappLink: whatsappLink || ""
+                posterUrl: parsedData.data.image,
+                eventHeaderImage : parsedData.data.image,
+                Form : parsedData.data.form ? parsedData.data.form : "none",
+                Fees : parsedData.data.paymentAmount || parsedData.data.fees || "none",
+                link1 : parsedData.data.link1 ? parsedData.data.link1 : null,
+                link2 : parsedData.data.link2 ? parsedData.data.link2 : null,
+                link3 : parsedData.data.link3 ? parsedData.data.link3 : null,
+                whatsappLink: parsedData.data.whatsappLink || "",
+                isPaid: parsedData.data.isPaidEvent ?? parsedData.data.isPaid ?? false,
+                qrCodeUrl: parsedData.data.paymentQRCode || parsedData.data.qrCodeUrl || null
             },
             select: { id: true }
         });
@@ -340,7 +366,7 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
 export const registerForEvent = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const userId = req.id;
-    const { eventId } = req.body;
+    const { eventId, paymentScreenshotUrl } = req.body;
 
     logger.info(`[${requestId}] POST /registerEvent - Starting registration`, {
         userId,
@@ -354,6 +380,7 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
     }
 
     try {
+        // Check if user is already registered
         const alreadyRegistered = await prisma.userEvents.findUnique({
             where: {
                 userId_eventId: {
@@ -372,9 +399,32 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             return;
         }
 
+        // Check if event is paid
+        const event = await prisma.event.findUnique({
+            where: { id: eventId },
+            select: { isPaid: true }
+        });
+
+        if (!event) {
+            logger.warn(`[${requestId}] Event not found`, { eventId });
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        // If event is paid, payment screenshot is required
+        if (event.isPaid && !paymentScreenshotUrl) {
+            logger.warn(`[${requestId}] Payment screenshot missing for paid event`, {
+                userId,
+                eventId
+            });
+            sendErrorResponse(res, requestId, 'Payment screenshot is required for paid events', 400);
+            return;
+        }
+
         logger.info(`[${requestId}] Registering user for event`, {
             userId,
-            eventId
+            eventId,
+            isPaid: event.isPaid
         });
 
         const response = await prisma.userEvents.create({
@@ -382,23 +432,27 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
                 userId: userId,
                 eventId: eventId,
                 uniquePassId: generateUUID(),
+                paymentScreenshotUrl: paymentScreenshotUrl || null,
+                paymentStatus: event.isPaid ? 'PENDING' : 'CONFIRMED'
             },
             select: {
-                uniquePassId: true
+                uniquePassId: true,
+                paymentStatus: true
             }
         });
-
-       
 
         logger.info(`[${requestId}] User registered successfully`, {
             userId,
             eventId,
-            passId: response.uniquePassId
+            passId: response.uniquePassId,
+            paymentStatus: response.paymentStatus
         });
 
         res.status(200).json({
             msg: 'registered successfully',
             ForkedUpId: response.uniquePassId,
+            paymentStatus: response.paymentStatus,
+            requiresPaymentVerification: event.isPaid
         });
 
     } catch (error: any) {
@@ -693,7 +747,9 @@ export const eventAttendees = async (req: Request, res: Response) => {
         "Course",
         "Year",
         "Joined At",
-        "Pass ID"
+        "Pass ID",
+        "Payment Status",
+        "Payment Screenshot URL"
       ];
 
         const escapeCsv = (v: any) => {
@@ -713,6 +769,8 @@ export const eventAttendees = async (req: Request, res: Response) => {
           select: {
             joinedAt: true;
             uniquePassId: true;
+            paymentStatus: true;
+            paymentScreenshotUrl: true;
             user: {
               select: {
                 id: true;
@@ -734,6 +792,8 @@ export const eventAttendees = async (req: Request, res: Response) => {
           select: {
             joinedAt: true,
             uniquePassId: true,
+            paymentStatus: true,
+            paymentScreenshotUrl: true,
             user: {
               select: {
                 id: true,
@@ -761,7 +821,9 @@ export const eventAttendees = async (req: Request, res: Response) => {
             u.course ?? "",
             u.year ?? "",
             p.joinedAt.toISOString(),
-            p.uniquePassId ?? ""
+            p.uniquePassId ?? "",
+            p.paymentStatus ?? "CONFIRMED",
+            p.paymentScreenshotUrl ?? ""
           ];
 
             res.write(row.map(escapeCsv).join(",") + "\n");
@@ -1112,6 +1174,232 @@ export const deleteGalleryItem = async (req: Request, res: Response): Promise<vo
             eventId,
             userId
         });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+export const verifyPayment = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const verifierUserId = req.id; // club head userId
+    const { eventId, registrationId, approvalStatus } = req.body;
+
+    logger.info(`[${requestId}] POST /verifyPayment - Start`, {
+        verifierUserId,
+        eventId,
+        registrationId,
+        approvalStatus
+    });
+
+    // 1️⃣ Auth check
+    if (!verifierUserId) {
+        logger.warn(`[${requestId}] Unauthorized user`);
+        sendErrorResponse(res, requestId, 'Unauthorized', 401);
+        return;
+    }
+
+    try {
+        // 2️⃣ Fetch verifier (club head)
+        const verifier = await prisma.user.findUnique({
+            where: { id: verifierUserId },
+            select: { email: true }
+        });
+
+        if (!verifier) {
+            sendErrorResponse(res, requestId, 'User not found', 404);
+            return;
+        }
+
+        // 3️⃣ Fetch event
+        const event = await prisma.event.findUnique({
+            where: { id: eventId },
+            select: { clubId: true, isPaid: true }
+        });
+
+        if (!event) {
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        if (!event.isPaid) {
+            sendErrorResponse(res, requestId, 'This is not a paid event', 400);
+            return;
+        }
+
+        // 4️⃣ Verify club head permission
+        const club = await prisma.clubs.findUnique({
+            where: { id: event.clubId },
+            select: { founderEmail: true }
+        });
+
+        if (!club || club.founderEmail !== verifier.email) {
+            sendErrorResponse(res, requestId, 'Only club head can verify payments', 403);
+            return;
+        }
+
+        // 5️⃣ Validate approval status
+        const status = approvalStatus?.toUpperCase();
+        const validStatuses = ['APPROVED', 'REJECTED'];
+
+        if (!validStatuses.includes(status)) {
+            sendErrorResponse(
+                res,
+                requestId,
+                'Invalid approval status. Must be APPROVED or REJECTED',
+                400
+            );
+            return;
+        }
+
+        // 6️⃣ Fetch registration using uniquePassId
+        const registration = await prisma.userEvents.findFirst({
+            where: { uniquePassId: registrationId }
+        });
+
+        if (!registration || registration.eventId !== eventId) {
+            sendErrorResponse(res, requestId, 'Registration not found for this event', 404);
+            return;
+        }
+
+        // 7️⃣ Prevent double verification
+        if (registration.paymentStatus === 'APPROVED') {
+            sendErrorResponse(res, requestId, 'Payment already approved', 409);
+            return;
+        }
+
+        // 8️⃣ Update payment status
+        await prisma.userEvents.update({
+            where: {
+                userId_eventId: {
+                    userId: registration.userId,
+                    eventId: eventId
+                }
+            },
+            data: {
+                paymentStatus: status,
+                paymentVerifiedAt: new Date()
+            }
+        });
+
+        logger.info(`[${requestId}] Payment ${status}`, {
+            eventId,
+            registrationId
+        });
+
+        res.status(200).json({
+            message: `Payment ${status.toLowerCase()} successfully`,
+            status
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] verifyPayment failed`, {
+            error: error.message,
+            stack: error.stack
+        });
+
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+export const getPaidEventPayments = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const userId = req.id;
+    const eventId = req.params.eventId;
+
+    logger.info(`[${requestId}] GET /paidEventPayments/:eventId - Fetching payments`, {
+        userId,
+        eventId
+    });
+
+    if (!userId) {
+        logger.warn(`[${requestId}] Invalid user ID`);
+        sendErrorResponse(res, requestId, 'Invalid user', 402);
+        return;
+    }
+
+    try {
+        // Verify user is club head
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true }
+        });
+
+        if (!user) {
+            logger.warn(`[${requestId}] User not found`, { userId });
+            sendErrorResponse(res, requestId, 'User not found', 404);
+            return;
+        }
+
+        const event = await prisma.event.findUnique({
+            where: { id: eventId },
+            select: { clubId: true, isPaid: true }
+        });
+
+        if (!event) {
+            logger.warn(`[${requestId}] Event not found`, { eventId });
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        if (!event.isPaid) {
+            logger.warn(`[${requestId}] Event is not a paid event`, { eventId });
+            sendErrorResponse(res, requestId, 'This is not a paid event', 400);
+            return;
+        }
+
+        const club = await prisma.clubs.findUnique({
+            where: { id: event.clubId },
+            select: { founderEmail: true }
+        });
+
+        if (!club || club.founderEmail !== user.email) {
+            logger.warn(`[${requestId}] Unauthorized - user is not club head`, {
+                userId,
+                clubId: event.clubId
+            });
+            sendErrorResponse(res, requestId, 'Only club head can view payments', 403);
+            return;
+        }
+
+        // Fetch all registrations for the event with payment screenshots
+        const registrations = await prisma.userEvents.findMany({
+            where: { eventId: eventId },
+            select: {
+                userId: true,
+                uniquePassId: true,
+                paymentStatus: true,
+                paymentScreenshotUrl: true,
+                paymentVerifiedAt: true,
+                joinedAt: true,
+                user: {
+                    select: {
+                        name: true,
+                        email: true,
+                        collegeName: true
+                    }
+                }
+            },
+            orderBy: { joinedAt: 'desc' }
+        });
+
+        logger.info(`[${requestId}] Fetched ${registrations.length} payment records`, {
+            eventId,
+            userId
+        });
+
+        res.status(200).json({
+            msg: 'Payments fetched successfully',
+            total: registrations.length,
+            payments: registrations
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error fetching payments`, {
+            error: error.message,
+            stack: error.stack,
+            userId,
+            eventId
+        });
+        console.log(error);
         sendErrorResponse(res, requestId, 'Internal server error', 500);
     }
 };
