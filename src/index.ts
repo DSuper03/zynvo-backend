@@ -1,6 +1,5 @@
 import dotenv from 'dotenv';
 dotenv.config();
-import 'atomicdocs'
 import express from 'express';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
@@ -12,11 +11,10 @@ import { EventRouter } from './routes/eventRouter';
 import { clubRouter } from './routes/clubRouter';
 import openapiSpec from '../openapispecfile.json';
 import { adminControlRouter } from './routes/adminRouter';
-import atomicdocs from 'atomicdocs';
+
 
 const app = express()
 const PORT = 8000;
-app.use(atomicdocs());
 app.set('trust proxy', 1);
 
 app.use(express.json());
@@ -58,9 +56,6 @@ app.get('/health', (_req: any, res: any) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-    console.log(`📚 Docs available at http://localhost:${PORT}/docs`);
-  
-  // Register routes after server starts
-  atomicdocs.register(app, PORT);
+
 
 });
