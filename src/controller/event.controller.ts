@@ -1180,125 +1180,122 @@ export const deleteGalleryItem = async (req: Request, res: Response): Promise<vo
 
 export const verifyPayment = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
-    const userId = req.id;
+    const verifierUserId = req.id; // club head userId
     const { eventId, registrationId, approvalStatus } = req.body;
 
-    logger.info(`[${requestId}] POST /verifyPayment - Starting payment verification`, {
-        userId,
+    logger.info(`[${requestId}] POST /verifyPayment - Start`, {
+        verifierUserId,
         eventId,
         registrationId,
         approvalStatus
     });
 
-    if (!userId) {
-        logger.warn(`[${requestId}] Invalid user ID`);
-        sendErrorResponse(res, requestId, 'Invalid user', 402);
+    // 1️⃣ Auth check
+    if (!verifierUserId) {
+        logger.warn(`[${requestId}] Unauthorized user`);
+        sendErrorResponse(res, requestId, 'Unauthorized', 401);
         return;
     }
 
     try {
-        // Verify user is club head
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
+        // 2️⃣ Fetch verifier (club head)
+        const verifier = await prisma.user.findUnique({
+            where: { id: verifierUserId },
             select: { email: true }
         });
 
-        if (!user) {
-            logger.warn(`[${requestId}] User not found`, { userId });
+        if (!verifier) {
             sendErrorResponse(res, requestId, 'User not found', 404);
             return;
         }
 
+        // 3️⃣ Fetch event
         const event = await prisma.event.findUnique({
             where: { id: eventId },
             select: { clubId: true, isPaid: true }
         });
 
         if (!event) {
-            logger.warn(`[${requestId}] Event not found`, { eventId });
             sendErrorResponse(res, requestId, 'Event not found', 404);
             return;
         }
 
         if (!event.isPaid) {
-            logger.warn(`[${requestId}] Event is not a paid event`, { eventId });
             sendErrorResponse(res, requestId, 'This is not a paid event', 400);
             return;
         }
 
+        // 4️⃣ Verify club head permission
         const club = await prisma.clubs.findUnique({
-            where: { 
-                id: event.clubId 
-            },
+            where: { id: event.clubId },
             select: { founderEmail: true }
         });
 
-        if (!club || club.founderEmail !== user.email) {
-            logger.warn(`[${requestId}] Unauthorized - user is not club head`, {
-                userId,
-                clubId: event.clubId
-            });
+        if (!club || club.founderEmail !== verifier.email) {
             sendErrorResponse(res, requestId, 'Only club head can verify payments', 403);
             return;
         }
 
-        // Update registration with payment status
+        // 5️⃣ Validate approval status
+        const status = approvalStatus?.toUpperCase();
         const validStatuses = ['APPROVED', 'REJECTED'];
-        if (!validStatuses.includes(approvalStatus)) {
-            logger.warn(`[${requestId}] Invalid approval status`, { approvalStatus });
-            sendErrorResponse(res, requestId, 'Invalid approval status. Must be APPROVED or REJECTED', 400);
+
+        if (!validStatuses.includes(status)) {
+            sendErrorResponse(
+                res,
+                requestId,
+                'Invalid approval status. Must be APPROVED or REJECTED',
+                400
+            );
             return;
         }
 
-        // First, find the registration to get userId
-        const existingRegistration = await prisma.userEvents.findUnique({
-            where: {
-                userId_eventId: {
-                    userId: registrationId, // This should be userId from the request
-                    eventId: eventId
-                }
-            }
+        // 6️⃣ Fetch registration using uniquePassId
+        const registration = await prisma.userEvents.findFirst({
+            where: { uniquePassId: registrationId }
         });
 
-        if (!existingRegistration) {
-            logger.warn(`[${requestId}] Registration not found`, { registrationId, eventId });
-            sendErrorResponse(res, requestId, 'Registration not found', 404);
+        if (!registration || registration.eventId !== eventId) {
+            sendErrorResponse(res, requestId, 'Registration not found for this event', 404);
             return;
         }
 
-        const registration = await prisma.userEvents.update({
+        // 7️⃣ Prevent double verification
+        if (registration.paymentStatus === 'APPROVED') {
+            sendErrorResponse(res, requestId, 'Payment already approved', 409);
+            return;
+        }
+
+        // 8️⃣ Update payment status
+        await prisma.userEvents.update({
             where: {
                 userId_eventId: {
-                    userId: registrationId,
+                    userId: registration.userId,
                     eventId: eventId
                 }
             },
             data: {
-                paymentStatus: approvalStatus,
+                paymentStatus: status,
                 paymentVerifiedAt: new Date()
             }
         });
 
-        logger.info(`[${requestId}] Payment verified successfully`, {
-            registrationId,
-            eventId,
-            newStatus: approvalStatus
-        });
-
-        res.status(200).json({
-            msg: `Payment ${approvalStatus.toLowerCase()} successfully`,
-            status: approvalStatus
-        });
-
-    } catch (error: any) {
-        logger.error(`[${requestId}] Error verifying payment`, {
-            error: error.message,
-            stack: error.stack,
-            userId,
+        logger.info(`[${requestId}] Payment ${status}`, {
             eventId,
             registrationId
         });
-        console.log(error);
+
+        res.status(200).json({
+            message: `Payment ${status.toLowerCase()} successfully`,
+            status
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] verifyPayment failed`, {
+            error: error.message,
+            stack: error.stack
+        });
+
         sendErrorResponse(res, requestId, 'Internal server error', 500);
     }
 };
