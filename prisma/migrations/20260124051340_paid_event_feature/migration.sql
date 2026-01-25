@@ -17,7 +17,7 @@ ADD COLUMN     "isPaid" BOOLEAN NOT NULL DEFAULT false;
 
 -- AlterTable
 ALTER TABLE "userEvents" ADD COLUMN     "paymentScreenshotUrl" TEXT DEFAULT '',
-ADD COLUMN     "paymentStatus" TEXT NOT NULL DEFAULT 'CONFIRMED',
+ADD COLUMN     "paymentStatus" TEXT NOT NULL DEFAULT 'PENDING',
 ADD COLUMN     "paymentVerifiedAt" TIMESTAMP(3);
 
 -- DropTable
