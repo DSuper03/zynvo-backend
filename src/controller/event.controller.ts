@@ -34,6 +34,10 @@ const eventSelectBase = {
     link3 : true,
     whatsappLink: true,
     isPaid: true,
+    Fees: true,
+    Form : true,
+    paymentAmount: true,
+    paymentQRCode: true,
     qrCodeUrl: true
 } as const;
 
