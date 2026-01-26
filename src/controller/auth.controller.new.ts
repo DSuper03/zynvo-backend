@@ -8,7 +8,7 @@ import jwt from "jsonwebtoken";
 // This route handles BOTH "Sign in with Google" AND "New Clerk Signups"
 export const clerkLogin = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
-    const { email, name, clerkId, collegeName, avatarUrl, imgUrl } = req.body; 
+    const { email, name, clerkId, collegeName, avatarUrl, imgUrl, password } = req.body; 
 
     try {
         if(!clerkId || !email) {
@@ -22,7 +22,7 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
             res.status(400).json({ msg: "Missing required fields" });
             return;
         }
-        
+
         logger.info(`[${requestId}] Clerk Auth attempt`, { email });
 
         // 3. Check if user exists in YOUR Database
@@ -49,7 +49,7 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
                     name: name || "New User",
                     collegeName: collegeName , // Sent from frontend
                     profileAvatar: avatarUrl || imgUrl,
-                    password: "", // No password needed for Clerk users
+                    password: password || "", // No password needed for Clerk users
                     isVerified: true,
                     ValidFor: 86400000,
                 }
