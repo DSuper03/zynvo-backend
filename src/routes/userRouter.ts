@@ -21,15 +21,19 @@ import {
   leaveClub,
   isClubAdmin
 } from '../controller/user.controller';
+import { clerkLogin } from '../controller/auth.controller.new';
 
 const router = Router();
 
+//depricated routes - use auth.controller.new.ts for new routes
 router.post('/signup', signup);
 router.post('/login', login);
 router.post('/ResendEmail', resendEmail);
 router.post('/verify', verifyEmail);
 router.post('/forgot', forgotPassword);
 router.put('/reset-password', AuthMiddleware, resetPassword);
+
+router.post('/clerkLogin', clerkLogin);
 
 router.get('/getUser', AuthMiddleware, getUser);
 router.post('/joinClub/:id', AuthMiddleware, joinClub);
