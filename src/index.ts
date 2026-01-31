@@ -13,9 +13,14 @@ import { clubRouter } from './routes/clubRouter';
 import openapiSpec from '../openapispecfile.json';
 import { adminControlRouter } from './routes/adminRouter';
 import atomicdocs from 'atomicdocs';
+import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
 
 const app = express()
 const PORT = 8000;
+
+// Create Apollo Server
+const apolloServer = createApolloServer();
+
 app.use(atomicdocs());
 app.set('trust proxy', 1);
 
@@ -52,14 +57,23 @@ app.use('/api/v1/contact', contactRouter);
 
 app.use('/api/v2/admin', adminControlRouter)
 
+// GraphQL endpoint will be added after server starts
+
 app.get('/health', (_req: any, res: any) => {
   res.status(200).json({ msg: 'good health' });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
     console.log(`📚 Docs available at http://localhost:${PORT}/docs`);
+    console.log(`🚀 GraphQL endpoint available at http://localhost:${PORT}/graphql`);
   
+  // Start Apollo Server
+  await apolloServer.start();
+
+  // Add GraphQL endpoint after server starts
+  app.use('/graphql', createGraphQLMiddleware(apolloServer));
+
   // Register routes after server starts
   atomicdocs.register(app, PORT);
 
