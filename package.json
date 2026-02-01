@@ -28,7 +28,6 @@
     "@types/graphql": "^14.2.3",
     "@types/nodemailer": "^6.4.17",
     "@types/swagger-ui-express": "^4.1.8",
-    "atomicdocs": "^1.1.0",
     "bcrypt-ts": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "ci": "^2.3.0",
