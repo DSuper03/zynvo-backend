@@ -93,8 +93,26 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
        
       
     } catch (error: any) {
-        logger.error(`[${requestId}] Clerk Auth Error`, error);
-        res.status(401).json({ msg: "Unauthorized or Verification Failed" });
+        logger.error(`[${requestId}] Clerk Auth Error`, {
+            error: error?.message,
+            stack: error?.stack,
+        });
+
+        let status = 500;
+        let msg = "Internal server error during authentication";
+
+        // Authentication / token-related errors
+        if (error?.name === "JsonWebTokenError" || error?.name === "TokenExpiredError") {
+            status = 401;
+            msg = "Invalid or expired authentication token";
+        }
+        // Validation-related errors (e.g., bad input)
+        else if (error?.name === "ValidationError") {
+            status = 400;
+            msg = "Invalid authentication request";
+        }
+
+        res.status(status).json({ msg, requestId });
         return;
     }
 };
