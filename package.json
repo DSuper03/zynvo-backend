@@ -17,6 +17,7 @@
   "dependencies": {
     "@apollo/server": "^5.3.0",
     "@as-integrations/express4": "^1.1.2",
+    "@clerk/express": "^1.7.65",
     "@prisma/adapter-pg": "^7.0.1",
     "@prisma/client": "^7.0.1",
     "@prisma/extension-accelerate": "^3.0.0",
