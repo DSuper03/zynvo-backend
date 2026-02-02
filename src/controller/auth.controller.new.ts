@@ -18,6 +18,13 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
+        // Basic email format validation to prevent invalid emails from being stored
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            logger.warn(`[${requestId}] Clerk Auth attempt with invalid email format`, { email, clerkId });
+            res.status(400).json({ msg: "Invalid email format" });
+            return;
+        }
         if (!collegeName){
             logger.warn(`[${requestId}] Clerk Auth attempt with missing collegeName`, { email, clerkId });
             res.status(400).json({ msg: "Missing required fields" });
