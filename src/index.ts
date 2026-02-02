@@ -49,6 +49,7 @@ app.use('/api/v1/contact', contactRouter);
 //------------------- V2 routes --------------------
 
 app.use('/api/v2/admin', adminControlRouter)
+app.use('/api/v2/user/auth', userRouter);
 
 app.get('/health', (_req: any, res: any) => {
   res.status(200).json({ msg: 'good health' });
