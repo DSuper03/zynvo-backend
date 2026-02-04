@@ -380,7 +380,8 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
 export const registerForEvent = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const userId = req.id;
-    const { eventId, paymentScreenshotUrl } = req.body;
+    const { eventId, paymentScreenshotUrl, paymentProofUrl } = req.body;
+    const paymentScreenshot = paymentScreenshotUrl ?? paymentProofUrl;
 
     logger.info(`[${requestId}] POST /registerEvent - Starting registration`, {
         userId,
@@ -426,7 +427,7 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
         }
 
         // If event is paid, payment screenshot is required
-        if (event.isPaid && !paymentScreenshotUrl) {
+        if (event.isPaid && !paymentScreenshot) {
             logger.warn(`[${requestId}] Payment screenshot missing for paid event`, {
                 userId,
                 eventId
@@ -446,7 +447,7 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
                 userId: userId,
                 eventId: eventId,
                 uniquePassId: generateUUID(),
-                paymentScreenshotUrl: paymentScreenshotUrl || null,
+                paymentScreenshotUrl: paymentScreenshot || null,
                 paymentStatus: event.isPaid ? 'PENDING' : 'CONFIRMED'
             },
             select: {
