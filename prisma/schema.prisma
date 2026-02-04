@@ -183,7 +183,7 @@ model userEvents {
   uniquePassId String? @default("none")
   joinedAt  DateTime @default(now())
   paymentScreenshotUrl String? @default("")
-  paymentStatus String @default("PENDING") // PENDING, CONFIRMED, APPROVED, REJECTED
+  paymentStatus String @default("CONFIRMED") // PENDING, CONFIRMED, APPROVED, REJECTED
   paymentVerifiedAt DateTime?
 
   @@id([userId, eventId]) // Composite primary key
