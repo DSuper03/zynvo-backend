@@ -11,7 +11,7 @@ import { EventRouter } from './routes/eventRouter';
 import { clubRouter } from './routes/clubRouter';
 import openapiSpec from '../openapispecfile.json';
 import { adminControlRouter } from './routes/adminRouter';
-import atomicdocs from 'atomicdocs';
+
 import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
 
 const app = express()
@@ -20,7 +20,7 @@ const PORT = 8000;
 // Create Apollo Server
 const apolloServer = createApolloServer();
 
-app.use(atomicdocs());
+
 app.set('trust proxy', 1);
 
 app.use(express.json());
@@ -75,6 +75,6 @@ app.listen(PORT, async () => {
   app.use('/graphql', createGraphQLMiddleware(apolloServer));
 
   // Register routes after server starts
-  atomicdocs.register(app, PORT);
+  
 
 });
