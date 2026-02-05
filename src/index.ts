@@ -9,7 +9,7 @@ import { limiter } from './utils/rate-limiter';
 import { contactRouter } from './routes/contactRouter';
 import { EventRouter } from './routes/eventRouter';
 import { clubRouter } from './routes/clubRouter';
-import openapiSpec from '../openapispecfile.json';
+import path from 'path';
 import { adminControlRouter } from './routes/adminRouter';
 
 import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
@@ -20,6 +20,7 @@ const PORT = 8000;
 // Create Apollo Server
 const apolloServer = createApolloServer();
 
+const swaggerSpecPath = path.join(__dirname, '..', 'openapispecfile.json');
 
 app.set('trust proxy', 1);
 
@@ -37,10 +38,19 @@ app.options('*', cors({
 }));
 
 if (process.env.NODE_ENV !== 'production') {
-  app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec, {
-    customSiteTitle: 'Zynvo API Documentation',
-    customCss: '.swagger-ui .topbar { display: none }'
-  }));
+  app.get('/docs/openapi.json', (_req, res) => {
+    res.sendFile(swaggerSpecPath);
+  });
+
+  app.use(
+    '/docs',
+    swaggerUi.serve,
+    swaggerUi.setup(undefined, {
+      swaggerOptions: { url: '/docs/openapi.json' },
+      customSiteTitle: 'Zynvo API Documentation',
+      customCss: '.swagger-ui .topbar { display: none }'
+    })
+  );
 }
 
 //-----------------V1 routes------------------------
