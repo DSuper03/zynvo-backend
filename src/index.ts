@@ -13,6 +13,7 @@ import { clubRouter } from './routes/clubRouter';
 import openapiSpec from '../openapispecfile.json';
 import { adminControlRouter } from './routes/adminRouter';
 import atomicdocs from 'atomicdocs';
+import { startHonoServer } from './hono/server';
 
 const app = express()
 const PORT = 8000;
@@ -62,5 +63,6 @@ app.listen(PORT, () => {
   
   // Register routes after server starts
   atomicdocs.register(app, PORT);
+  startHonoServer();
 
 });
