@@ -3,7 +3,7 @@
 services:
   - type: web
     name: zynvo-backend
-    env: node
+    runtime: node
     buildCommand: npm install && npx prisma generate && npm run build
     startCommand: npm run start
     healthCheckPath: /health
