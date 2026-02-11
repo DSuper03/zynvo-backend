@@ -11,13 +11,12 @@ import { EventRouter } from './routes/eventRouter';
 import { clubRouter } from './routes/clubRouter';
 import path from 'path';
 import { adminControlRouter } from './routes/adminRouter';
-
-import { startHonoServer } from './hono/server';
-
 import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
+import { getRequestListener } from '@hono/node-server';
+import { honoApp } from './hono/app';
 
 const app = express()
-const PORT = 8000;
+const PORT = Number(process.env.PORT) || 8000;
 
 // Create Apollo Server
 const apolloServer = createApolloServer();
@@ -69,6 +68,19 @@ app.use('/api/v1/contact', contactRouter);
 app.use('/api/v2/admin', adminControlRouter)
 app.use('/api/v2/user/auth', userRouter);
 
+//------------------- Hono (mounted at /hono) --------------------
+// Routes: /hono/health, /hono/api/v1/events
+const honoHandler = getRequestListener(honoApp.fetch);
+app.use('/hono', (req, res, next) => {
+  // Hono's listener uses req.url; Express gives mounted path in req.path
+  const query = req.url?.includes('?') ? '?' + req.url.split('?')[1] : '';
+  const originalUrl = req.url;
+  req.url = (req.path || '/') + query;
+  honoHandler(req, res)
+    .catch(next)
+    .finally(() => { req.url = originalUrl; });
+});
+
 // GraphQL endpoint will be added after server starts
 
 app.get('/health', (_req: any, res: any) => {
@@ -79,16 +91,12 @@ app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
     console.log(`📚 Docs available at http://localhost:${PORT}/docs`);
     console.log(`🚀 GraphQL endpoint available at http://localhost:${PORT}/graphql`);
+    console.log(`✨ Hono app available at http://localhost:${PORT}/hono (e.g. /hono/health, /hono/api/v1/events)`);
   
   // Start Apollo Server
   await apolloServer.start();
 
   // Add GraphQL endpoint after server starts
   app.use('/graphql', createGraphQLMiddleware(apolloServer));
-
-  // Register routes after server starts
- 
-  startHonoServer();
-  
 
 });

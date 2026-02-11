@@ -1,0 +1,9 @@
+# Render Blueprint - use this so the service starts the built app (not dev)
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: zynvo-backend
+    env: node
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health

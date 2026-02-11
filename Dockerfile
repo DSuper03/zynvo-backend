@@ -3,7 +3,7 @@
 # --- Builder stage ---
 FROM node:20-alpine AS builder
 
-WORKDIR /src
+WORKDIR /app
 
 # Install OS deps if needed (openssl, etc.)
 RUN apk add --no-cache openssl
