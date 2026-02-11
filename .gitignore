@@ -1,5 +1,7 @@
 .env*
 dist
+prisma/migrations
+prisma/events.seed.csv
 node_modules
 npm-debug.log*
 pnpm-debug.log

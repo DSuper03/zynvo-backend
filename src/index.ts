@@ -11,6 +11,8 @@ import { EventRouter } from './routes/eventRouter';
 import { clubRouter } from './routes/clubRouter';
 import path from 'path';
 import { adminControlRouter } from './routes/adminRouter';
+import atomicdocs from 'atomicdocs';
+import { startHonoServer } from './hono/server';
 
 import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
 
@@ -85,6 +87,8 @@ app.listen(PORT, async () => {
   app.use('/graphql', createGraphQLMiddleware(apolloServer));
 
   // Register routes after server starts
+  atomicdocs.register(app, PORT);
+  startHonoServer();
   
 
 });
