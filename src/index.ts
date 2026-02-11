@@ -1,6 +1,5 @@
-import dotenv from 'dotenv';
+﻿import dotenv from 'dotenv';
 dotenv.config();
-import 'atomicdocs'
 import express from 'express';
 
 import cors from 'cors';
@@ -16,6 +15,7 @@ import { adminControlRouter } from './routes/adminRouter';
 import atomicdocs from 'atomicdocs';
 import { createHonoExpressMiddleware } from './hono/expressAdapter';
 import { honoApp } from './hono/app';
+import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
 
 const app = express()
 const PORT = Number(process.env.PORT) || 8000;
@@ -24,9 +24,9 @@ app.set('trust proxy', 1);
 
 app.use(express.json());
 
-const FE_URL = process.env.FE_URL as string
+const FE_URL = process.env.FE_URL;
 
-const FRONTEND_URL = [ FE_URL,  'http://localhost:3000', 'https://zynvo.social', 'https://zynvo-main.vercel.app'];
+const FRONTEND_URL = [ FE_URL,  'http://localhost:3000', 'https://zynvo.social', 'https://zynvo-main.vercel.app'].filter(Boolean) as string[];
 app.use(cors({
   origin: FRONTEND_URL,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
@@ -44,6 +44,33 @@ if (process.env.NODE_ENV !== 'production') {
   }));
 }
 
+const apolloServer = createApolloServer();
+let apolloStartPromise: Promise<void> | null = null;
+let apolloMiddleware: ReturnType<typeof createGraphQLMiddleware> | null = null;
+
+const getApolloMiddleware = async () => {
+  if (apolloMiddleware) {
+    return apolloMiddleware;
+  }
+
+  if (!apolloStartPromise) {
+    apolloStartPromise = apolloServer.start();
+  }
+
+  await apolloStartPromise;
+  apolloMiddleware = createGraphQLMiddleware(apolloServer);
+  return apolloMiddleware;
+};
+
+app.use('/graphql', async (req, res, next) => {
+  try {
+    const middleware = await getApolloMiddleware();
+    return middleware(req, res, next);
+  } catch (error) {
+    return next(error);
+  }
+});
+
 //-----------------V1 routes------------------------
 
 app.use('/api/v1/user', limiter);
@@ -57,6 +84,7 @@ app.use('/api/v1/contact', contactRouter);
 //------------------- V2 routes --------------------
 
 app.use('/api/v2/admin', adminControlRouter)
+app.use('/api/v2/user/auth', userRouter);
 
 app.get('/health', (_req: any, res: any) => {
   res.status(200).json({ msg: 'good health' });
@@ -65,7 +93,8 @@ app.get('/health', (_req: any, res: any) => {
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log(`📚 Docs available at http://localhost:${PORT}/docs`);
+    console.log(`Docs available at http://localhost:${PORT}/docs`);
+    console.log(`GraphQL endpoint available at http://localhost:${PORT}/graphql`);
 
     // Register routes after server starts
     atomicdocs.register(app, PORT);

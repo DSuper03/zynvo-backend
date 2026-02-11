@@ -20,6 +20,7 @@ enum clubType  {
 
 model User {
   id            String    @id   @default(cuid())
+  clerkId      String?   @unique
   email         String  @unique
   collegeName   String  @default("not joined")
   name          String?
@@ -27,8 +28,8 @@ model User {
   password      String
   createdAt     DateTime @default(now())
   vToken        String?
-  expiryToken   Int 
-  ValidFor      Int
+  expiryToken   Int? 
+  ValidFor      Int?
   isVerified    Boolean? @default(false)
   clubName      String?  
   clubId        String?  
@@ -182,7 +183,7 @@ model userEvents {
   uniquePassId String? @default("none")
   joinedAt  DateTime @default(now())
   paymentScreenshotUrl String? @default("")
-  paymentStatus String @default("PENDING") // PENDING, CONFIRMED, APPROVED, REJECTED
+  paymentStatus String @default("CONFIRMED") // PENDING, CONFIRMED, APPROVED, REJECTED
   paymentVerifiedAt DateTime?
 
   @@id([userId, eventId]) // Composite primary key
