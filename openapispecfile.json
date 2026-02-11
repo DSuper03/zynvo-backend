@@ -1183,6 +1183,10 @@
                   "eventId": {
                     "type": "string",
                     "description": "Event ID to register for"
+                  },
+                  "paymentProofUrl": {
+                    "type": "string",
+                    "description": "Payment proof screenshot URL (required for paid events)"
                   }
                 }
               }

@@ -29,13 +29,21 @@ const eventSelectBase = {
     participationFee: true,
     posterUrl: true,
     createdAt: true,
-    link1 : true,
-    link2 : true,
-    link3 : true,
+    link1: true,
+    link2: true,
+    link3: true,
     whatsappLink: true,
     isPaid: true,
-    qrCodeUrl: true
+    Fees: true,
+    qrCodeUrl: true,
 } as const;
+
+// Surface payment amount under friendlier keys for responses.
+const mapEventFees = <T extends { Fees?: string | null }>(event: T) => ({
+    ...event,
+    paymentAmount: event.Fees,
+    fees: event.Fees,
+});
 
 export const createEvent = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
@@ -71,7 +79,7 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         tagline,
         applicationStartDate,
         applicationEndDate,
-        coreTeamOnly
+        coreTeamOnly,
     } = req.body;
 
     const userId = req.id;
@@ -172,7 +180,7 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
                 posterUrl: parsedData.data.image,
                 eventHeaderImage : parsedData.data.image,
                 Form : parsedData.data.form ? parsedData.data.form : "none",
-                Fees : parsedData.data.paymentAmount || parsedData.data.fees || "none",
+                Fees : parsedData.data.paymentAmount ?? parsedData.data.fees ?? "none",
                 link1 : parsedData.data.link1 ? parsedData.data.link1 : null,
                 link2 : parsedData.data.link2 ? parsedData.data.link2 : null,
                 link3 : parsedData.data.link3 ? parsedData.data.link3 : null,
@@ -236,9 +244,11 @@ export const getEventById = async (req: Request, res: Response): Promise<void> =
             eventName: response.EventName
         });
 
+        const mappedEvent = mapEventFees(response);
+
         res.status(200).json({
             msg: 'event found',
-            response,
+            response: mappedEvent,
         });
         return;
 
@@ -279,9 +289,11 @@ export const getEventsByClub = async (req: Request, res: Response): Promise<void
             eventsCount: events.length
         });
 
+        const mappedEvents = events.map(mapEventFees);
+
         res.status(200).json({
             msg: 'fetched',
-            event: events,
+            event: mappedEvents,
         });
 
     } catch (error: any) {
@@ -348,9 +360,11 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
             totalPages: Math.ceil(totalData / limit)
         });
 
+        const mappedResponse = response.map(mapEventFees);
+
         res.status(200).json({
             msg: 'found',
-            response: response,
+            response: mappedResponse,
             totalPages: Math.ceil(totalData / limit)
         });
 
@@ -366,7 +380,8 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
 export const registerForEvent = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const userId = req.id;
-    const { eventId, paymentScreenshotUrl } = req.body;
+    const { eventId, paymentScreenshotUrl, paymentProofUrl } = req.body;
+    const paymentScreenshot = paymentScreenshotUrl ?? paymentProofUrl;
 
     logger.info(`[${requestId}] POST /registerEvent - Starting registration`, {
         userId,
@@ -412,7 +427,7 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
         }
 
         // If event is paid, payment screenshot is required
-        if (event.isPaid && !paymentScreenshotUrl) {
+        if (event.isPaid && !paymentScreenshot) {
             logger.warn(`[${requestId}] Payment screenshot missing for paid event`, {
                 userId,
                 eventId
@@ -432,7 +447,7 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
                 userId: userId,
                 eventId: eventId,
                 uniquePassId: generateUUID(),
-                paymentScreenshotUrl: paymentScreenshotUrl || null,
+                paymentScreenshotUrl: paymentScreenshot || null,
                 paymentStatus: event.isPaid ? 'PENDING' : 'CONFIRMED'
             },
             select: {

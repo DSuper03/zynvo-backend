@@ -451,7 +451,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"eventId\": \":eventId\"\n}"
+              "raw": "{\n  \"eventId\": \":eventId\",\n  \"paymentProofUrl\": \"https://example.com/payment-proof.jpg\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/events/registerEvent",
