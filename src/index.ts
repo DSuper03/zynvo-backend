@@ -1,6 +1,7 @@
-import dotenv from 'dotenv';
+﻿import dotenv from 'dotenv';
 dotenv.config();
 import express from 'express';
+
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
 import { userRouter } from './routes/userRouter';
@@ -9,17 +10,19 @@ import { limiter } from './utils/rate-limiter';
 import { contactRouter } from './routes/contactRouter';
 import { EventRouter } from './routes/eventRouter';
 import { clubRouter } from './routes/clubRouter';
-import path from 'path';
+import openapiSpec from '../openapispecfile.json';
 import { adminControlRouter } from './routes/adminRouter';
+import atomicdocs from 'atomicdocs';
+import { createHonoExpressMiddleware } from './hono/expressAdapter';
+import { honoApp } from './hono/app';
 import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
 import { getRequestListener } from '@hono/node-server';
-import { honoApp } from './hono/app';
+import path from 'path';
 
 const app = express()
 const PORT = Number(process.env.PORT) || 8000;
 
 // Create Apollo Server
-const apolloServer = createApolloServer();
 
 const swaggerSpecPath = path.join(__dirname, '..', 'openapispecfile.json');
 
@@ -27,9 +30,9 @@ app.set('trust proxy', 1);
 
 app.use(express.json());
 
-const FE_URL = process.env.FE_URL as string
+const FE_URL = process.env.FE_URL;
 
-const FRONTEND_URL = [ FE_URL,  'http://localhost:3000', 'https://zynvo.social', 'https://zynvo-main.vercel.app'];
+const FRONTEND_URL = [ FE_URL,  'http://localhost:3000', 'https://zynvo.social', 'https://zynvo-main.vercel.app'].filter(Boolean) as string[];
 app.use(cors({
   origin: FRONTEND_URL,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
@@ -38,27 +41,48 @@ app.options('*', cors({
   origin: FRONTEND_URL
 }));
 
-if (process.env.NODE_ENV !== 'production') {
-  app.get('/docs/openapi.json', (_req, res) => {
-    res.sendFile(swaggerSpecPath);
-  });
+const honoMiddleware = createHonoExpressMiddleware(honoApp);
 
-  app.use(
-    '/docs',
-    swaggerUi.serve,
-    swaggerUi.setup(undefined, {
-      swaggerOptions: { url: '/docs/openapi.json' },
-      customSiteTitle: 'Zynvo API Documentation',
-      customCss: '.swagger-ui .topbar { display: none }'
-    })
-  );
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec, {
+    customSiteTitle: 'Zynvo API Documentation',
+    customCss: '.swagger-ui .topbar { display: none }'
+  }));
 }
+
+const apolloServer = createApolloServer();
+let apolloStartPromise: Promise<void> | null = null;
+let apolloMiddleware: ReturnType<typeof createGraphQLMiddleware> | null = null;
+
+const getApolloMiddleware = async () => {
+  if (apolloMiddleware) {
+    return apolloMiddleware;
+  }
+
+  if (!apolloStartPromise) {
+    apolloStartPromise = apolloServer.start();
+  }
+
+  await apolloStartPromise;
+  apolloMiddleware = createGraphQLMiddleware(apolloServer);
+  return apolloMiddleware;
+};
+
+app.use('/graphql', async (req, res, next) => {
+  try {
+    const middleware = await getApolloMiddleware();
+    return middleware(req, res, next);
+  } catch (error) {
+    return next(error);
+  }
+});
 
 //-----------------V1 routes------------------------
 
 app.use('/api/v1/user', limiter);
 app.use('/api/v1/user', userRouter);
 app.use('/api/v1/post', postRouter);
+app.use('/api/hono/v1', honoMiddleware);
 app.use('/api/v1/events', EventRouter);
 app.use('/api/v1/clubs', clubRouter);
 app.use('/api/v1/contact', contactRouter);
@@ -96,7 +120,8 @@ app.listen(PORT, async () => {
   // Start Apollo Server
   await apolloServer.start();
 
-  // Add GraphQL endpoint after server starts
-  app.use('/graphql', createGraphQLMiddleware(apolloServer));
+    // Register routes after server starts
+    atomicdocs.register(app, PORT);
+  });
 
-});
+export default app;
