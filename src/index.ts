@@ -12,7 +12,7 @@ import { EventRouter } from './routes/eventRouter';
 import { clubRouter } from './routes/clubRouter';
 import openapiSpec from '../openapispecfile.json';
 import { adminControlRouter } from './routes/adminRouter';
-import atomicdocs from 'atomicdocs';
+// ort atomicdocs from 'atomicdocs';
 import { createHonoExpressMiddleware } from './hono/expressAdapter';
 import { honoApp } from './hono/app';
 import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
@@ -118,10 +118,6 @@ app.listen(PORT, async () => {
     console.log(`✨ Hono app available at http://localhost:${PORT}/hono (e.g. /hono/health, /hono/api/v1/events)`);
   
   // Start Apollo Server
-  await apolloServer.start();
-
-    // Register routes after server starts
-    atomicdocs.register(app, PORT);
-  });
+})
 
 export default app;
