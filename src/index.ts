@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import 'atomicdocs'
 import express from 'express';
+
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
 import { userRouter } from './routes/userRouter';
@@ -13,10 +14,11 @@ import { clubRouter } from './routes/clubRouter';
 import openapiSpec from '../openapispecfile.json';
 import { adminControlRouter } from './routes/adminRouter';
 import atomicdocs from 'atomicdocs';
-import { startHonoServer } from './hono/server';
+import { createHonoExpressMiddleware } from './hono/expressAdapter';
+import { honoApp } from './hono/app';
 
 const app = express()
-const PORT = 8000;
+const PORT = Number(process.env.PORT) || 8000;
 app.use(atomicdocs());
 app.set('trust proxy', 1);
 
@@ -33,6 +35,8 @@ app.options('*', cors({
   origin: FRONTEND_URL
 }));
 
+const honoMiddleware = createHonoExpressMiddleware(honoApp);
+
 if (process.env.NODE_ENV !== 'production') {
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec, {
     customSiteTitle: 'Zynvo API Documentation',
@@ -45,6 +49,7 @@ if (process.env.NODE_ENV !== 'production') {
 app.use('/api/v1/user', limiter);
 app.use('/api/v1/user', userRouter);
 app.use('/api/v1/post', postRouter);
+app.use('/api/hono/v1', honoMiddleware);
 app.use('/api/v1/events', EventRouter);
 app.use('/api/v1/clubs', clubRouter);
 app.use('/api/v1/contact', contactRouter);
@@ -57,12 +62,14 @@ app.get('/health', (_req: any, res: any) => {
   res.status(200).json({ msg: 'good health' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
     console.log(`📚 Docs available at http://localhost:${PORT}/docs`);
-  
-  // Register routes after server starts
-  atomicdocs.register(app, PORT);
-  startHonoServer();
 
-});
+    // Register routes after server starts
+    atomicdocs.register(app, PORT);
+  });
+}
+
+export default app;

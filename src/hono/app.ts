@@ -5,6 +5,7 @@ import eventsRouter from './routes/events';
 import type { HonoEnv } from './types';
 
 export const honoApp = new Hono<HonoEnv>();
+export const HONO_NOT_FOUND_HEADER = 'x-hono-not-found';
 
 const FE_URL = process.env.FE_URL;
 const FRONTEND_URL = [
@@ -25,5 +26,10 @@ honoApp.use(
   }),
 );
 
+honoApp.notFound((c) => {
+  c.header(HONO_NOT_FOUND_HEADER, '1');
+  return c.json({ msg: 'not found' }, 404);
+});
+
 honoApp.get('/health', (c) => c.json({ msg: 'good health' }));
-honoApp.route('/api/v1/events', eventsRouter);
+honoApp.route('/events', eventsRouter);
