@@ -16,10 +16,16 @@ import atomicdocs from 'atomicdocs';
 import { createHonoExpressMiddleware } from './hono/expressAdapter';
 import { honoApp } from './hono/app';
 import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
+import { getRequestListener } from '@hono/node-server';
+import path from 'path';
 
 const app = express()
 const PORT = Number(process.env.PORT) || 8000;
-app.use(atomicdocs());
+
+// Create Apollo Server
+
+const swaggerSpecPath = path.join(__dirname, '..', 'openapispecfile.json');
+
 app.set('trust proxy', 1);
 
 app.use(express.json());
@@ -86,19 +92,36 @@ app.use('/api/v1/contact', contactRouter);
 app.use('/api/v2/admin', adminControlRouter)
 app.use('/api/v2/user/auth', userRouter);
 
+//------------------- Hono (mounted at /hono) --------------------
+// Routes: /hono/health, /hono/api/v1/events
+const honoHandler = getRequestListener(honoApp.fetch);
+app.use('/hono', (req, res, next) => {
+  // Hono's listener uses req.url; Express gives mounted path in req.path
+  const query = req.url?.includes('?') ? '?' + req.url.split('?')[1] : '';
+  const originalUrl = req.url;
+  req.url = (req.path || '/') + query;
+  honoHandler(req, res)
+    .catch(next)
+    .finally(() => { req.url = originalUrl; });
+});
+
+// GraphQL endpoint will be added after server starts
+
 app.get('/health', (_req: any, res: any) => {
   res.status(200).json({ msg: 'good health' });
 });
 
-if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Docs available at http://localhost:${PORT}/docs`);
-    console.log(`GraphQL endpoint available at http://localhost:${PORT}/graphql`);
+app.listen(PORT, async () => {
+  console.log(`Server running on port ${PORT}`);
+    console.log(`📚 Docs available at http://localhost:${PORT}/docs`);
+    console.log(`🚀 GraphQL endpoint available at http://localhost:${PORT}/graphql`);
+    console.log(`✨ Hono app available at http://localhost:${PORT}/hono (e.g. /hono/health, /hono/api/v1/events)`);
+  
+  // Start Apollo Server
+  await apolloServer.start();
 
     // Register routes after server starts
     atomicdocs.register(app, PORT);
   });
-}
 
 export default app;
