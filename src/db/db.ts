@@ -1,3 +1,11 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Ensure dotenv is loaded before accessing env vars
+if (!process.env.DIRECT_DATABASE_URL && !process.env.DATABASE_URL) {
+  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+}
+
 import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from '@prisma/adapter-pg'
 

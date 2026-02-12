@@ -1,11 +1,35 @@
 ﻿import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+
+// Load .env file from project root with explicit path
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
 import express from 'express';
 
 // Log startup info
 console.log('🚀 Starting Zynvo Backend...');
 console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
 console.log(`🔌 PORT: ${process.env.PORT || 8000}`);
+
+// Validate required environment variables
+const requiredEnvVars = ['JWT_SECRET'];
+const conditionalEnvVars = process.env.NODE_ENV === 'production' 
+  ? ['DIRECT_DATABASE_URL', 'REDIS_URL']
+  : [];
+
+const missingEnvVars = [
+  ...requiredEnvVars.filter(v => !process.env[v]),
+  ...conditionalEnvVars.filter(v => !process.env[v])
+];
+
+if (missingEnvVars.length > 0) {
+  console.warn(`⚠️  Missing environment variables: ${missingEnvVars.join(', ')}`);
+  if (process.env.NODE_ENV === 'production') {
+    console.error(`❌ FATAL: Required env vars missing in production. Please set them in your Render environment variables.`);
+    console.error(`Missing: ${missingEnvVars.join(', ')}`);
+    process.exit(1);
+  }
+}
 
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
@@ -22,7 +46,6 @@ import { createHonoExpressMiddleware } from './hono/expressAdapter';
 import { honoApp } from './hono/app';
 import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
 import { getRequestListener } from '@hono/node-server';
-import path from 'path';
 
 const app = express()
 const PORT = Number(process.env.PORT) || 8000;

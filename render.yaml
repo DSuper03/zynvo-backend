@@ -1,5 +1,6 @@
 # Render Blueprint - use this so the service starts the built app (not dev)
 # https://render.com/docs/blueprint-spec
+
 services:
   - type: web
     name: zynvo-backend
@@ -7,3 +8,16 @@ services:
     buildCommand: npm install && npx prisma generate && npm run build
     startCommand: npm run start
     healthCheckPath: /health
+    envVars:
+      # Add these environment variables to Render:
+      # DATABASE_URL - Your Prisma connection string
+      # DIRECT_DATABASE_URL - Direct database connection (for PrismaPg)
+      # REDIS_URL - Redis connection string
+      # JWT_SECRET - JWT signing secret
+      # SENDGRID_API_KEY - SendGrid API key for emails
+      # FE_URL - Frontend URL for CORS
+      # NODE_ENV - Set to "production" (Render does this automatically)
+      
+      # These will be set automatically by Render or should be set in dashboard
+      - key: NODE_ENV
+        value: production
