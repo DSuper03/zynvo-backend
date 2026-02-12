@@ -2,7 +2,11 @@ import { prisma } from '../db/db';
 
 export const resolvers = {
   Query: {
-    users: async () => {
+    users: async (_: any, { limit = 50, skip = 0 }: { limit?: number; skip?: number }) => {
+      // Cap limit to prevent memory exhaustion
+      const safeLimit = Math.min(limit, 1000);
+      const safeSkip = Math.max(skip, 0);
+      
       return await prisma.user.findMany({
         select: {
           id: true,
@@ -13,6 +17,8 @@ export const resolvers = {
           clubName: true,
           createdAt: true,
         },
+        take: safeLimit,
+        skip: safeSkip,
       });
     },
 
@@ -35,7 +41,7 @@ export const resolvers = {
       return await prisma.user.findMany({
         where: {
           email: {
-            in: emails,
+            in: emails.slice(0, 1000), // Cap input to prevent memory exhaustion
           },
         },
         select: {
@@ -50,7 +56,10 @@ export const resolvers = {
       });
     },
 
-    usersByCollege: async (_: any, { collegeName }: { collegeName: string }) => {
+    usersByCollege: async (_: any, { collegeName, limit = 100, skip = 0 }: { collegeName: string; limit?: number; skip?: number }) => {
+      const safeLimit = Math.min(limit, 1000);
+      const safeSkip = Math.max(skip, 0);
+      
       return await prisma.user.findMany({
         where: {
           collegeName,
@@ -64,18 +73,28 @@ export const resolvers = {
           clubName: true,
           createdAt: true,
         },
+        take: safeLimit,
+        skip: safeSkip,
       });
     },
 
-    emailsByCollege: async (_: any, { collegeName }: { collegeName: string }) => {
-       const users = await prisma.user.findMany({
+    emailsByCollege: async (_: any, { collegeName, limit = 100, skip = 0 }: { collegeName: string; limit?: number; skip?: number }) => {
+      const safeLimit = Math.min(limit, 1000);
+      const safeSkip = Math.max(skip, 0);
+      
+      const users = await prisma.user.findMany({
         where: { collegeName },
-         select: { email: true }
-        });
-       return users.map(user => user.email);
-   },
+        select: { email: true },
+        take: safeLimit,
+        skip: safeSkip,
+      });
+      return users.map(user => user.email);
+    },
 
-    verifiedUsers: async () => {
+    verifiedUsers: async (_: any, { limit = 50, skip = 0 }: { limit?: number; skip?: number }) => {
+      const safeLimit = Math.min(limit, 1000);
+      const safeSkip = Math.max(skip, 0);
+      
       return await prisma.user.findMany({
         where: {
           isVerified: true,
@@ -89,6 +108,8 @@ export const resolvers = {
           clubName: true,
           createdAt: true,
         },
+        take: safeLimit,
+        skip: safeSkip,
       });
     },
   },
