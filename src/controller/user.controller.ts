@@ -32,6 +32,7 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
                 eventAttended: {
                     where: { userId: userId },
                     select: {
+                        uniquePassId: true,
                         event: {
                             select: {
                                 EventName: true,
@@ -367,6 +368,7 @@ export const getPublicUser = async (req: Request, res: Response): Promise<void> 
                 eventAttended: {
                     where: { userId: userId },
                     select: {
+                        uniquePassId: true,
                         event: {
                             select: {
                                 EventName: true,
