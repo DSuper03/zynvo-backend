@@ -6,8 +6,8 @@ if (!process.env.DIRECT_DATABASE_URL && !process.env.DATABASE_URL) {
   dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 }
 
-import { PrismaClient } from "../generated/prisma";
 import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaClient } from '@prisma/client';
 
 const dbUrl = process.env.DIRECT_DATABASE_URL || process.env.DATABASE_URL;
 
