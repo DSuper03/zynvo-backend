@@ -1,6 +1,35 @@
 ﻿import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+
+// Load .env file from project root with explicit path
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
 import express from 'express';
+
+
+console.log('🚀 Starting Zynvo Backend...');
+console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+console.log(`🔌 PORT: ${process.env.PORT || 8000}`);
+
+
+const requiredEnvVars = ['JWT_SECRET'];
+const conditionalEnvVars = process.env.NODE_ENV === 'production' 
+  ? ['DIRECT_DATABASE_URL', 'REDIS_URL']
+  : [];
+
+const missingEnvVars = [
+  ...requiredEnvVars.filter(v => !process.env[v]),
+  ...conditionalEnvVars.filter(v => !process.env[v])
+];
+
+if (missingEnvVars.length > 0) {
+  console.warn(`⚠️  Missing environment variables: ${missingEnvVars.join(', ')}`);
+  if (process.env.NODE_ENV === 'production') {
+    console.error(`❌ FATAL: Required env vars missing in production. Please set them in your Render environment variables.`);
+    console.error(`Missing: ${missingEnvVars.join(', ')}`);
+    process.exit(1);
+  }
+}
 
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
@@ -17,12 +46,14 @@ import { createHonoExpressMiddleware } from './hono/expressAdapter';
 import { honoApp } from './hono/app';
 import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
 import { getRequestListener } from '@hono/node-server';
-import path from 'path';
 
 const app = express()
 const PORT = Number(process.env.PORT) || 8000;
 
-// Create Apollo Server
+console.log('⚙️  Setting up middleware and routes...');
+
+try {
+  // Create Apollo Server
 
 const swaggerSpecPath = path.join(__dirname, '..', 'openapispecfile.json');
 
@@ -111,13 +142,39 @@ app.get('/health', (_req: any, res: any) => {
   res.status(200).json({ msg: 'good health' });
 });
 
-app.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
-    console.log(`📚 Docs available at http://localhost:${PORT}/docs`);
-    console.log(`🚀 GraphQL endpoint available at http://localhost:${PORT}/graphql`);
-    console.log(`✨ Hono app available at http://localhost:${PORT}/hono (e.g. /hono/health, /hono/api/v1/events)`);
-  
-  // Start Apollo Server
-})
+// Error handler middleware
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+console.log('✅ Middleware and routes configured successfully');
+
+} catch (error) {
+  console.error('❌ Failed to configure middleware/routes:', error);
+  process.exit(1);
+}
+
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`📚 Docs available at http://localhost:${PORT}/docs`);
+  console.log(`🚀 GraphQL endpoint available at http://localhost:${PORT}/graphql`);
+  console.log(`✨ Hono app available at http://localhost:${PORT}/hono`);
+});
+
+// Handle connection errors
+server.on('error', (err: any) => {
+  console.error('Server error:', err);
+  process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
 
 export default app;

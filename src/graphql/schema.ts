@@ -12,12 +12,12 @@ export const typeDefs = gql`
   }
 
   type Query {
-    users: [User!]!
+    users(limit: Int, skip: Int): [User!]!
     user(id: String!): User
     usersByEmail(emails: [String!]!): [User!]!
-    usersByCollege(collegeName: String!): [User!]!
-    emailsByCollege(collegeName: String!): [String!]!
-    verifiedUsers: [User!]!
+    usersByCollege(collegeName: String!, limit: Int, skip: Int): [User!]!
+    emailsByCollege(collegeName: String!, limit: Int, skip: Int): [String!]!
+    verifiedUsers(limit: Int, skip: Int): [User!]!
   }
 
   type Mutation {

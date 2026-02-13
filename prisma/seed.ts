@@ -190,13 +190,13 @@ async function readCsv(filePath: string): Promise<CsvRow[]> {
     fs.createReadStream(filePath)
       .pipe(
         csvParser({
-          mapHeaders: ({ header }) =>
+          mapHeaders: ({ header }: { header: string }) =>
             header?.trim?.().replace(/^\uFEFF/, '') ?? header,
-          mapValues: ({ value }) =>
+          mapValues: ({ value }: { value: string }) =>
             typeof value === 'string' ? value.trim() : value,
         }),
       )
-      .on('data', (row) => rows.push(row as CsvRow))
+      .on('data', (row:any) => rows.push(row as CsvRow))
       .on('error', reject)
       .on('end', () => resolve(rows));
   });

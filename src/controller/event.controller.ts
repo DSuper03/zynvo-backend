@@ -3,8 +3,11 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { EventSchema } from '../types/formtypes';
 import { generateRequestId, generateUUID, sendErrorResponse } from '../utils/helper';
-import { Prisma } from '../generated/prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
+
+
+ // Temporary workaround for the Prisma type issue in eventAttendees function
 const eventSelectBase = {
     id: true,
     EventName: true,
