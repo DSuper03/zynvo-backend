@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum clubType {
+  Technology
+  Cultural
+  Business
+  Social
+  Literature
+  Design
+  General
+}
+
+model User {
+  id            String         @id @default(cuid())
+  clerkId       String?        @unique
+  email         String         @unique
+  collegeName   String         @default("not joined")
+  name          String?
+  profileAvatar String?
+  password      String
+  createdAt     DateTime       @default(now())
+  vToken        String?
+  expiryToken   Int?
+  ValidFor      Int?
+  isVerified    Boolean?       @default(false)
+  clubName      String?
+  clubId        String?
+  bio           String?        @default("Zynvo Community Fresher")
+  tags          String[]       @default([])
+  course        String?        @default("")
+  year          String?        @default("")
+  phone         String?        @default("")
+  twitter       String?        @default("")
+  linkedin      String?        @default("")
+  instagram     String?        @default("")
+  eventAttended userEvents[]
+  club          clubs?         @relation(fields: [clubId], references: [id])
+  CreatePost    CreatePost[]
+  postUpvotes   PostUpvote[]
+  postDownvotes PostDownvote[]
+}
+
+model clubs {
+  id            String             @id @default(uuid())
+  name          String
+  founderEmail  String             @unique @default("none")
+  coremember1   String?            @default("none")
+  coremember2   String?            @default("none")
+  coremember3   String?            @default("none")
+  facultyEmail  String             @default("none")
+  collegeName   String
+  collegeId     String             @unique @default(uuid())
+  type          String             @default("General")
+  description   String
+  requirements  String?            @default("none")
+  profilePicUrl String?
+  clubContact   String             @default("none")
+  wings         String[]           @default([])
+  instagram     String?
+  twitter       String?
+  linkedin      String?
+  // is Accepted boolean default false true how , will be changed by us 
+  //relations 
+  posts         CreatePost[]
+  members       User[]
+  events        event[]
+  announcements clubAnnouncement[]
+}
+
+model CreatePost {
+  id          String         @id @default(uuid())
+  title       String
+  description String
+  image       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  published   Boolean        @default(false)
+  collegeName String         @default("zync college")
+  clubName    String         @default("zync club")
+  collegeId   String?
+  club        clubs?         @relation(fields: [collegeId], references: [collegeId])
+  authorId    String
+  author      User           @relation(fields: [authorId], references: [id])
+  upvotes     PostUpvote[]
+  downvotes   PostDownvote[]
+}
+
+model speakers {
+  id         Int     @id @default(autoincrement())
+  profilePic String?
+  about      String
+  name       String
+  email      String  @unique
+  eventId    String
+  event      event   @relation(fields: [eventId], references: [id])
+}
+
+model event {
+  id                   String              @id @default(uuid())
+  posterUrl            String?             @default("")
+  EventMode            String              @default("Hybrid") //online, offline, Hybrid
+  EventType            String              @default("general") // give the options on frontend
+  eventHeaderImage     String?             @default("none")
+  EventName            String              @unique
+  description          String
+  tagline              String?             @default("")
+  prizes               String              @default("no prizes given")
+  TeamSize             Int                 @default(1)
+  Venue                String              @default("")
+  EventUrl             String?             @default("")
+  applicationStatus    String              @default("open") // open/ closed , frontend par button hoga jo ki core member click krke isko close kr skta hai as desired.
+  applicationStartDate String?             @default("")
+  applicationEndDate   String?             @default("")
+  clubName             String
+  clubId               String
+  university           String
+  createdAt            DateTime            @default(now())
+  startDate            String
+  endDate              String?
+  collegeStudentsOnly  Boolean             @default(true)
+  participationFee     Boolean             @default(false)
+  contactEmail         String
+  contactPhone         String?
+  Form                 String?
+  Fees                 String?             @default("none")
+  link1                String?
+  link2                String?
+  link3                String?
+  whatsappLink         String?             @default("")
+  isPaid               Boolean             @default(false)
+  qrCodeUrl            String?             @default("")
+  club                 clubs               @relation(fields: [clubId], references: [id])
+  speakers             speakers[]
+  attendees            userEvents[]
+  announcements        eventAnnouncement[]
+  galleries            eventGallery[]
+}
+
+model eventAnnouncement {
+  id          String    @id @default(uuid())
+  Title       String
+  Description String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime?
+  eventId     String
+  event       event     @relation(fields: [eventId], references: [id])
+}
+
+model eventGallery {
+  id        String    @id @default(uuid())
+  imageUrl  String
+  caption   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime?
+  eventId   String
+  event     event     @relation(fields: [eventId], references: [id])
+}
+
+model clubAnnouncement {
+  id          String    @id @default(uuid())
+  Title       String
+  Description String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime?
+  clubId      String
+  club        clubs     @relation(fields: [clubId], references: [id])
+}
+
+model userEvents {
+  user                 User      @relation(fields: [userId], references: [id])
+  userId               String
+  event                event     @relation(fields: [eventId], references: [id])
+  eventId              String
+  uniquePassId         String?   @default("none")
+  joinedAt             DateTime  @default(now())
+  paymentScreenshotUrl String?   @default("")
+  paymentStatus        String    @default("CONFIRMED") // PENDING, CONFIRMED, APPROVED, REJECTED
+  paymentVerifiedAt    DateTime?
+
+  @@id([userId, eventId]) // Composite primary key
+}
+
+model PostUpvote {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post CreatePost @relation(fields: [postId], references: [id])
+  user User       @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId])
+}
+
+model PostDownvote {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post CreatePost @relation(fields: [postId], references: [id])
+  user User       @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId])
+}

@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { EventSchema } from '../types/formtypes';
 import { generateRequestId, generateUUID, sendErrorResponse } from '../utils/helper';
-import { Prisma } from '../generated/prisma/client';
+import { Prisma } from '../generated/prisma';
 
 const eventSelectBase = {
     id: true,

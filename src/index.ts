@@ -6,12 +6,12 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 import express from 'express';
 
-// Log startup info
+
 console.log('🚀 Starting Zynvo Backend...');
 console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
 console.log(`🔌 PORT: ${process.env.PORT || 8000}`);
 
-// Validate required environment variables
+
 const requiredEnvVars = ['JWT_SECRET'];
 const conditionalEnvVars = process.env.NODE_ENV === 'production' 
   ? ['DIRECT_DATABASE_URL', 'REDIS_URL']
