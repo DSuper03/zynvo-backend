@@ -451,7 +451,9 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
                 eventId: eventId,
                 uniquePassId: generateUUID(),
                 paymentScreenshotUrl: paymentScreenshot || null,
-                paymentStatus: event.isPaid ? 'PENDING' : 'CONFIRMED'
+                paymentStatus: event.isPaid
+                    ? (paymentScreenshot ? 'CONFIRMED' : 'PENDING')
+                    : 'CONFIRMED'
             },
             select: {
                 uniquePassId: true,
@@ -762,8 +764,6 @@ export const eventAttendees = async (req: Request, res: Response) => {
         "Name",
         "Email",
         "College",
-        "Course",
-        "Year",
         "Joined At",
         "Pass ID",
         "Payment Status",
@@ -795,8 +795,6 @@ export const eventAttendees = async (req: Request, res: Response) => {
                 name: true;
                 email: true;
                 collegeName: true;
-                course: true;
-                year: true;
               };
             };
           };
@@ -818,8 +816,6 @@ export const eventAttendees = async (req: Request, res: Response) => {
                 name: true,
                 email: true,
                 collegeName: true,
-                course: true,
-                year: true
               }
             }
           }
@@ -836,8 +832,6 @@ export const eventAttendees = async (req: Request, res: Response) => {
             u.name ?? "",
             u.email ?? "",
             u.collegeName ?? "",
-            u.course ?? "",
-            u.year ?? "",
             p.joinedAt.toISOString(),
             p.uniquePassId ?? "",
             p.paymentStatus ?? "CONFIRMED",
