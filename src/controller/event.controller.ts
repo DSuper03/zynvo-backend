@@ -726,6 +726,133 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
     }
 };
 
+export const getUserDetailsByPassId = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const id = req.query.id as string;
+    const requesterId = req.id;
+
+    logger.info(`[${requestId}] GET /user-details - Starting request`, {
+        passId: id,
+        requesterId
+    });
+
+    if (!requesterId) {
+        logger.warn(`[${requestId}] Invalid user ID`);
+        sendErrorResponse(res, requestId, 'invalid user', 401);
+        return;
+    }
+
+    if (!id?.startsWith('Z')) {
+        logger.warn(`[${requestId}] Invalid pass ID format`, { passId: id });
+        res.status(502).json({
+            status: 'invalid'
+        });
+        return;
+    }
+
+    try {
+        const registration = await prisma.userEvents.findFirst({
+            where: { uniquePassId: id },
+            select: {
+                userId: true,
+                uniquePassId: true,
+                joinedAt: true,
+                paymentStatus: true,
+                event: {
+                    select: {
+                        EventName: true,
+                        clubId: true
+                    }
+                },
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        collegeName: true,
+                        course: true,
+                        year: true,
+                        profileAvatar: true
+                    }
+                }
+            }
+        });
+
+        if (!registration) {
+            logger.warn(`[${requestId}] Registration not found`, { passId: id });
+            res.status(404).json({ data: {} });
+            return;
+        }
+
+        const isSelf = registration.userId === requesterId;
+
+        if (!isSelf) {
+            const requester = await prisma.user.findUnique({
+                where: { id: requesterId },
+                select: { email: true }
+            });
+
+            if (!requester?.email) {
+                logger.warn(`[${requestId}] Requester not found`, { requesterId });
+                sendErrorResponse(res, requestId, 'User not found', 404);
+                return;
+            }
+
+            const club = registration.event?.clubId
+                ? await prisma.clubs.findUnique({
+                      where: { id: registration.event.clubId },
+                      select: {
+                          founderEmail: true,
+                          coremember1: true,
+                          coremember2: true,
+                          coremember3: true
+                      }
+                  })
+                : null;
+
+            const adminEmailsEnv = process.env.ADMIN_EMAILS || '';
+            const adminEmails = adminEmailsEnv
+                .split(',')
+                .map((e) => e.trim().toLowerCase())
+                .filter(Boolean);
+
+            const requesterEmail = requester.email.toLowerCase();
+            const isFounder = !!club?.founderEmail && club.founderEmail.toLowerCase() === requesterEmail;
+            const isCore = [club?.coremember1, club?.coremember2, club?.coremember3].some(
+                (c) => c && c.toLowerCase() === requesterEmail
+            );
+            const isSiteAdmin = adminEmails.includes(requesterEmail);
+
+            if (!isFounder && !isCore && !isSiteAdmin) {
+                res.status(403).json({ message: 'Access denied' });
+                return;
+            }
+        }
+
+        logger.info(`[${requestId}] User details found`, {
+            passId: id,
+            userId: registration.user.id
+        });
+
+        res.status(200).json({
+            data: {
+                passId: registration.uniquePassId,
+                eventName: registration.event?.EventName ?? '',
+                joinedAt: registration.joinedAt,
+                paymentStatus: registration.paymentStatus,
+                user: registration.user
+            }
+        });
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error fetching user details`, {
+            error: error.message,
+            stack: error.stack,
+            passId: id
+        });
+        sendErrorResponse(res, requestId, 'internal server error', 500);
+    }
+};
+
 
 export const eventAttendees = async (req: Request, res: Response) => {
   const requestId = generateRequestId();
