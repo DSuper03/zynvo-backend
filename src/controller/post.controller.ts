@@ -59,39 +59,38 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
-        if (!user.clubId) {
-            logger.warn(`[${requestId}] User not associated with any club`, { userId });
-            sendErrorResponse(res, requestId, 'no club found associated to you, either join a club or create one', 404);
-            return;
-        }
+        let club: { collegeId: string; name: string } | null = null;
+        if (user.clubId) {
+            logger.info(`[${requestId}] Fetching club information`, { clubId: user.clubId });
 
-        logger.info(`[${requestId}] Fetching club information`, { clubId: user.clubId });
+            club = await prisma.clubs.findUnique({
+                where: { id: user.clubId },
+                select: {
+                    collegeId: true,
+                    name: true,
+                },
+            });
 
-        const club = await prisma.clubs.findUnique({
-            where: { id: user.clubId },
-            select: {
-                collegeId: true,
-                name: true,
-            },
-        });
-
-        if (!club) {
-            logger.warn(`[${requestId}] Club not found`, { clubId: user.clubId });
-            sendErrorResponse(res, requestId, 'no club found associated to you, either join a club or create one', 404);
-            return;
+            if (!club) {
+                logger.warn(`[${requestId}] Club not found`, { clubId: user.clubId });
+                sendErrorResponse(res, requestId, 'no club found associated to you, either join a club or create one', 404);
+                return;
+            }
+        } else {
+            logger.info(`[${requestId}] User has no club, creating post without club association`, { userId });
         }
 
         logger.info(`[${requestId}] Creating post`, {
             userId,
-            clubId: user.clubId,
-            collegeId: club.collegeId
+            clubId: user.clubId ?? null,
+            collegeId: club?.collegeId ?? null
         });
 
         const post = await prisma.createPost.create({
             data: {
                 title: parsedData.data.title,
                 description: parsedData.data.description,
-                collegeId: club.collegeId,
+                collegeId: club?.collegeId,
                 collegeName: collegeName,
                 clubName: clubName,
                 authorId: userId,

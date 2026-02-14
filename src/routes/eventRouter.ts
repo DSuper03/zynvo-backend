@@ -14,6 +14,7 @@ import {
   verifyEventRegistration,
   eventAttendees,
   getEventDetails,
+  getUserDetailsByPassId,
   verifyPayment,
   getPaidEventPayments,
 } from '../controller/event.controller';
@@ -40,6 +41,7 @@ router.post('/addSpeakers',AuthMiddleware,SpecificClubHeadAuthMiddleware, addSpe
 router.get('/getSpeakers', getSpeakers);
 router.get('/ver-event', verifyEventRegistration);
 router.get('/event-details', getEventDetails);
+router.get('/user-details', AuthMiddleware, getUserDetailsByPassId);
 router.get('/participants/:eventId', AuthMiddleware, AdminCoreAuthMiddleware, eventAttendees);
 router.post('/verifyPayment', AuthMiddleware, ClubHeadAuthMiddleware, verifyPayment);
 router.get('/paidEventPayments/:eventId', AuthMiddleware, ClubHeadAuthMiddleware, getPaidEventPayments);
