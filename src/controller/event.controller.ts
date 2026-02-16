@@ -728,87 +728,246 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
 
 export const getUserDetailsByPassId = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
-    const id = req.query.id as string;
+    const startTime = Date.now();
+    const rawId = req.query.id as string;
     const requesterId = req.id;
 
-    logger.info(`[${requestId}] GET /user-details - Starting request`, {
-        passId: id,
-        requesterId
+    // Normalize the pass ID: safely decode URL encoding and trim whitespace
+    let id = '';
+    if (rawId) {
+        try {
+            id = decodeURIComponent(rawId).trim();
+        } catch (e) {
+            // If decoding fails (malformed URI), use raw value trimmed
+            id = rawId.trim();
+            logger.warn(`[${requestId}] Failed to decode pass ID, using raw value`, {
+                rawPassId: rawId,
+                error: (e as Error).message
+            });
+        }
+    }
+
+    logger.info(`[${requestId}] GET /user-details - Request initiated`, {
+        rawPassId: rawId,
+        normalizedPassId: id,
+        passIdLength: id?.length,
+        requesterId,
+        timestamp: new Date().toISOString()
     });
 
+    // Validate requester ID
     if (!requesterId) {
-        logger.warn(`[${requestId}] Invalid user ID`);
-        sendErrorResponse(res, requestId, 'invalid user', 401);
+        logger.warn(`[${requestId}] Unauthorized access attempt - Missing requester ID`, {
+            passId: id,
+            headers: req.headers['user-agent']
+        });
+        sendErrorResponse(res, requestId, 'Unauthorized: Invalid user credentials', 401);
         return;
     }
 
-    if (!id?.startsWith('Z')) {
-        logger.warn(`[${requestId}] Invalid pass ID format`, { passId: id });
-        res.status(502).json({
-            status: 'invalid'
+    // Validate pass ID format
+    if (!id) {
+        logger.warn(`[${requestId}] Bad request - Missing pass ID`, { requesterId });
+        res.status(400).json({
+            status: 'error',
+            message: 'Pass ID is required',
+            requestId
+        });
+        return;
+    }
+
+    // Pass IDs should start with "Z" (various formats in DB: Zynvo, Zbnvo, etc.)
+    if (!id.startsWith('Z')) {
+        logger.warn(`[${requestId}] Invalid pass ID format - Must start with 'Z'`, {
+            passId: id,
+            firstChars: id.substring(0, 10),
+            requesterId
+        });
+        res.status(400).json({
+            status: 'invalid',
+            message: 'Invalid pass ID format',
+            requestId
         });
         return;
     }
 
     try {
-        const registration = await prisma.userEvents.findFirst({
-            where: { uniquePassId: id },
-            select: {
-                userId: true,
-                uniquePassId: true,
-                joinedAt: true,
-                paymentStatus: true,
-                event: {
-                    select: {
-                        EventName: true,
-                        clubId: true
-                    }
-                },
-                user: {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                        collegeName: true,
-                        course: true,
-                        year: true,
-                        profileAvatar: true
-                    }
-                }
-            }
+        // Fetch registration details
+        logger.debug(`[${requestId}] Querying registration for pass ID`, { 
+            passId: id,
+            rawId: rawId,
+            passIdLength: id.length,
+            passIdEncoded: encodeURIComponent(id)
         });
 
+        // Build list of ID variations to try
+        const idsToTry = [id];
+        if (rawId && rawId !== id) {
+            idsToTry.push(rawId.trim());
+        }
+        // Also try replacing %XX sequences with actual characters using a more lenient approach
+        const lenientDecoded = rawId?.replace(/%([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+        if (lenientDecoded && !idsToTry.includes(lenientDecoded.trim())) {
+            idsToTry.push(lenientDecoded.trim());
+        }
+
+        logger.debug(`[${requestId}] Trying pass ID variations`, { idsToTry });
+
+        let registration = null;
+        let matchedId = '';
+        
+        for (const passIdVariation of idsToTry) {
+            registration = await prisma.userEvents.findFirst({
+                where: { uniquePassId: passIdVariation },
+                select: {
+                    userId: true,
+                    uniquePassId: true,
+                    joinedAt: true,
+                    paymentStatus: true,
+                    event: {
+                        select: {
+                            EventName: true,
+                            clubId: true
+                        }
+                    },
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            collegeName: true,
+                            course: true,
+                            year: true,
+                            profileAvatar: true
+                        }
+                    }
+                }
+            });
+            
+            if (registration) {
+                matchedId = passIdVariation;
+                logger.info(`[${requestId}] Found registration with pass ID variation`, { 
+                    matchedId, 
+                    originalId: id 
+                });
+                break;
+            }
+        }
+
         if (!registration) {
-            logger.warn(`[${requestId}] Registration not found`, { passId: id });
-            res.status(404).json({ data: {} });
+            // Try case-insensitive search as fallback
+            const caseInsensitiveRegistration = await prisma.userEvents.findFirst({
+                where: {
+                    uniquePassId: {
+                        equals: id,
+                        mode: 'insensitive'
+                    }
+                },
+                select: { uniquePassId: true }
+            });
+
+            // Also try a "contains" search to find similar IDs for debugging
+            const uuidPart = id.replace(/^[A-Za-z]+\s?/, ''); // Extract UUID part
+            const similarRegistrations = uuidPart.length > 10 ? await prisma.userEvents.findMany({
+                where: {
+                    uniquePassId: {
+                        contains: uuidPart.substring(0, 8)
+                    }
+                },
+                select: { uniquePassId: true },
+                take: 5
+            }) : [];
+
+            if (caseInsensitiveRegistration) {
+                logger.warn(`[${requestId}] Pass ID found with different case`, {
+                    searchedPassId: id,
+                    foundPassId: caseInsensitiveRegistration.uniquePassId,
+                    requesterId
+                });
+            }
+
+            logger.warn(`[${requestId}] Registration not found for pass ID`, {
+                passId: id,
+                rawId: rawId,
+                idsTried: idsToTry,
+                passIdHex: Buffer.from(id).toString('hex'),
+                requesterId,
+                duration: `${Date.now() - startTime}ms`,
+                caseInsensitiveMatch: !!caseInsensitiveRegistration,
+                similarPassIds: similarRegistrations.map(r => r.uniquePassId)
+            });
+            res.status(404).json({
+                status: 'error',
+                message: 'Registration not found',
+                data: {},
+                requestId
+            });
             return;
         }
+
+        logger.debug(`[${requestId}] Registration found`, {
+            passId: matchedId || id,
+            userId: registration.userId,
+            eventName: registration.event?.EventName
+        });
 
         const isSelf = registration.userId === requesterId;
 
         if (!isSelf) {
-            const requester = await prisma.user.findUnique({
-                where: { id: requesterId },
-                select: { email: true }
+            logger.debug(`[${requestId}] Non-self access - Verifying permissions`, {
+                requesterId,
+                targetUserId: registration.userId
             });
 
+            // Fetch requester details
+            let requester;
+            try {
+                requester = await prisma.user.findUnique({
+                    where: { id: requesterId },
+                    select: { email: true }
+                });
+            } catch (dbError: any) {
+                logger.error(`[${requestId}] Database error fetching requester`, {
+                    requesterId,
+                    error: dbError.message,
+                    code: dbError.code
+                });
+                sendErrorResponse(res, requestId, 'Failed to verify user permissions', 500);
+                return;
+            }
+
             if (!requester?.email) {
-                logger.warn(`[${requestId}] Requester not found`, { requesterId });
+                logger.warn(`[${requestId}] Requester not found in database`, {
+                    requesterId,
+                    duration: `${Date.now() - startTime}ms`
+                });
                 sendErrorResponse(res, requestId, 'User not found', 404);
                 return;
             }
 
-            const club = registration.event?.clubId
-                ? await prisma.clubs.findUnique({
-                      where: { id: registration.event.clubId },
-                      select: {
-                          founderEmail: true,
-                          coremember1: true,
-                          coremember2: true,
-                          coremember3: true
-                      }
-                  })
-                : null;
+            // Fetch club details for authorization
+            let club = null;
+            if (registration.event?.clubId) {
+                try {
+                    club = await prisma.clubs.findUnique({
+                        where: { id: registration.event.clubId },
+                        select: {
+                            founderEmail: true,
+                            coremember1: true,
+                            coremember2: true,
+                            coremember3: true
+                        }
+                    });
+                } catch (dbError: any) {
+                    logger.error(`[${requestId}] Database error fetching club details`, {
+                        clubId: registration.event.clubId,
+                        error: dbError.message,
+                        code: dbError.code
+                    });
+                    sendErrorResponse(res, requestId, 'Failed to verify club permissions', 500);
+                    return;
+                }
+            }
 
             const adminEmailsEnv = process.env.ADMIN_EMAILS || '';
             const adminEmails = adminEmailsEnv
@@ -823,33 +982,63 @@ export const getUserDetailsByPassId = async (req: Request, res: Response): Promi
             );
             const isSiteAdmin = adminEmails.includes(requesterEmail);
 
+            logger.debug(`[${requestId}] Permission check results`, {
+                requesterEmail,
+                isFounder,
+                isCore,
+                isSiteAdmin,
+                clubId: registration.event?.clubId
+            });
+
             if (!isFounder && !isCore && !isSiteAdmin) {
-                res.status(403).json({ message: 'Access denied' });
+                logger.warn(`[${requestId}] Access denied - Insufficient permissions`, {
+                    requesterId,
+                    requesterEmail,
+                    targetPassId: id,
+                    duration: `${Date.now() - startTime}ms`
+                });
+                res.status(403).json({
+                    status: 'error',
+                    message: 'Access denied: Insufficient permissions to view this user\'s details',
+                    requestId
+                });
                 return;
             }
+
+            logger.info(`[${requestId}] Access granted via ${isFounder ? 'founder' : isCore ? 'core member' : 'site admin'} role`);
         }
 
-        logger.info(`[${requestId}] User details found`, {
+        const duration = Date.now() - startTime;
+        logger.info(`[${requestId}] User details retrieved successfully`, {
             passId: id,
-            userId: registration.user.id
+            userId: registration.user.id,
+            eventName: registration.event?.EventName,
+            accessType: isSelf ? 'self' : 'authorized',
+            duration: `${duration}ms`
         });
 
         res.status(200).json({
+            status: 'success',
             data: {
                 passId: registration.uniquePassId,
                 eventName: registration.event?.EventName ?? '',
                 joinedAt: registration.joinedAt,
                 paymentStatus: registration.paymentStatus,
                 user: registration.user
-            }
+            },
+            requestId
         });
     } catch (error: any) {
-        logger.error(`[${requestId}] Error fetching user details`, {
+        const duration = Date.now() - startTime;
+        logger.error(`[${requestId}] Unhandled error in getUserDetailsByPassId`, {
             error: error.message,
             stack: error.stack,
-            passId: id
+            code: error.code,
+            passId: id,
+            requesterId,
+            duration: `${duration}ms`
         });
-        sendErrorResponse(res, requestId, 'internal server error', 500);
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
     }
 };
 
