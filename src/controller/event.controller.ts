@@ -755,16 +755,6 @@ export const getUserDetailsByPassId = async (req: Request, res: Response): Promi
         timestamp: new Date().toISOString()
     });
 
-    // Validate requester ID
-    if (!requesterId) {
-        logger.warn(`[${requestId}] Unauthorized access attempt - Missing requester ID`, {
-            passId: id,
-            headers: req.headers['user-agent']
-        });
-        sendErrorResponse(res, requestId, 'Unauthorized: Invalid user credentials', 401);
-        return;
-    }
-
     // Validate pass ID format
     if (!id) {
         logger.warn(`[${requestId}] Bad request - Missing pass ID`, { requesterId });
@@ -911,109 +901,12 @@ export const getUserDetailsByPassId = async (req: Request, res: Response): Promi
             eventName: registration.event?.EventName
         });
 
-        const isSelf = registration.userId === requesterId;
-
-        if (!isSelf) {
-            logger.debug(`[${requestId}] Non-self access - Verifying permissions`, {
-                requesterId,
-                targetUserId: registration.userId
-            });
-
-            // Fetch requester details
-            let requester;
-            try {
-                requester = await prisma.user.findUnique({
-                    where: { id: requesterId },
-                    select: { email: true }
-                });
-            } catch (dbError: any) {
-                logger.error(`[${requestId}] Database error fetching requester`, {
-                    requesterId,
-                    error: dbError.message,
-                    code: dbError.code
-                });
-                sendErrorResponse(res, requestId, 'Failed to verify user permissions', 500);
-                return;
-            }
-
-            if (!requester?.email) {
-                logger.warn(`[${requestId}] Requester not found in database`, {
-                    requesterId,
-                    duration: `${Date.now() - startTime}ms`
-                });
-                sendErrorResponse(res, requestId, 'User not found', 404);
-                return;
-            }
-
-            // Fetch club details for authorization
-            let club = null;
-            if (registration.event?.clubId) {
-                try {
-                    club = await prisma.clubs.findUnique({
-                        where: { id: registration.event.clubId },
-                        select: {
-                            founderEmail: true,
-                            coremember1: true,
-                            coremember2: true,
-                            coremember3: true
-                        }
-                    });
-                } catch (dbError: any) {
-                    logger.error(`[${requestId}] Database error fetching club details`, {
-                        clubId: registration.event.clubId,
-                        error: dbError.message,
-                        code: dbError.code
-                    });
-                    sendErrorResponse(res, requestId, 'Failed to verify club permissions', 500);
-                    return;
-                }
-            }
-
-            const adminEmailsEnv = process.env.ADMIN_EMAILS || '';
-            const adminEmails = adminEmailsEnv
-                .split(',')
-                .map((e) => e.trim().toLowerCase())
-                .filter(Boolean);
-
-            const requesterEmail = requester.email.toLowerCase();
-            const isFounder = !!club?.founderEmail && club.founderEmail.toLowerCase() === requesterEmail;
-            const isCore = [club?.coremember1, club?.coremember2, club?.coremember3].some(
-                (c) => c && c.toLowerCase() === requesterEmail
-            );
-            const isSiteAdmin = adminEmails.includes(requesterEmail);
-
-            logger.debug(`[${requestId}] Permission check results`, {
-                requesterEmail,
-                isFounder,
-                isCore,
-                isSiteAdmin,
-                clubId: registration.event?.clubId
-            });
-
-            if (!isFounder && !isCore && !isSiteAdmin) {
-                logger.warn(`[${requestId}] Access denied - Insufficient permissions`, {
-                    requesterId,
-                    requesterEmail,
-                    targetPassId: id,
-                    duration: `${Date.now() - startTime}ms`
-                });
-                res.status(403).json({
-                    status: 'error',
-                    message: 'Access denied: Insufficient permissions to view this user\'s details',
-                    requestId
-                });
-                return;
-            }
-
-            logger.info(`[${requestId}] Access granted via ${isFounder ? 'founder' : isCore ? 'core member' : 'site admin'} role`);
-        }
-
         const duration = Date.now() - startTime;
         logger.info(`[${requestId}] User details retrieved successfully`, {
             passId: id,
             userId: registration.user.id,
             eventName: registration.event?.EventName,
-            accessType: isSelf ? 'self' : 'authorized',
+            accessType: 'public',
             duration: `${duration}ms`
         });
 
