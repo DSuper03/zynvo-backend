@@ -32,7 +32,9 @@ if (dbUrl) {
   } catch (err) {
     console.error('❌ Failed to initialize PrismaPg adapter:', err);
     if (process.env.NODE_ENV === 'production') {
-      process.exit(1);
+      // Don't exit immediately - let the health check fail naturally
+      // This gives Cloud Run time to log the error properly
+      console.error('❌ Will retry database connection...');
     }
   }
 }
@@ -41,10 +43,22 @@ export const prisma = new PrismaClient(prismaOptions);
 
 // Test connection on startup (only in production)
 if (dbUrl && process.env.NODE_ENV === 'production') {
-  prisma.$connect()
-    .then(() => console.log('✅ Database connected'))
-    .catch((err) => {
-      console.error('❌ Database connection failed:', err.message);
-      process.exit(1);
-    });
+  const connectWithRetry = async (retries = 5, delay = 3000) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        await prisma.$connect();
+        console.log('✅ Database connected');
+        return;
+      } catch (err: any) {
+        console.error(`❌ Database connection attempt ${i + 1}/${retries} failed:`, err.message);
+        if (i < retries - 1) {
+          console.log(`⏳ Retrying in ${delay / 1000}s...`);
+          await new Promise(r => setTimeout(r, delay));
+        }
+      }
+    }
+    console.error('❌ All database connection attempts failed. Exiting.');
+    process.exit(1);
+  };
+  connectWithRetry();
 }
