@@ -1,0 +1,97 @@
+# =============================================================================
+# Docker Build Context Exclusions
+# =============================================================================
+
+# Prisma config (causes ESM issues with @prisma/dev, not needed for generate)
+prisma.config.ts
+
+# Dependencies - will be installed fresh in container
+node_modules
+.npm
+.pnpm-store
+
+# Build outputs - will be built fresh
+dist
+build
+.next
+out
+
+# Environment files - NEVER include secrets in image
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Documentation and configs not needed at runtime
+README.md
+RENDER.md
+CONTRIBUTING.md
+CHANGELOG.md
+docs/
+*.md
+
+# Test files
+test/
+tests/
+__tests__
+*.test.ts
+*.spec.ts
+coverage/
+.nyc_output
+
+# CI/CD configs
+.github
+.gitlab-ci.yml
+.circleci
+azure-pipelines.yml
+cloudbuild.yaml
+
+# Deployment configs (not needed inside container)
+render.yaml
+vercel.json
+fly.toml
+railway.json
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Build tools/configs (NOT tsconfig.json or prisma.config.ts - needed for build)
+eslint.config.js
+prettier.config.js
+.eslintrc*
+.prettierrc*
+jest.config.*
+
+# Lock files (package-lock.json is needed, but others aren't)
+bun.lockb
+pnpm-lock.yaml
+yarn.lock
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Misc
+.turbo
+.cache
+tmp/
+temp/
+
+# Prisma migrations metadata (schema is needed, lock isn't critical)
+prisma/migrations/**/migration_lock.toml
+
+# Postman/API testing
+postman_collection.json
+*.postman_collection.json
