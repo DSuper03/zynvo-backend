@@ -66,6 +66,7 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 zynvo
 
 # Set environment
+# PORT is set by Cloud Run at runtime; 8000 is the fallback default
 ENV NODE_ENV=production \
     PORT=8000
 
