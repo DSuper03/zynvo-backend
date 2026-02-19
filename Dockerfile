@@ -4,12 +4,13 @@
 # =============================================================================
 
 # --- Stage 1: Dependencies ---
-FROM node:22-alpine AS deps
+FROM node:22-slim AS deps
 
 WORKDIR /app
 
 # Install build dependencies for native modules
-RUN apk add --no-cache openssl libc6-compat
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy package files for caching
 COPY package.json package-lock.json* ./
@@ -19,11 +20,12 @@ RUN npm ci --ignore-scripts && \
     npm cache clean --force
 
 # --- Stage 2: Builder ---
-FROM node:22-alpine AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache openssl
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy deps from previous stage
 COPY --from=deps /app/node_modules ./node_modules
@@ -45,7 +47,7 @@ RUN npm run build
 RUN npm prune --production
 
 # --- Stage 3: Production Runtime ---
-FROM node:22-alpine AS runtime
+FROM node:22-slim AS runtime
 
 # Labels for container metadata
 LABEL org.opencontainers.image.source="https://github.com/DSuper03/zynvo-backend"
@@ -58,12 +60,12 @@ WORKDIR /app
 # - openssl: Required by Prisma
 # - dumb-init: Proper signal handling for graceful shutdown
 # - curl: Health check
-RUN apk add --no-cache openssl dumb-init curl && \
-    rm -rf /var/cache/apk/*
+RUN apt-get update && apt-get install -y --no-install-recommends openssl dumb-init curl && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 zynvo
+RUN groupadd --system --gid 1001 nodejs && \
+    useradd --system --uid 1001 --gid nodejs zynvo
 
 # Set environment
 # PORT is set by Cloud Run at runtime; 8000 is the fallback default
