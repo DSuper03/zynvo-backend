@@ -67,8 +67,8 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 # Set environment
 # PORT is set by Cloud Run at runtime; 8000 is the fallback default
-ENV NODE_ENV=production \
-    PORT=8000
+ENV NODE_ENV=production
+
 
 # Copy only production artifacts
 COPY --from=builder --chown=zynvo:nodejs /app/node_modules ./node_modules
