@@ -4,6 +4,10 @@ import { prisma } from '../db/db';
 import { postSchema } from '../types/formtypes';
 import { generateRequestId, sendErrorResponse } from '../utils/helper';
 
+// Normalize query/param values that might be arrays into a single string
+const normalizeParam = (value: string | string[] | undefined): string | undefined =>
+    Array.isArray(value) ? value[0] : value;
+
 const postSelectBase = {
     id: true,
     title: true,
@@ -126,7 +130,7 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
 
 export const editPost = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
-    const postId = req.params.id;
+    const postId = normalizeParam(req.params.id);
 
     logger.info(`[${requestId}] PUT /edit/:id - Starting post edit`, {
         postId,
@@ -240,7 +244,7 @@ export const getAllPosts = async (req: Request, res: Response): Promise<void> =>
 
 export const getPostById = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
-    const postId = req.params.id;
+    const postId = normalizeParam(req.params.id);
 
     logger.info(`[${requestId}] GET /get/:id - Starting request`, {
         postId,
@@ -284,7 +288,7 @@ export const getPostById = async (req: Request, res: Response): Promise<void> =>
 
 export const deletePost = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
-    const postId = req.params.id;
+    const postId = normalizeParam(req.params.id);
 
     logger.info(`[${requestId}] DELETE /delete/:id - Starting request`, {
         postId,
@@ -323,7 +327,11 @@ export const deletePost = async (req: Request, res: Response): Promise<void> => 
 export const toggleUpvotePost = async (req: Request, res: Response): Promise<void> => 
  {
     try {
-        const postId = req.params.id;
+        const postId = normalizeParam(req.params.id);
+        if (!postId) {
+            res.status(400).json({ msg: "post id required" });
+            return;
+        }
   const userId = req.id;
   const existing = await prisma.postUpvote.findUnique({
     where: {
@@ -403,7 +411,11 @@ return;
 
 export const toggleDownvotePost = async (req: Request, res: Response): Promise<void> => {
     try {
-        const postId = req.params.id;
+        const postId = normalizeParam(req.params.id);
+                if (!postId) {
+                    res.status(400).json({ msg: "post id required" });
+                    return;
+                }
         const userId = req.id;
 
         const existing = await prisma.postDownvote.findUnique({
@@ -471,7 +483,11 @@ export const toggleDownvotePost = async (req: Request, res: Response): Promise<v
 
 export const getPostUpvotes = async (req : Request, res: Response): Promise<void> => {
     try {
-        const postId = req.params.id;
+        const postId = normalizeParam(req.params.id);
+                if (!postId) {
+                    res.status(400).json({ msg: "post id required" });
+                    return;
+                }
 
         const upvotes = await prisma.postUpvote.findMany({
             where: { postId },
@@ -494,7 +510,11 @@ export const getPostUpvotes = async (req : Request, res: Response): Promise<void
 
 export const getPostDownvotes = async (req : Request, res: Response): Promise<void> => {
     try {
-        const postId = req.params.id;
+        const postId = normalizeParam(req.params.id);
+                if (!postId) {
+                    res.status(400).json({ msg: "post id required" });
+                    return;
+                }
 
         const downvotes = await prisma.postDownvote.findMany({
             where: { postId },

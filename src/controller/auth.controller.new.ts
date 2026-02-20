@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import { logger } from "../utils/logger";
 import { prisma } from "../db/db";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs"
 
 
 // This route handles BOTH "Sign in with Google" AND "New Clerk Signups"

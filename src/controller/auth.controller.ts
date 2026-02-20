@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { signupSchema, newPWschema } from '../types/formtypes';
 import { generateRequestId } from '../utils/helper'
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import mail from '../utils/nodemailer';

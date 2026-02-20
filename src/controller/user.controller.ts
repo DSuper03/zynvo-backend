@@ -3,6 +3,10 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { generateRequestId } from '../utils/helper';
 
+// Normalize query/param values that might be arrays into a single string
+const normalizeParam = (value: string | string[] | undefined): string | undefined =>
+    Array.isArray(value) ? value[0] : value;
+
 
 export const getUser = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
@@ -72,7 +76,7 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
 
 export const joinClub = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
-    const clubId = req.params.id;
+    const clubId = normalizeParam(req.params.id);
     const userId = req.id;
 
     logger.info(`[${requestId}] POST /joinClub - Starting request`, { userId, clubId });
