@@ -5,7 +5,7 @@ import { createClubAnnouncement, deleteClubAnnouncement, updateClubAnnouncement 
 import { createAnnouncement, deleteAnnouncement, updateAnnouncement } from "../controller/event.ann.controller";
 
 const router = Router()
-
+//hello
 router.put('/updateClubLinks/:id', AuthMiddleware, updateLink);
 router.put('/addWings/:id', AuthMiddleware, addWings);
 router.post('/deleteEvent/:eventId', AuthMiddleware, deleteEvent);
