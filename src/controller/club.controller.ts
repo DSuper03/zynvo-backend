@@ -4,6 +4,10 @@ import { prisma } from '../db/db';
 import { generateRequestId, sendErrorResponse } from '../utils/helper';
 import { link } from 'fs';
 
+// Normalize query/param values that might be arrays into a single string
+const normalizeParam = (value: string | string[] | undefined): string | undefined =>
+    Array.isArray(value) ? value[0] : value;
+
 const clubSelectBase = {
     id: true,
     name: true,
@@ -241,7 +245,8 @@ export const getClubsByCollege = async (req: Request, res: Response): Promise<vo
     const requestId = generateRequestId();
 
     try {
-        const collegeName = decodeURIComponent(req.params.college);
+        const collegeParam = normalizeParam(req.params.college);
+        const collegeName = decodeURIComponent(collegeParam ?? '');
 
         logger.info(`[${requestId}] GET /getClubs/:college - Starting request`, {
             collegeName,
@@ -293,7 +298,7 @@ export const getClubById = async (req: Request, res: Response): Promise<void> =>
     const requestId = generateRequestId();
 
     try {
-        const clubId = req.params.id;
+        const clubId = normalizeParam(req.params.id);
 
         logger.info(`[${requestId}] GET /:id - Starting request`, {
             clubId,
@@ -366,10 +371,12 @@ export const getClubById = async (req: Request, res: Response): Promise<void> =>
             return;
         }
 
+        const membersCount = (club as any)?.members?.length ?? 0;
+
         logger.info(`[${requestId}] Club details retrieved successfully`, {
             clubId: club.id,
             clubName: club.name,
-            membersCount: club.members.length
+            membersCount
         });
 
         res.status(200).json({

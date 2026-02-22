@@ -48,6 +48,10 @@ const mapEventFees = <T extends { Fees?: string | null }>(event: T) => ({
     fees: event.Fees,
 });
 
+// Normalize query/param values that might be arrays into a single string
+const normalizeParam = (value: string | string[] | undefined): string | undefined =>
+    Array.isArray(value) ? value[0] : value;
+
 export const createEvent = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
 
@@ -220,7 +224,7 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
 
 export const getEventById = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
-    const eventId = req.params.id;
+    const eventId = normalizeParam(req.params.id);
 
     logger.info(`[${requestId}] GET /event/:id - Starting request`, { eventId });
 
@@ -267,7 +271,7 @@ export const getEventById = async (req: Request, res: Response): Promise<void> =
 
 export const getEventsByClub = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
-    const clubId = req.params.id;
+    const clubId = normalizeParam(req.params.id);
 
     logger.info(`[${requestId}] GET /eventByClub/:id - Starting request`, {
         clubId,
@@ -983,15 +987,26 @@ export const getUserDetailsByPassId = async (req: Request, res: Response): Promi
 
 export const eventAttendees = async (req: Request, res: Response) => {
   const requestId = generateRequestId();
-  const eventId = req.params.eventId;
+    const eventId = normalizeParam(req.params.eventId);
   if (!eventId) {
     res.status(400).json({ message: "Event id required" });
     return;
   }
 
   try {
-    const format = req.query.format as string | undefined;
-    if (format === "csv") {
+        const format = req.query.format as string | undefined;
+        if (format === "csv") {
+            const sinceParam = req.query.since as string | undefined;
+            let sinceDate: Date | null = null;
+
+            if (sinceParam) {
+                const parsedSince = new Date(sinceParam);
+                if (Number.isNaN(parsedSince.getTime())) {
+                    res.status(400).json({ message: "Invalid since timestamp" });
+                    return;
+                }
+                sinceDate = parsedSince;
+            }
       // Pre-validate that the event exists before starting the stream
       const eventExists = await prisma.event.findUnique({
         where: { id: eventId },
@@ -1002,6 +1017,27 @@ export const eventAttendees = async (req: Request, res: Response) => {
         res.status(404).json({ message: "Event not found" });
         return;
       }
+
+            const [latestRegistration, totalRegistrations] = await prisma.$transaction([
+                prisma.userEvents.findFirst({
+                    where: { eventId },
+                    orderBy: { joinedAt: "desc" },
+                    select: { joinedAt: true }
+                }),
+                prisma.userEvents.count({ where: { eventId } })
+            ]);
+
+            const etag = latestRegistration
+                ? `${totalRegistrations}-${latestRegistration.joinedAt.getTime()}`
+                : `0-${totalRegistrations}`;
+
+            res.setHeader("ETag", etag);
+            res.setHeader("Cache-Control", "no-cache");
+
+            if (req.headers["if-none-match"] === etag) {
+                res.status(304).end();
+                return;
+            }
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader(
@@ -1033,8 +1069,10 @@ export const eventAttendees = async (req: Request, res: Response) => {
         // write header
         res.write(headers.map(escapeCsv).join(",") + "\n");
 
-        const batchSize = 500;
-        let lastJoinedAt: Date | null = null;
+                const batchSize = 500;
+                let lastJoinedAt: Date | null = null;
+
+                const joinedAtFilter = sinceDate ? { gt: sinceDate } : undefined;
 
       while (true) {
         const batch: Prisma.userEventsGetPayload<{
@@ -1052,28 +1090,35 @@ export const eventAttendees = async (req: Request, res: Response) => {
               };
             };
           };
-        }>[] = await prisma.userEvents.findMany({
-          where: {
-            eventId,
-            ...(lastJoinedAt && { joinedAt: { lt: lastJoinedAt } })
-          },
-          take: batchSize,
-          orderBy: { joinedAt: "desc" },
-          select: {
-            joinedAt: true,
-            uniquePassId: true,
-            paymentStatus: true,
-            paymentScreenshotUrl: true,
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                collegeName: true,
-              }
-            }
-          }
-        });
+                }>[] = await prisma.userEvents.findMany({
+                    where: {
+                        eventId,
+                        ...(joinedAtFilter || lastJoinedAt
+                            ? {
+                                    joinedAt: {
+                                        ...(joinedAtFilter ?? {}),
+                                        ...(lastJoinedAt ? { lt: lastJoinedAt } : {})
+                                    }
+                                }
+                            : {})
+                    },
+                    take: batchSize,
+                    orderBy: { joinedAt: "desc" },
+                    select: {
+                        joinedAt: true,
+                        uniquePassId: true,
+                        paymentStatus: true,
+                        paymentScreenshotUrl: true,
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                                collegeName: true,
+                            }
+                        }
+                    }
+                });
 
 
           if (batch.length === 0) break;
@@ -1122,32 +1167,31 @@ export const eventAttendees = async (req: Request, res: Response) => {
     const MAX_LIMIT = 100;
     const limit = Math.min(Math.max(rawLimit || 50, 1), MAX_LIMIT);
     const skip = (page - 1) * limit;
-
-    const [participants, total] = await Promise.all([
-      prisma.userEvents.findMany({
-        where: { eventId },
-        take: limit,
-        skip,
-        orderBy: { joinedAt: "desc" },
-        select: {
-          joinedAt: true,
-          uniquePassId: true,
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              
-              collegeName: true,
-              course: true,
-              year: true,
-              
+        const participantSelect = {
+            joinedAt: true,
+            uniquePassId: true,
+            user: {
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    collegeName: true,
+                    course: true,
+                    year: true,
+                }
             }
-          }
-        }
-      }),
-      prisma.userEvents.count({ where: { eventId } })
-    ]);
+        } as const;
+
+        const [participants, total] = await Promise.all([
+            prisma.userEvents.findMany({
+                where: { eventId },
+                take: limit,
+                skip,
+                orderBy: { joinedAt: "desc" },
+                select: participantSelect,
+            }) as Promise<Prisma.userEventsGetPayload<{ select: typeof participantSelect; }>[]> ,
+            prisma.userEvents.count({ where: { eventId } })
+        ]);
 
     res.status(200).json({
       msg: "participants fetched",
@@ -1569,7 +1613,7 @@ export const verifyPayment = async (req: Request, res: Response): Promise<void> 
 export const getPaidEventPayments = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const userId = req.id;
-    const eventId = req.params.eventId;
+    const eventId = normalizeParam(req.params.eventId);
 
     logger.info(`[${requestId}] GET /paidEventPayments/:eventId - Fetching payments`, {
         userId,

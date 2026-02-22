@@ -1,12 +1,16 @@
 import { Request, Response } from "express";
 import { prisma } from '../db/db';
 
+// Normalize query/param values that might be arrays into a single string
+const normalizeParam = (value: string | string[] | undefined): string | undefined =>
+    Array.isArray(value) ? value[0] : value;
+
 export const removeMember = async (req: Request, res: Response): Promise<void> => {
     const id =  req.id;
     const {
         member
     } = req.body 
-    const clubId = req.params.clubId; 
+    const clubId = normalizeParam(req.params.clubId); 
     try {
 
         const userEmail = await prisma.user.findUnique({
@@ -68,7 +72,7 @@ export const removeMember = async (req: Request, res: Response): Promise<void> =
 
 export const TransferOwnership = async (req: Request, res: Response): Promise<void> => {
     const id =  req.id;
-    const clubId = req.params.clubId; 
+    const clubId = normalizeParam(req.params.clubId); 
     const {
         email
     } = req.body;
@@ -157,7 +161,7 @@ export const TransferOwnership = async (req: Request, res: Response): Promise<vo
 export const addCoreMembers = async (req: Request, res: Response): Promise<void> => {
     const id = req.id;
     const { coremember1, coremember2, coremember3 } = req.body;
-    const clubId = req.params.clubId;
+    const clubId = normalizeParam(req.params.clubId);
 
     try {
          const userEmail = await prisma.user.findUnique({
@@ -242,7 +246,7 @@ export const addCoreMembers = async (req: Request, res: Response): Promise<void>
 export const removeCoreMembers = async (req: Request, res: Response): Promise<void> => {
     const id = req.id;
     const { coremember1, coremember2, coremember3 } = req.body;
-    const clubId = req.params.clubId;
+    const clubId = normalizeParam(req.params.clubId);
 
     try {
         const userEmail = await prisma.user.findUnique({
@@ -335,7 +339,7 @@ export const removeCoreMembers = async (req: Request, res: Response): Promise<vo
 
 export const addWings =   async (req: Request, res: Response): Promise<void> => {
     const id = req.id 
-    const clubid = req.params.id as string;
+    const clubid = normalizeParam(req.params.id);
     const {
        wings
     } =  req.body
@@ -406,7 +410,7 @@ export const addWings =   async (req: Request, res: Response): Promise<void> => 
 
 export const updateLink = async (req: Request, res: Response): Promise<void> => {
     const id = req.id;
-    const clubid = req.params.id as string;
+    const clubid = normalizeParam(req.params.id);
     const { instagram, twitter, linkedin } = req.body;
 
     try {
@@ -461,7 +465,7 @@ export const updateLink = async (req: Request, res: Response): Promise<void> => 
 
 export const deleteEvent = async (req : Request, res : Response) => {
     const id = req.id 
-    const eventId = req.params.eventId;
+    const eventId = normalizeParam(req.params.eventId);
     if(!id) {
         res.status(404).json({
             msg : "Unauthorized"
@@ -545,7 +549,7 @@ export const deleteEvent = async (req : Request, res : Response) => {
 
 export const updateEventLink = async (req: Request, res: Response): Promise<void> => {
     const id = req.id;
-    const eventId = req.params.eventId as string;
+    const eventId = normalizeParam(req.params.eventId);
     const { link1, link2, link3 } = req.body;
 
     try {
