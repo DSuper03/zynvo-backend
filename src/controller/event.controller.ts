@@ -417,16 +417,61 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             return;
         }
 
-        // Check if event is paid
-        const event = await prisma.event.findUnique({
-            where: { id: eventId },
-            select: { isPaid: true }
-        });
+        // Fetch event and user details for eligibility checks
+        const [event, user] = await Promise.all([
+            prisma.event.findUnique({
+                where: { id: eventId },
+                select: {
+                    isPaid: true,
+                    collegeStudentsOnly: true,
+                    university: true,
+                    club: {
+                        select: {
+                            collegeName: true
+                        }
+                    }
+                }
+            }),
+            prisma.user.findUnique({
+                where: { id: userId },
+                select: {
+                    collegeName: true
+                }
+            })
+        ]);
 
         if (!event) {
             logger.warn(`[${requestId}] Event not found`, { eventId });
             sendErrorResponse(res, requestId, 'Event not found', 404);
             return;
+        }
+
+        if (!user) {
+            logger.warn(`[${requestId}] User not found`, { userId });
+            sendErrorResponse(res, requestId, 'User not found', 404);
+            return;
+        }
+
+        if (event.collegeStudentsOnly) {
+            const eventCollegeRaw = event.university || event.club?.collegeName || '';
+            const eventCollege = eventCollegeRaw.trim().toLowerCase();
+            const userCollege = (user.collegeName || '').trim().toLowerCase();
+
+            if (!eventCollege || !userCollege || eventCollege !== userCollege) {
+                logger.warn(`[${requestId}] College restriction failed`, {
+                    userId,
+                    eventId,
+                    userCollege: user.collegeName,
+                    eventCollege: eventCollegeRaw
+                });
+                sendErrorResponse(
+                    res,
+                    requestId,
+                    'This event is restricted to students of the organizer college',
+                    403
+                );
+                return;
+            }
         }
 
         // If event is paid, payment screenshot is required
