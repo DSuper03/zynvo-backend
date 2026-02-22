@@ -949,8 +949,19 @@ export const eventAttendees = async (req: Request, res: Response) => {
   }
 
   try {
-    const format = req.query.format as string | undefined;
-    if (format === "csv") {
+        const format = req.query.format as string | undefined;
+        if (format === "csv") {
+            const sinceParam = req.query.since as string | undefined;
+            let sinceDate: Date | null = null;
+
+            if (sinceParam) {
+                const parsedSince = new Date(sinceParam);
+                if (Number.isNaN(parsedSince.getTime())) {
+                    res.status(400).json({ message: "Invalid since timestamp" });
+                    return;
+                }
+                sinceDate = parsedSince;
+            }
       // Pre-validate that the event exists before starting the stream
       const eventExists = await prisma.event.findUnique({
         where: { id: eventId },
@@ -961,6 +972,27 @@ export const eventAttendees = async (req: Request, res: Response) => {
         res.status(404).json({ message: "Event not found" });
         return;
       }
+
+            const [latestRegistration, totalRegistrations] = await prisma.$transaction([
+                prisma.userEvents.findFirst({
+                    where: { eventId },
+                    orderBy: { joinedAt: "desc" },
+                    select: { joinedAt: true }
+                }),
+                prisma.userEvents.count({ where: { eventId } })
+            ]);
+
+            const etag = latestRegistration
+                ? `${totalRegistrations}-${latestRegistration.joinedAt.getTime()}`
+                : `0-${totalRegistrations}`;
+
+            res.setHeader("ETag", etag);
+            res.setHeader("Cache-Control", "no-cache");
+
+            if (req.headers["if-none-match"] === etag) {
+                res.status(304).end();
+                return;
+            }
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader(
@@ -992,8 +1024,10 @@ export const eventAttendees = async (req: Request, res: Response) => {
         // write header
         res.write(headers.map(escapeCsv).join(",") + "\n");
 
-        const batchSize = 500;
-        let lastJoinedAt: Date | null = null;
+                const batchSize = 500;
+                let lastJoinedAt: Date | null = null;
+
+                const joinedAtFilter = sinceDate ? { gt: sinceDate } : undefined;
 
       while (true) {
         const batch: Prisma.userEventsGetPayload<{
@@ -1011,28 +1045,35 @@ export const eventAttendees = async (req: Request, res: Response) => {
               };
             };
           };
-        }>[] = await prisma.userEvents.findMany({
-          where: {
-            eventId,
-            ...(lastJoinedAt && { joinedAt: { lt: lastJoinedAt } })
-          },
-          take: batchSize,
-          orderBy: { joinedAt: "desc" },
-          select: {
-            joinedAt: true,
-            uniquePassId: true,
-            paymentStatus: true,
-            paymentScreenshotUrl: true,
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                collegeName: true,
-              }
-            }
-          }
-        });
+                }>[] = await prisma.userEvents.findMany({
+                    where: {
+                        eventId,
+                        ...(joinedAtFilter || lastJoinedAt
+                            ? {
+                                    joinedAt: {
+                                        ...(joinedAtFilter ?? {}),
+                                        ...(lastJoinedAt ? { lt: lastJoinedAt } : {})
+                                    }
+                                }
+                            : {})
+                    },
+                    take: batchSize,
+                    orderBy: { joinedAt: "desc" },
+                    select: {
+                        joinedAt: true,
+                        uniquePassId: true,
+                        paymentStatus: true,
+                        paymentScreenshotUrl: true,
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                                collegeName: true,
+                            }
+                        }
+                    }
+                });
 
 
           if (batch.length === 0) break;
