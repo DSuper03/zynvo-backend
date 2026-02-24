@@ -421,28 +421,15 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             return;
         }
 
-        // Fetch event and user details for eligibility checks
-        const [event, user] = await Promise.all([
-            prisma.event.findUnique({
-                where: { id: eventId },
-                select: {
-                    isPaid: true,
-                    collegeStudentsOnly: true,
-                    university: true,
-                    club: {
-                        select: {
-                            collegeName: true
-                        }
-                    }
-                }
-            }),
-            prisma.user.findUnique({
-                where: { id: userId },
-                select: {
-                    collegeName: true
-                }
-            })
-        ]);
+        // Fetch event first so we can fail early for missing events.
+        const event = await prisma.event.findUnique({
+            where: { id: eventId },
+            select: {
+                isPaid: true,
+                collegeStudentsOnly: true,
+                university: true,
+            }
+        });
 
         if (!event) {
             logger.warn(`[${requestId}] Event not found`, { eventId });
@@ -450,14 +437,21 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             return;
         }
 
-        if (!user) {
-            logger.warn(`[${requestId}] User not found`, { userId });
-            sendErrorResponse(res, requestId, 'User not found', 404);
-            return;
-        }
-
         if (event.collegeStudentsOnly) {
-            const eventCollegeRaw = event.university || event.club?.collegeName || '';
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                select: {
+                    collegeName: true
+                }
+            });
+
+            if (!user) {
+                logger.warn(`[${requestId}] User not found`, { userId });
+                sendErrorResponse(res, requestId, 'User not found', 404);
+                return;
+            }
+
+            const eventCollegeRaw = event.university || '';
             const eventCollege = eventCollegeRaw.trim().toLowerCase();
             const userCollege = (user.collegeName || '').trim().toLowerCase();
 
