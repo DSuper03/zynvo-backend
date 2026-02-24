@@ -421,16 +421,55 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             return;
         }
 
-        // Check if event is paid
+        // Fetch event first so we can fail early for missing events.
         const event = await prisma.event.findUnique({
             where: { id: eventId },
-            select: { isPaid: true }
+            select: {
+                isPaid: true,
+                collegeStudentsOnly: true,
+                university: true,
+            }
         });
 
         if (!event) {
             logger.warn(`[${requestId}] Event not found`, { eventId });
             sendErrorResponse(res, requestId, 'Event not found', 404);
             return;
+        }
+
+        if (event.collegeStudentsOnly) {
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                select: {
+                    collegeName: true
+                }
+            });
+
+            if (!user) {
+                logger.warn(`[${requestId}] User not found`, { userId });
+                sendErrorResponse(res, requestId, 'User not found', 404);
+                return;
+            }
+
+            const eventCollegeRaw = event.university || '';
+            const eventCollege = eventCollegeRaw.trim().toLowerCase();
+            const userCollege = (user.collegeName || '').trim().toLowerCase();
+
+            if (!eventCollege || !userCollege || eventCollege !== userCollege) {
+                logger.warn(`[${requestId}] College restriction failed`, {
+                    userId,
+                    eventId,
+                    userCollege: user.collegeName,
+                    eventCollege: eventCollegeRaw
+                });
+                sendErrorResponse(
+                    res,
+                    requestId,
+                    'This event is restricted to students of the organizer college',
+                    403
+                );
+                return;
+            }
         }
 
         // If event is paid, payment screenshot is required
