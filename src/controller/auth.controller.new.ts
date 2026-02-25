@@ -166,10 +166,30 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        const passwordMatches = (user.password && bcrypt.compareSync(password, user.password))
-            || password === user.password; // allow legacy plain-text stored passwords
+        let passwordMatches = false;
+        let needsRehash = false;
+
+        if (user.password) {
+            // First, try bcrypt comparison (hashed password case)
+            passwordMatches = bcrypt.compareSync(password, user.password);
+
+            // If bcrypt comparison fails, fall back to legacy plain-text comparison
+            if (!passwordMatches && password === user.password) {
+                passwordMatches = true;
+                needsRehash = true; // legacy plain-text password: upgrade to bcrypt
+            }
+        }
 
         if (passwordMatches) {
+            if (needsRehash) {
+                // Transparently upgrade legacy plain-text password to a bcrypt hash
+                const newHashedPassword = bcrypt.hashSync(password, 10);
+                await prisma.user.update({
+                    where: { id: user.id },
+                    data: { password: newHashedPassword },
+                });
+                logger.info(`[${requestId}] Upgraded legacy plain-text password to bcrypt`, { userId: user.id, email });
+            }
             logger.info(`[${requestId}] Login successful`, { userId: user.id, email });
             const token = jwt.sign({
                 id: user.id,
