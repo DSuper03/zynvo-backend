@@ -12,6 +12,13 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
     const { email, name, clerkId, collegeName, avatarUrl, imgUrl, password } = req.body; 
 
     try {
+        // Fallback: if no clerkId is provided, treat this as legacy email/password login
+        if (!clerkId) {
+            logger.info(`[${requestId}] /login without clerkId - falling back to password login`, { email });
+            await login(req, res);
+            return;
+        }
+
         if(!clerkId || !email) {
             logger.warn(`[${requestId}] Clerk Auth attempt with missing fields`, { email, clerkId });
             res.status(400).json({ msg: "Missing required fields" });
@@ -159,9 +166,11 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        if (bcrypt.compareSync(password, user.password)) {
+        const passwordMatches = (user.password && bcrypt.compareSync(password, user.password))
+            || password === user.password; // allow legacy plain-text stored passwords
+
+        if (passwordMatches) {
             logger.info(`[${requestId}] Login successful`, { userId: user.id, email });
-            
             const token = jwt.sign({
                 id: user.id,
                 email: user.email,
@@ -174,14 +183,15 @@ export const login = async (req: Request, res: Response): Promise<void> => {
                 token,
             });
             return;
-        } else {
-            logger.warn(`[${requestId}] Invalid password`, { email });
-            res.status(403).json({
-                msg: 'Invalid email or password',
-                token: 'no token',
-            });
-            return;
         }
+
+        logger.warn(`[${requestId}] Invalid password`, { email });
+        res.status(403).json({
+            msg: 'Invalid email or password',
+            token: 'no token',
+        });
+        return;
+
     } catch (error: any) {
         logger.error(`[${requestId}] Error in login`, {
             error: error.message,
