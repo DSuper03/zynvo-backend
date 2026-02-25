@@ -12,7 +12,14 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
     const { email, name, clerkId, collegeName, avatarUrl, imgUrl, password } = req.body; 
 
     try {
-        if(!clerkId || !email) {
+        // Fallback: if no clerkId is provided, treat this as legacy email/password login
+        if (!clerkId) {
+            logger.info(`[${requestId}] /login without clerkId - falling back to password login`, { email });
+            await login(req, res);
+            return;
+        }
+
+        if (!email) {
             logger.warn(`[${requestId}] Clerk Auth attempt with missing fields`, { email, clerkId });
             res.status(400).json({ msg: "Missing required fields" });
             return;
@@ -159,9 +166,31 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        if (bcrypt.compareSync(password, user.password)) {
+        let passwordMatches = false;
+        let needsRehash = false;
+
+        if (user.password) {
+            // First, try bcrypt comparison (hashed password case)
+            passwordMatches = bcrypt.compareSync(password, user.password);
+
+            // If bcrypt comparison fails, fall back to legacy plain-text comparison
+            if (!passwordMatches && password === user.password) {
+                passwordMatches = true;
+                needsRehash = true; // legacy plain-text password: upgrade to bcrypt
+            }
+        }
+
+        if (passwordMatches) {
+            if (needsRehash) {
+                // Transparently upgrade legacy plain-text password to a bcrypt hash
+                const newHashedPassword = bcrypt.hashSync(password, 10);
+                await prisma.user.update({
+                    where: { id: user.id },
+                    data: { password: newHashedPassword },
+                });
+                logger.info(`[${requestId}] Upgraded legacy plain-text password to bcrypt`, { userId: user.id, email });
+            }
             logger.info(`[${requestId}] Login successful`, { userId: user.id, email });
-            
             const token = jwt.sign({
                 id: user.id,
                 email: user.email,
@@ -174,14 +203,15 @@ export const login = async (req: Request, res: Response): Promise<void> => {
                 token,
             });
             return;
-        } else {
-            logger.warn(`[${requestId}] Invalid password`, { email });
-            res.status(403).json({
-                msg: 'Invalid email or password',
-                token: 'no token',
-            });
-            return;
         }
+
+        logger.warn(`[${requestId}] Invalid password`, { email });
+        res.status(403).json({
+            msg: 'Invalid email or password',
+            token: 'no token',
+        });
+        return;
+
     } catch (error: any) {
         logger.error(`[${requestId}] Error in login`, {
             error: error.message,
