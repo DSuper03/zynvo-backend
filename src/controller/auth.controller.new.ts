@@ -19,7 +19,7 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
-        if(!clerkId || !email) {
+        if (!email) {
             logger.warn(`[${requestId}] Clerk Auth attempt with missing fields`, { email, clerkId });
             res.status(400).json({ msg: "Missing required fields" });
             return;
