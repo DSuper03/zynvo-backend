@@ -21,7 +21,7 @@ import {
   leaveClub,
   isClubAdmin
 } from '../controller/user.controller';
-import { clerkLogin } from '../controller/auth.controller.new';
+import { clerkLogin, syncWithClerk } from '../controller/auth.controller.new';
 
 const router = Router();
 
@@ -37,6 +37,7 @@ router.post('/forgot', forgotPassword);
 router.put('/reset-password', AuthMiddleware, resetPassword);
 
 router.post('/clerkLogin', clerkLogin);
+router.post('/syncWithClerk', syncWithClerk);
 
 router.get('/getUser', AuthMiddleware, getUser);
 router.post('/joinClub/:id', AuthMiddleware, joinClub);
