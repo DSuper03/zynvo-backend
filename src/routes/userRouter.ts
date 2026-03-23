@@ -27,7 +27,10 @@ const router = Router();
 
 //depricated routes - use auth.controller.new.ts for new routes
 router.post('/signup', signup);
-router.post('/login', login);
+// Route /login through the Clerk-aware handler; it falls back to legacy password login when clerkId is absent
+router.post('/login', clerkLogin);
+// Keep legacy password login separately for explicit calls
+router.post('/password-login', login);
 router.post('/ResendEmail', resendEmail);
 router.post('/verify', verifyEmail);
 router.post('/forgot', forgotPassword);
