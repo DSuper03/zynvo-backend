@@ -120,6 +120,7 @@ app.use('/api/v1/contact', contactRouter);
 
 //------------------- V2 routes --------------------
 
+app.use('/api/v2/user/auth', limiter);
 app.use('/api/v2/admin', adminControlRouter)
 app.use('/api/v2/user/auth', userRouter);
 
