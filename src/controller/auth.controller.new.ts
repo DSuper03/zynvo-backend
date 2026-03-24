@@ -45,12 +45,6 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
             res.status(400).json({ msg: "Invalid email format" });
             return;
         }
-        if (!collegeName){
-            logger.warn(`[${requestId}] Clerk Auth attempt with missing collegeName`, { email, clerkId });
-            res.status(400).json({ msg: "Missing required fields" });
-            return;
-        }
-
         logger.info(`[${requestId}] Clerk Auth attempt`, { email });
         logger.info(`[${requestId}] Clerk Auth Data`, { email, name, clerkId, collegeName});
 
@@ -59,7 +53,14 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
             where: { email: email }
         });
 
-    
+        // collegeName is only required for NEW users (signup), not existing (signin)
+        if (!user && !collegeName) {
+            logger.warn(`[${requestId}] New user signup missing collegeName`, { email, clerkId });
+            res.status(404).json({ msg: "No account found with this email. Please sign up first." });
+            return;
+        }
+
+
         if (user) {
             //if they don't have a clerkId yet, link it now
             if (!user.clerkId) {
@@ -137,7 +138,7 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
     }
 };
 
-// traditional Login (Depreciate when all users have clerkId linked)
+// depricated
 export const login = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const { email, password } = req.body;
