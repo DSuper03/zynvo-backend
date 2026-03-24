@@ -11,10 +11,7 @@ dotenv.config();
 
 
 const secretKey = process.env.CLERK_SECRET_KEY;
-if (!secretKey) {
-    logger.error("CLERK_SECRET_KEY is not set in environment variables");
-    throw new Error("CLERK_SECRET_KEY is required for authentication");
-}
+
 
 const clerkClient = createClerkClient({ secretKey: secretKey });
 
