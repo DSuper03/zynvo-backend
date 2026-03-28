@@ -53,6 +53,7 @@ export const getAllClubs = async (req: Request, res: Response): Promise<void> =>
                 skip,
                 take: limit,
                 select: clubSelectWithMembers,
+                orderBy: { createdAt: 'desc' },
             }),
             prisma.clubs.count()
         ]);
@@ -170,6 +171,7 @@ export const getClubByQuery = async (req: Request, res: Response): Promise<void>
                     collegeName: collegeName as string
                 },
                 select: clubSelectWithMembers,
+                orderBy: { createdAt: 'desc' },
             });
 
             if (!response || response.length === 0) {
@@ -201,6 +203,7 @@ export const getClubByQuery = async (req: Request, res: Response): Promise<void>
             const response = await prisma.clubs.findMany({
                 where: { name: name as string },
                 select: clubSelectBase,
+                orderBy: { createdAt: 'desc' },
             });
 
             if (!response || response.length === 0) {
@@ -267,6 +270,7 @@ export const getClubsByCollege = async (req: Request, res: Response): Promise<vo
                 }
             },
             select: clubSelectWithMembers,
+            orderBy: { createdAt: 'desc' },
         });
 
         logger.info(`[${requestId}] Successfully fetched clubs for college`, {
