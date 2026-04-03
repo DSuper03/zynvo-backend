@@ -86,14 +86,6 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
                 user = await prisma.user.update({
                     where: { email },
                     data: updateData,
-                    select: {
-                        id: true,
-                        email: true,
-                        name: true,
-                        profileAvatar: true,
-                        collegeName: true,
-                        clerkId: true,
-                    }
                 });
             }
             
@@ -122,14 +114,6 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
                     password: password ? bcrypt.hashSync(password, 10) : "", // Hash password; empty for OAuth-only users
                     isVerified: true,
                     ValidFor: 86400000,
-                },
-                select: {
-                    id: true,
-                    email: true,
-                    name: true,
-                    profileAvatar: true,
-                    collegeName: true,
-                    clerkId: true,
                 }
             });
 
