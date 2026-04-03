@@ -59,25 +59,56 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
 
 
         if (user) {
-            //if they don't have a clerkId yet, link it now
+            // Update user with new data from Clerk/OAuth (clerkId, collegeName, name, profileAvatar)
+            const updateData: any = {};
+            
             if (!user.clerkId) {
+                updateData.clerkId = clerkId;
+            }
+            
+            // Always update collegeName if provided
+            if (collegeName) {
+                updateData.collegeName = collegeName;
+            }
+            
+            // Update name if provided and different
+            if (name && name !== user.name) {
+                updateData.name = name;
+            }
+            
+            // Update profile avatar if provided and different
+            if ((avatarUrl || imgUrl) && (avatarUrl || imgUrl) !== user.profileAvatar) {
+                updateData.profileAvatar = avatarUrl || imgUrl;
+            }
+
+            // If there are changes to make, update the user
+            if (Object.keys(updateData).length > 0) {
                 user = await prisma.user.update({
                     where: { email },
-                    data: { clerkId}
+                    data: updateData,
+                    select: {
+                        id: true,
+                        email: true,
+                        name: true,
+                        profileAvatar: true,
+                        collegeName: true,
+                        clerkId: true,
+                    }
                 });
-            } 
-              const token = jwt.sign({
-            id: user.id,
-            email: user.email,
-            pfp: user.profileAvatar,
-            name: user.name
-        }, process.env.JWT_SECRET!);
+            }
+            
+            const token = jwt.sign({
+                id: user.id,
+                email: user.email,
+                pfp: user.profileAvatar,
+                name: user.name
+            }, process.env.JWT_SECRET!);
 
-        res.status(200).json({
-            msg: 'login success',
-            token,
-        });
-        return;
+            res.status(200).json({
+                msg: 'login success',
+                token,
+            });
+            return;
         } 
     
         else {
@@ -91,21 +122,29 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
                     password: password ? bcrypt.hashSync(password, 10) : "", // Hash password; empty for OAuth-only users
                     isVerified: true,
                     ValidFor: 86400000,
+                },
+                select: {
+                    id: true,
+                    email: true,
+                    name: true,
+                    profileAvatar: true,
+                    collegeName: true,
+                    clerkId: true,
                 }
             });
 
-              const token = jwt.sign({
-            id: user.id,
-            email: user.email,
-            pfp: user.profileAvatar,
-            name: user.name
-        }, process.env.JWT_SECRET!);
+            const token = jwt.sign({
+                id: user.id,
+                email: user.email,
+                pfp: user.profileAvatar,
+                name: user.name
+            }, process.env.JWT_SECRET!);
 
-        res.status(200).json({
-            msg: 'Signup success',
-            token,
-        });
-        return;
+            res.status(200).json({
+                msg: 'Signup success',
+                token,
+            });
+            return;
         }
 
        
