@@ -66,8 +66,8 @@ export const clerkLogin = async (req: Request, res: Response): Promise<void> => 
                 updateData.clerkId = clerkId;
             }
             
-            // Always update collegeName if provided
-            if (collegeName) {
+            // Always update collegeName if provided and it's not a placeholder
+            if (collegeName && collegeName !== "not joined" && collegeName !== "not_joined" && collegeName !== "zync college") {
                 updateData.collegeName = collegeName;
             }
             
