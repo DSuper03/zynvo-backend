@@ -16,6 +16,41 @@ const secretKey = process.env.CLERK_SECRET_KEY;
 const clerkClient = createClerkClient({ secretKey: secretKey });
 
 
+// Pre-check: does this email already exist in our DB?
+// Called by frontend BEFORE starting Clerk signup to prevent duplicate accounts.
+export const checkUserExists = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const { email } = req.body;
+
+    if (!email) {
+        res.status(400).json({ msg: "Email is required" });
+        return;
+    }
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { email: email.trim().toLowerCase() },
+            select: { id: true, collegeName: true }
+        });
+
+        if (user) {
+            // Check if the user has a real college name (not a placeholder)
+            const placeholders = ["not joined", "not_joined", "zync college", "n/a", "na", "none", "", "null", "undefined"];
+            const hasCollege = !!user.collegeName && !placeholders.includes(user.collegeName.trim().toLowerCase());
+
+            logger.info(`[${requestId}] checkUserExists: user found`, { email, hasCollege });
+            res.status(200).json({ exists: true, hasCollege });
+            return;
+        }
+
+        logger.info(`[${requestId}] checkUserExists: user not found`, { email });
+        res.status(200).json({ exists: false, hasCollege: false });
+    } catch (error: any) {
+        logger.error(`[${requestId}] checkUserExists error`, { error: error?.message });
+        res.status(500).json({ msg: "Internal server error" });
+    }
+};
+
 // This route handles BOTH "Sign in with Google" AND "New Clerk Signups"
 export const clerkLogin = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
