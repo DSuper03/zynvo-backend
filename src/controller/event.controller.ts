@@ -1604,6 +1604,89 @@ export const verifyPayment = async (req: Request, res: Response): Promise<void> 
     }
 };
 
+export const checkEventDates = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const { eventStartDate, eventEndDate, applicationStartDate, applicationEndDate } = req.body;
+
+    logger.info(`[${requestId}] POST /checkEventDates - Validating event dates`, {
+        eventStartDate,
+        eventEndDate,
+        applicationStartDate,
+        applicationEndDate
+    });
+
+    try {
+        const validationResults: {
+            isValid: boolean;
+            errors: string[];
+            warnings: string[];
+        } = {
+            isValid: true,
+            errors: [],
+            warnings: []
+        };
+
+        const now = new Date();
+        
+        // Parse dates
+        const startDate = eventStartDate ? new Date(eventStartDate) : null;
+        const endDate = eventEndDate ? new Date(eventEndDate) : null;
+        const appStartDate = applicationStartDate ? new Date(applicationStartDate) : null;
+        const appEndDate = applicationEndDate ? new Date(applicationEndDate) : null;
+
+        // Validate event dates
+        if (startDate && endDate) {
+            if (startDate >= endDate) {
+                validationResults.isValid = false;
+                validationResults.errors.push('Event start date must be before event end date');
+            }
+
+            if (startDate < now) {
+                validationResults.warnings.push('Event start date is in the past');
+            }
+        }
+
+        // Validate application dates
+        if (appStartDate && appEndDate) {
+            if (appStartDate >= appEndDate) {
+                validationResults.isValid = false;
+                validationResults.errors.push('Application start date must be before application end date');
+            }
+
+            if (appEndDate < now) {
+                validationResults.warnings.push('Application end date is in the past');
+            }
+        }
+
+        // Check application dates vs event dates
+        if (appStartDate && startDate && appStartDate >= startDate) {
+            validationResults.warnings.push('Application start date is on or after event start date');
+        }
+
+        if (appEndDate && startDate && appEndDate > startDate) {
+            validationResults.warnings.push('Application end date is after event start date');
+        }
+
+        logger.info(`[${requestId}] Event date validation completed`, {
+            isValid: validationResults.isValid,
+            errorsCount: validationResults.errors.length,
+            warningsCount: validationResults.warnings.length
+        });
+
+        res.status(200).json({
+            msg: 'Event dates validated',
+            ...validationResults
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error validating event dates`, {
+            error: error.message,
+            stack: error.stack
+        });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
 export const getPaidEventPayments = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const userId = req.id;
@@ -1664,7 +1747,7 @@ export const getPaidEventPayments = async (req: Request, res: Response): Promise
             return;
         }
 
-        // Fetch all registrations for the event with payment screenshots
+        // Fetch all registrations for event with payment screenshots
         const registrations = await prisma.userEvents.findMany({
             where: { eventId: eventId },
             select: {

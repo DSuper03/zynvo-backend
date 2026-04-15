@@ -17,6 +17,7 @@ import {
   getUserDetailsByPassId,
   verifyPayment,
   getPaidEventPayments,
+  checkEventDates,
 } from '../controller/event.controller';
 import { 
   getAllannouncements, 
@@ -33,6 +34,7 @@ import{addToGallery,
 const router = Router();
 
 router.post('/event', AuthMiddleware, ClubHeadAuthMiddleware, createEvent);
+router.post('/checkEventDates', checkEventDates);
 router.get('/event/:id', getEventById);
 router.get('/eventByClub/:id', AuthMiddleware, getEventsByClub);
 router.get('/all', getAllEvents);
