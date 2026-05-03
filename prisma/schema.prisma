@@ -45,6 +45,8 @@ model User {
   CreatePost    CreatePost[]
   postUpvotes   PostUpvote[]
   postDownvotes PostDownvote[]
+  teamsCreated    Team[]       @relation("TeamCreator")
+  teamMemberships TeamMember[]
 }
 
 model clubs{ // same names multiple colleges , same college multiple
@@ -143,6 +145,7 @@ model event {
   attendees userEvents[]
   announcements eventAnnouncement[]
   galleries eventGallery[]
+  teams     Team[]
 }
 
 model eventAnnouncement {
@@ -212,4 +215,28 @@ model PostDownvote {
   user      User       @relation(fields: [userId], references: [id])
 
   @@unique([postId, userId])
+}
+
+model Team {
+  id          String       @id @default(uuid())
+  teamName    String
+  teamCode    String       @unique
+  eventId     String
+  event       event        @relation(fields: [eventId], references: [id])
+  createdById String
+  createdBy   User         @relation("TeamCreator", fields: [createdById], references: [id])
+  createdAt   DateTime     @default(now())
+  members     TeamMember[]
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  role      String   @default("member")
+  joinedAt  DateTime @default(now())
+
+  @@unique([teamId, userId])
 }

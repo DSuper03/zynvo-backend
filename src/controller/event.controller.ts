@@ -1620,6 +1620,7 @@ export const checkEventDates = async (req: Request, res: Response): Promise<void
             isValid: boolean;
             errors: string[];
             warnings: string[];
+            existingEvents?: any[];
         } = {
             isValid: true,
             errors: [],
@@ -1643,6 +1644,40 @@ export const checkEventDates = async (req: Request, res: Response): Promise<void
 
             if (startDate < now) {
                 validationResults.warnings.push('Event start date is in the past');
+            }
+
+            // Check for existing events on the same date range
+            const existingEvents = await prisma.event.findMany({
+                where: {
+                    OR: [
+                        {
+                            startDate: { lte: startDate.toISOString() },
+                            endDate: { gte: startDate.toISOString() }
+                        },
+                        {
+                            startDate: { lte: endDate.toISOString() },
+                            endDate: { gte: endDate.toISOString() }
+                        },
+                        {
+                            startDate: { gte: startDate.toISOString() },
+                            endDate: { lte: endDate.toISOString() }
+                        }
+                    ]
+                },
+                select: {
+                    id: true,
+                    EventName: true,
+                    startDate: true,
+                    endDate: true,
+                    clubName: true,
+                    Venue: true
+                },
+                take: 10
+            });
+
+            if (existingEvents.length > 0) {
+                validationResults.existingEvents = existingEvents;
+                validationResults.warnings.push(`Found ${existingEvents.length} event(s) during the same period`);
             }
         }
 
@@ -1670,7 +1705,8 @@ export const checkEventDates = async (req: Request, res: Response): Promise<void
         logger.info(`[${requestId}] Event date validation completed`, {
             isValid: validationResults.isValid,
             errorsCount: validationResults.errors.length,
-            warningsCount: validationResults.warnings.length
+            warningsCount: validationResults.warnings.length,
+            existingEventsCount: validationResults.existingEvents?.length || 0
         });
 
         res.status(200).json({
