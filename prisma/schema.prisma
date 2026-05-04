@@ -222,7 +222,7 @@ model Team {
   teamName    String
   teamCode    String       @unique
   eventId     String
-  event       event        @relation(fields: [eventId], references: [id])
+  event       event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   createdById String
   createdBy   User         @relation("TeamCreator", fields: [createdById], references: [id])
   createdAt   DateTime     @default(now())
