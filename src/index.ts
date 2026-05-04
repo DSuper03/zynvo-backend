@@ -1,4 +1,4 @@
-﻿import dotenv from 'dotenv';
+import dotenv from 'dotenv';
 import path from 'path';
 
 // Load .env file from project root with explicit path
@@ -41,6 +41,7 @@ import { EventRouter } from './routes/eventRouter';
 import { clubRouter } from './routes/clubRouter';
 import openapiSpec from '../openapispecfile.json';
 import { adminControlRouter } from './routes/adminRouter';
+import { teamRouter } from './routes/teamRouter';
 // ort atomicdocs from 'atomicdocs';
 import { createHonoExpressMiddleware } from './hono/expressAdapter';
 import { honoApp } from './hono/app';
@@ -117,6 +118,7 @@ app.use('/api/hono/v1', honoMiddleware);
 app.use('/api/v1/events', EventRouter);
 app.use('/api/v1/clubs', clubRouter);
 app.use('/api/v1/contact', contactRouter);
+app.use('/api/v1/teams', teamRouter);
 
 //------------------- V2 routes --------------------
 
