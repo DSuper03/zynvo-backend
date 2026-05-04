@@ -86,6 +86,7 @@ export const createTeam = async (req: Request, res: Response): Promise<void> => 
         const teamCode = await generateUniqueTeamCode();
 
         // 4. Create team + add the creator as leader in a single transaction
+        // Note: DB constraint @@unique([eventId, userId]) on TeamMember will catch concurrent requests
         const team = await prisma.team.create({
             data: {
                 teamName,
@@ -95,6 +96,7 @@ export const createTeam = async (req: Request, res: Response): Promise<void> => 
                 members: {
                     create: {
                         userId,
+                        eventId, // Required for unique(eventId, userId) constraint
                         role: 'leader',
                     },
                 },
@@ -124,6 +126,14 @@ export const createTeam = async (req: Request, res: Response): Promise<void> => 
             team,
         });
     } catch (error: any) {
+        // Handle unique constraint violation on (eventId, userId)
+        if (error.code === 'P2002' && error.meta?.target?.includes('eventId')) {
+            logger.warn(`[${requestId}] User already in a team for this event (concurrent request)`, 
+                { userId, eventId, error: error.message });
+            sendErrorResponse(res, requestId, 'You are already in a team for this event', 409);
+            return;
+        }
+
         logger.error(`[${requestId}] Error creating team`, { error: error.message, stack: error.stack });
         sendErrorResponse(res, requestId, 'Internal server error', 500);
     }
@@ -200,10 +210,11 @@ export const joinTeam = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        // 5. Add member
+        // 5. Add member (with DB constraint @@unique([eventId, userId]) catching concurrent attempts)
         await prisma.teamMember.create({
             data: {
                 teamId: team.id,
+                eventId: team.eventId, // Required for unique(eventId, userId) constraint
                 userId,
                 role: 'member',
             },
@@ -237,6 +248,14 @@ export const joinTeam = async (req: Request, res: Response): Promise<void> => {
             team: updatedTeam,
         });
     } catch (error: any) {
+        // Handle unique constraint violation on (eventId, userId)
+        if (error.code === 'P2002' && error.meta?.target?.includes('eventId')) {
+            logger.warn(`[${requestId}] User already in a team for this event (concurrent request)`, 
+                { userId, eventId, error: error.message });
+            sendErrorResponse(res, requestId, 'You are already in a team for this event', 409);
+            return;
+        }
+
         logger.error(`[${requestId}] Error joining team`, { error: error.message, stack: error.stack });
         sendErrorResponse(res, requestId, 'Internal server error', 500);
     }
