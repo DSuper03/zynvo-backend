@@ -3,6 +3,10 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { generateRequestId, sendErrorResponse } from '../utils/helper';
 
+interface AuthRequest extends Request {
+    id: string;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
@@ -31,6 +35,11 @@ const generateUniqueTeamCode = async (maxAttempts = 10): Promise<string> => {
     throw new Error('Failed to generate a unique team code after multiple attempts');
 };
 
+const getString = (val: unknown): string => {
+    if (Array.isArray(val)) return val[0];
+    return val as string;
+};
+
 // ─── Controllers ──────────────────────────────────────────────────────────────
 
 /**
@@ -40,7 +49,7 @@ const generateUniqueTeamCode = async (maxAttempts = 10): Promise<string> => {
  * Creates a new team for the given event. The authenticated user becomes
  * the team leader and first member.
  */
-export const createTeam = async (req: Request, res: Response): Promise<void> => {
+export const createTeam = async (req: AuthRequest, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const userId = req.id;
     const { eventId, teamName } = req.body;
@@ -145,7 +154,7 @@ export const createTeam = async (req: Request, res: Response): Promise<void> => 
  *
  * Joins an existing team via invite code.
  */
-export const joinTeam = async (req: Request, res: Response): Promise<void> => {
+export const joinTeam = async (req: AuthRequest, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const userId = req.id;
     const { eventId, teamCode } = req.body;
@@ -266,15 +275,15 @@ export const joinTeam = async (req: Request, res: Response): Promise<void> => {
  *
  * Fetches full team details including all members.
  */
-export const getTeamDetails = async (req: Request, res: Response): Promise<void> => {
+export const getTeamDetails = async (req: AuthRequest, res: Response): Promise<void> => {
     const requestId = generateRequestId();
-    const { teamId } = req.params;
+    const teamId = getString(req.params.teamId);
 
     logger.info(`[${requestId}] GET /teams/details/${teamId}`);
 
     try {
         const team = await prisma.team.findUnique({
-            where: { id: teamId },
+            where: { id: teamId as string },
             select: {
                 id: true,
                 teamName: true,
@@ -314,8 +323,8 @@ export const getTeamDetails = async (req: Request, res: Response): Promise<void>
             msg: 'Team details fetched',
             team: {
                 ...team,
-                maxMembers: team.event.TeamSize,
-                currentMembers: team.members.length,
+                maxMembers: team.event?.TeamSize,
+                currentMembers: team.members?.length ?? 0,
             },
         });
     } catch (error: any) {
@@ -329,10 +338,10 @@ export const getTeamDetails = async (req: Request, res: Response): Promise<void>
  *
  * Returns the authenticated user's team for the specified event, or null.
  */
-export const getMyTeam = async (req: Request, res: Response): Promise<void> => {
+export const getMyTeam = async (req: AuthRequest, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const userId = req.id;
-    const { eventId } = req.params;
+    const eventId = getString(req.params.eventId);
 
     logger.info(`[${requestId}] GET /teams/my-team/${eventId}`, { userId });
 
@@ -340,7 +349,7 @@ export const getMyTeam = async (req: Request, res: Response): Promise<void> => {
         const membership = await prisma.teamMember.findFirst({
             where: {
                 userId,
-                team: { eventId },
+                team: { eventId: eventId as string },
             },
             select: {
                 role: true,
@@ -389,8 +398,8 @@ export const getMyTeam = async (req: Request, res: Response): Promise<void> => {
             team: {
                 ...membership.team,
                 myRole: membership.role,
-                maxMembers: membership.team.event.TeamSize,
-                currentMembers: membership.team.members.length,
+                maxMembers: membership.team?.event?.TeamSize,
+                currentMembers: membership.team?.members?.length ?? 0,
             },
         });
     } catch (error: any) {
@@ -406,17 +415,41 @@ export const getMyTeam = async (req: Request, res: Response): Promise<void> => {
  * - If the leader leaves and other members exist, the next member is promoted.
  * - If the last member leaves, the team is deleted.
  */
-export const leaveTeam = async (req: Request, res: Response): Promise<void> => {
+export const leaveTeam = async (req: AuthRequest, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const userId = req.id;
-    const { teamId } = req.params;
+    const teamId = getString(req.params.teamId);
 
     logger.info(`[${requestId}] DELETE /teams/leave/${teamId}`, { userId });
 
     try {
         // 1. Check the user is actually in the team
         const membership = await prisma.teamMember.findFirst({
-            where: { teamId, userId },
+            where: { teamId: teamId as string, userId },
+            select: {
+                id: true,
+                role: true,
+                userId: true,
+                team: {
+                    select: {
+                        id: true,
+                        teamName: true,
+                        teamCode: true,
+                        eventId: true,
+                        createdAt: true,
+                        event: {
+                            select: { TeamSize: true, EventName: true },
+                        },
+                        members: {
+                            select: {
+                                id: true,
+                                role: true,
+                                user: true,
+                            },
+                        },
+                    },
+                },
+            },
         });
 
         if (!membership) {
@@ -426,13 +459,13 @@ export const leaveTeam = async (req: Request, res: Response): Promise<void> => {
 
         // 2. Get all team members to decide what happens next
         const allMembers = await prisma.teamMember.findMany({
-            where: { teamId },
+            where: { teamId: teamId as string },
             orderBy: { joinedAt: 'asc' },
         });
 
         if (allMembers.length === 1) {
             // Last member — delete the entire team (cascade deletes TeamMember)
-            await prisma.team.delete({ where: { id: teamId } });
+            await prisma.team.delete({ where: { id: teamId as string } });
 
             logger.info(`[${requestId}] Last member left, team deleted`, { teamId });
 
