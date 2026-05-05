@@ -45,7 +45,7 @@ jobs:
         run: |
           docker push asia-south1-docker.pkg.dev/${{ env.PROJECT_ID }}/zynvo-repo/zynvo-backend:$GITHUB_SHA
 
-      - name: Create env file
+      - name: Deploy to Cloud Run
         env:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
@@ -54,28 +54,9 @@ jobs:
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
           FE_URL: ${{ secrets.FE_URL }}
         run: |
-          node <<'NODE'
-          const fs = require('fs');
-          const keys = [
-            'JWT_SECRET',
-            'DIRECT_DATABASE_URL',
-            'DATABASE_URL',
-            'REDIS_URL',
-            'SENDGRID_API_KEY',
-            'FE_URL',
-          ];
-          const data = keys
-            .filter((key) => process.env[key])
-            .map((key) => `${key}: ${JSON.stringify(process.env[key])}`)
-            .join('\n');
-          fs.writeFileSync('env.yaml', `${data}\n`);
-          NODE
-
-      - name: Deploy to Cloud Run
-        run: |
           gcloud run deploy ${{ env.SERVICE }} \
             --image asia-south1-docker.pkg.dev/${{ env.PROJECT_ID }}/zynvo-repo/zynvo-backend:$GITHUB_SHA \
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
-            --env-vars-file env.yaml
+            --set-env-vars "^|^JWT_SECRET=$JWT_SECRET|DIRECT_DATABASE_URL=$DIRECT_DATABASE_URL|DATABASE_URL=$DATABASE_URL|REDIS_URL=$REDIS_URL|SENDGRID_API_KEY=$SENDGRID_API_KEY|FE_URL=$FE_URL"
