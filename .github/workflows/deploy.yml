@@ -5,6 +5,11 @@ on:
     branches:
       - main
 
+# 👇 THIS WAS MISSING (CRITICAL)
+permissions:
+  id-token: write
+  contents: read
+
 env:
   PROJECT_ID: project-fb9c80cd-f235-4d28-ac9
   SERVICE: zynvo-backend
