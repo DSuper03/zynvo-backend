@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+﻿import dotenv from 'dotenv';
 import path from 'path';
 
 // Load .env file from project root with explicit path
@@ -49,7 +49,7 @@ import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-se
 import { getRequestListener } from '@hono/node-server';
 
 const app = express()
-const PORT = Number(process.env.PORT) || 8000;
+const PORT = Number(process.env.PORT || 8000);
 
 console.log('⚙️  Setting up middleware and routes...');
 
@@ -159,10 +159,7 @@ console.log('✅ Middleware and routes configured successfully');
 }
 
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Server running on port ${PORT}`);
-  console.log(`📚 Docs available at http://localhost:${PORT}/docs`);
-  console.log(`🚀 GraphQL endpoint available at http://localhost:${PORT}/graphql`);
-  console.log(`✨ Hono app available at http://localhost:${PORT}/hono`);
+  console.log(`Server running on port ${PORT}`);
 });
 
 // Handle connection errors
