@@ -51,6 +51,12 @@ jobs:
         run: |
           docker push asia-south1-docker.pkg.dev/$PROJECT_ID/zynvo-repo/zynvo-backend:$GITHUB_SHA
 
+      - name: Create env file
+        run: |
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" > env.yaml
+          echo "DIRECT_DATABASE_URL=${{ secrets.DIRECT_DATABASE_URL }}" >> env.yaml
+          echo "REDIS_URL=${{ secrets.REDIS_URL }}" >> env.yaml
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy $SERVICE \
@@ -58,5 +64,5 @@ jobs:
             --region $REGION \
             --platform managed \
             --allow-unauthenticated \
-            --set-env-vars JWT_SECRET=${{ secrets.JWT_SECRET }},DIRECT_DATABASE_URL=${{ secrets.DIRECT_DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }}
+            --env-vars-file env.yaml
             
