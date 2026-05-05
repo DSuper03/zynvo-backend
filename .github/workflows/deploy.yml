@@ -53,5 +53,6 @@ jobs:
             --image asia-south1-docker.pkg.dev/$PROJECT_ID/zynvo-repo/zynvo-backend:$GITHUB_SHA \
             --region $REGION \
             --platform managed \
-            --allow-unauthenticated
+            --allow-unauthenticated \
+            --set-env-vars JWT_SECRET=${{ secrets.JWT_SECRET }},DIRECT_DATABASE_URL=${{ secrets.DIRECT_DATABASE_URL }},REDIS_URL=${{ secrets.REDIS_URL }}
             
