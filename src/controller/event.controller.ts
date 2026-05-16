@@ -1826,3 +1826,278 @@ export const getPaidEventPayments = async (req: Request, res: Response): Promise
         sendErrorResponse(res, requestId, 'Internal server error', 500);
     }
 };
+
+// JUDGE ROUTES HANDLERS
+export const addJudge = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const eventId = req.params.eventId as string;
+    const userId = req.id;
+    const { name, description, achievement } = req.body;
+
+    try {
+        if (!name || !description || !achievement) {
+            sendErrorResponse(res, requestId, 'Name, description, and achievement are required', 400);
+            return;
+        }
+
+        // Verify event exists
+        const event = await prisma.event.findUnique({
+            where: { id: eventId }
+        });
+
+        if (!event) {
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        // Verify user is the club head
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user) {
+            sendErrorResponse(res, requestId, 'User not found', 404);
+            return;
+        }
+
+        const club = await prisma.clubs.findFirst({
+            where: {
+                id: event.clubId,
+                founderEmail: user.email
+            }
+        });
+
+        if (!club) {
+            sendErrorResponse(res, requestId, 'Access denied. Only club heads can add judges', 403);
+            return;
+        }
+
+        const judge = await prisma.judges.create({
+            data: {
+                name,
+                description,
+                achievement,
+                eventId
+            }
+        });
+
+        logger.info(`[${requestId}] Judge added successfully`, {
+            judgeId: judge.id,
+            eventId,
+            userId
+        });
+
+        res.status(201).json({
+            msg: 'Judge added successfully',
+            data: judge
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error adding judge`, {
+            error: error.message,
+            eventId,
+            userId
+        });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+export const getJudges = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const eventId = req.params.eventId as string;
+
+    try {
+        const event = await prisma.event.findUnique({
+            where: { id: eventId }
+        });
+
+        if (!event) {
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        const judges = await prisma.judges.findMany({
+            where: { eventId },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.status(200).json({
+            msg: 'Judges fetched successfully',
+            data: judges
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error fetching judges`, {
+            error: error.message,
+            eventId
+        });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+export const updateJudge = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const eventId = req.params.eventId as string;
+    const judgeId = req.query.judgeId as string;
+    const userId = req.id;
+    const { name, description, achievement } = req.body;
+
+    try {
+        if (!judgeId) {
+            sendErrorResponse(res, requestId, 'Judge ID is required in query parameters', 400);
+            return;
+        }
+
+        const event = await prisma.event.findUnique({
+            where: { id: eventId }
+        });
+
+        if (!event) {
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        // Verify user is the club head
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user) {
+            sendErrorResponse(res, requestId, 'User not found', 404);
+            return;
+        }
+
+        const club = await prisma.clubs.findFirst({
+            where: {
+                id: event.clubId,
+                founderEmail: user.email
+            }
+        });
+
+        if (!club) {
+            sendErrorResponse(res, requestId, 'Access denied. Only club heads can update judges', 403);
+            return;
+        }
+
+        const existingJudge = await prisma.judges.findFirst({
+            where: {
+                id: judgeId,
+                eventId
+            }
+        });
+
+        if (!existingJudge) {
+            sendErrorResponse(res, requestId, 'Judge not found for this event', 404);
+            return;
+        }
+
+        const updatedJudge = await prisma.judges.update({
+            where: { id: judgeId },
+            data: {
+                name: name ?? existingJudge.name,
+                description: description ?? existingJudge.description,
+                achievement: achievement ?? existingJudge.achievement
+            }
+        });
+
+        logger.info(`[${requestId}] Judge updated successfully`, {
+            judgeId,
+            eventId,
+            userId
+        });
+
+        res.status(200).json({
+            msg: 'Judge updated successfully',
+            data: updatedJudge
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error updating judge`, {
+            error: error.message,
+            judgeId,
+            eventId,
+            userId
+        });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+export const deleteJudge = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const eventId = req.params.eventId as string;
+    const judgeId = req.query.judgeId as string;
+    const userId = req.id;
+
+    try {
+        if (!judgeId) {
+            sendErrorResponse(res, requestId, 'Judge ID is required in query parameters', 400);
+            return;
+        }
+
+        const event = await prisma.event.findUnique({
+            where: { id: eventId }
+        });
+
+        if (!event) {
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        // Verify user is the club head
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user) {
+            sendErrorResponse(res, requestId, 'User not found', 404);
+            return;
+        }
+
+        const club = await prisma.clubs.findFirst({
+            where: {
+                id: event.clubId,
+                founderEmail: user.email
+            }
+        });
+
+        if (!club) {
+            sendErrorResponse(res, requestId, 'Access denied. Only club heads can delete judges', 403);
+            return;
+        }
+
+        const existingJudge = await prisma.judges.findFirst({
+            where: {
+                id: judgeId,
+                eventId
+            }
+        });
+
+        if (!existingJudge) {
+            sendErrorResponse(res, requestId, 'Judge not found for this event', 404);
+            return;
+        }
+
+        await prisma.judges.delete({
+            where: { id: judgeId }
+        });
+
+        logger.info(`[${requestId}] Judge deleted successfully`, {
+            judgeId,
+            eventId,
+            userId
+        });
+
+        res.status(200).json({
+            msg: 'Judge deleted successfully'
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error deleting judge`, {
+            error: error.message,
+            judgeId,
+            eventId,
+            userId
+        });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
