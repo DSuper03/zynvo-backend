@@ -139,6 +139,7 @@ model event {
   tagline              String?             @default("")
   maxParticipants      Int?
   teams                Team[]
+  TeamMember           TeamMember[]
   club                 clubs               @relation(fields: [clubId], references: [id])
   announcements        eventAnnouncement[]
   galleries            eventGallery[]
@@ -232,6 +233,7 @@ model TeamMember {
   role     String   @default("member")
   joinedAt DateTime @default(now())
   eventId  String
+  event    event    @relation(fields: [eventId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id])
 
