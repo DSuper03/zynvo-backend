@@ -18,6 +18,10 @@ import {
   verifyPayment,
   getPaidEventPayments,
   checkEventDates,
+  addJudge,
+  getJudges,
+  updateJudge,
+  deleteJudge,
 } from '../controller/event.controller';
 import { 
   getAllannouncements, 
@@ -55,5 +59,9 @@ router.post('/:eventId/gallery', SpecificClubHeadAuthMiddleware, addToGallery);
 router.get('/:eventId/gallery', getEventGallery);
 router.put('/:eventId/gallery',AuthMiddleware, SpecificClubHeadAuthMiddleware, updateGalleryItem);
 router.delete('/:eventId/gallery',AuthMiddleware, SpecificClubHeadAuthMiddleware, deleteGalleryItem);
+router.post('/:eventId/judges', AuthMiddleware, SpecificClubHeadAuthMiddleware, addJudge);
+router.get('/:eventId/judges', getJudges);
+router.put('/:eventId/judges/:judgeId', AuthMiddleware, SpecificClubHeadAuthMiddleware, updateJudge);
+router.delete('/:eventId/judges/:judgeId', AuthMiddleware, SpecificClubHeadAuthMiddleware, deleteJudge);
 
 export const EventRouter = router;
