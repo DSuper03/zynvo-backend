@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "User" ALTER COLUMN "ValidFor" DROP NOT NULL,
+ALTER COLUMN "expiryToken" DROP NOT NULL;
