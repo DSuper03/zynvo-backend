@@ -1840,38 +1840,6 @@ export const addJudge = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        // Verify event exists
-        const event = await prisma.event.findUnique({
-            where: { id: eventId }
-        });
-
-        if (!event) {
-            sendErrorResponse(res, requestId, 'Event not found', 404);
-            return;
-        }
-
-        // Verify user is the club head
-        const user = await prisma.user.findUnique({
-            where: { id: userId }
-        });
-
-        if (!user) {
-            sendErrorResponse(res, requestId, 'User not found', 404);
-            return;
-        }
-
-        const club = await prisma.clubs.findFirst({
-            where: {
-                id: event.clubId,
-                founderEmail: user.email
-            }
-        });
-
-        if (!club) {
-            sendErrorResponse(res, requestId, 'Access denied. Only club heads can add judges', 403);
-            return;
-        }
-
         const judge = await prisma.judges.create({
             data: {
                 name,
@@ -1938,44 +1906,13 @@ export const getJudges = async (req: Request, res: Response): Promise<void> => {
 export const updateJudge = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const eventId = req.params.eventId as string;
-    const judgeId = req.query.judgeId as string;
+    const judgeId = req.params.judgeId as string;
     const userId = req.id;
     const { name, description, achievement } = req.body;
 
     try {
         if (!judgeId) {
-            sendErrorResponse(res, requestId, 'Judge ID is required in query parameters', 400);
-            return;
-        }
-
-        const event = await prisma.event.findUnique({
-            where: { id: eventId }
-        });
-
-        if (!event) {
-            sendErrorResponse(res, requestId, 'Event not found', 404);
-            return;
-        }
-
-        // Verify user is the club head
-        const user = await prisma.user.findUnique({
-            where: { id: userId }
-        });
-
-        if (!user) {
-            sendErrorResponse(res, requestId, 'User not found', 404);
-            return;
-        }
-
-        const club = await prisma.clubs.findFirst({
-            where: {
-                id: event.clubId,
-                founderEmail: user.email
-            }
-        });
-
-        if (!club) {
-            sendErrorResponse(res, requestId, 'Access denied. Only club heads can update judges', 403);
+            sendErrorResponse(res, requestId, 'Judge ID is required', 400);
             return;
         }
 
@@ -2025,43 +1962,12 @@ export const updateJudge = async (req: Request, res: Response): Promise<void> =>
 export const deleteJudge = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const eventId = req.params.eventId as string;
-    const judgeId = req.query.judgeId as string;
+    const judgeId = req.params.judgeId as string;
     const userId = req.id;
 
     try {
         if (!judgeId) {
-            sendErrorResponse(res, requestId, 'Judge ID is required in query parameters', 400);
-            return;
-        }
-
-        const event = await prisma.event.findUnique({
-            where: { id: eventId }
-        });
-
-        if (!event) {
-            sendErrorResponse(res, requestId, 'Event not found', 404);
-            return;
-        }
-
-        // Verify user is the club head
-        const user = await prisma.user.findUnique({
-            where: { id: userId }
-        });
-
-        if (!user) {
-            sendErrorResponse(res, requestId, 'User not found', 404);
-            return;
-        }
-
-        const club = await prisma.clubs.findFirst({
-            where: {
-                id: event.clubId,
-                founderEmail: user.email
-            }
-        });
-
-        if (!club) {
-            sendErrorResponse(res, requestId, 'Access denied. Only club heads can delete judges', 403);
+            sendErrorResponse(res, requestId, 'Judge ID is required', 400);
             return;
         }
 

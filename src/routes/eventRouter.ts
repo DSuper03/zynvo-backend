@@ -61,7 +61,7 @@ router.put('/:eventId/gallery',AuthMiddleware, SpecificClubHeadAuthMiddleware, u
 router.delete('/:eventId/gallery',AuthMiddleware, SpecificClubHeadAuthMiddleware, deleteGalleryItem);
 router.post('/:eventId/judges', AuthMiddleware, SpecificClubHeadAuthMiddleware, addJudge);
 router.get('/:eventId/judges', getJudges);
-router.put('/:eventId/judges', AuthMiddleware, SpecificClubHeadAuthMiddleware, updateJudge);
-router.delete('/:eventId/judges', AuthMiddleware, SpecificClubHeadAuthMiddleware, deleteJudge);
+router.put('/:eventId/judges/:judgeId', AuthMiddleware, SpecificClubHeadAuthMiddleware, updateJudge);
+router.delete('/:eventId/judges/:judgeId', AuthMiddleware, SpecificClubHeadAuthMiddleware, deleteJudge);
 
 export const EventRouter = router;
