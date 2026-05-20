@@ -39,6 +39,10 @@ const eventSelectBase = {
     isPaid: true,
     Fees: true,
     qrCodeUrl: true,
+    maxParticipants: true,
+    _count: {
+        select: { attendees: true }
+    }
 } as const;
 
 // Surface payment amount under friendlier keys for responses.
@@ -193,7 +197,8 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
                 link3 : parsedData.data.link3 ? parsedData.data.link3 : null,
                 whatsappLink: parsedData.data.whatsappLink || "",
                 isPaid: parsedData.data.isPaidEvent ?? parsedData.data.isPaid ?? false,
-                qrCodeUrl: parsedData.data.paymentQRCode || parsedData.data.qrCodeUrl || null
+                qrCodeUrl: parsedData.data.paymentQRCode || parsedData.data.qrCodeUrl || null,
+                maxParticipants: parsedData.data.maxParticipants ? parseInt(parsedData.data.maxParticipants.toString(), 10) : null
             },
             select: { id: true }
         });
@@ -428,12 +433,27 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
                 isPaid: true,
                 collegeStudentsOnly: true,
                 university: true,
+                maxParticipants: true,
+                _count: {
+                    select: { attendees: true }
+                }
             }
         });
 
         if (!event) {
             logger.warn(`[${requestId}] Event not found`, { eventId });
             sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        // Check if participation limit is reached
+        if (event.maxParticipants !== null && event.maxParticipants !== undefined && event._count.attendees >= event.maxParticipants) {
+            logger.warn(`[${requestId}] Event participation limit reached`, {
+                eventId,
+                maxParticipants: event.maxParticipants,
+                currentAttendees: event._count.attendees
+            });
+            sendErrorResponse(res, requestId, 'Participation limit reached for this event', 400);
             return;
         }
 
