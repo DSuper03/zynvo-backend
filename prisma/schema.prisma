@@ -92,6 +92,17 @@ model speakers {
   event      event   @relation(fields: [eventId], references: [id])
 }
 
+model judges {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  achievement String
+  eventId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  event       event    @relation(fields: [eventId], references: [id])
+}
+
 model event {
   id                   String              @id @default(uuid())
   EventName            String              @unique
@@ -126,11 +137,13 @@ model event {
   applicationEndDate   String?             @default("")
   applicationStartDate String?             @default("")
   tagline              String?             @default("")
+  maxParticipants      Int?
   teams                Team[]
   TeamMember           TeamMember[]
   club                 clubs               @relation(fields: [clubId], references: [id])
   announcements        eventAnnouncement[]
   galleries            eventGallery[]
+  judges               judges[]
   speakers             speakers[]
   attendees            userEvents[]
 }
@@ -209,7 +222,7 @@ model Team {
   createdById String
   createdAt   DateTime     @default(now())
   createdBy   User         @relation("TeamCreator", fields: [createdById], references: [id])
-  event       event        @relation(fields: [eventId], references: [id])
+  event       event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   members     TeamMember[]
 }
 

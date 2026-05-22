@@ -51,4 +51,5 @@ export const EventSchema = z.object({
   tagline: z.string().optional(),
   applicationStartDate: z.string().optional(),
   applicationEndDate: z.string().optional(),
+  maxParticipants: z.union([z.number(), z.string()]).optional().nullable(),
 });

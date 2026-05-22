@@ -39,6 +39,10 @@ const eventSelectBase = {
     isPaid: true,
     Fees: true,
     qrCodeUrl: true,
+    maxParticipants: true,
+    _count: {
+        select: { attendees: true }
+    }
 } as const;
 
 // Surface payment amount under friendlier keys for responses.
@@ -193,7 +197,8 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
                 link3 : parsedData.data.link3 ? parsedData.data.link3 : null,
                 whatsappLink: parsedData.data.whatsappLink || "",
                 isPaid: parsedData.data.isPaidEvent ?? parsedData.data.isPaid ?? false,
-                qrCodeUrl: parsedData.data.paymentQRCode || parsedData.data.qrCodeUrl || null
+                qrCodeUrl: parsedData.data.paymentQRCode || parsedData.data.qrCodeUrl || null,
+                maxParticipants: parsedData.data.maxParticipants ? parseInt(parsedData.data.maxParticipants.toString(), 10) : null
             },
             select: { id: true }
         });
@@ -428,12 +433,27 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
                 isPaid: true,
                 collegeStudentsOnly: true,
                 university: true,
+                maxParticipants: true,
+                _count: {
+                    select: { attendees: true }
+                }
             }
         });
 
         if (!event) {
             logger.warn(`[${requestId}] Event not found`, { eventId });
             sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        // Check if participation limit is reached
+        if (event.maxParticipants !== null && event.maxParticipants !== undefined && event._count.attendees >= event.maxParticipants) {
+            logger.warn(`[${requestId}] Event participation limit reached`, {
+                eventId,
+                maxParticipants: event.maxParticipants,
+                currentAttendees: event._count.attendees
+            });
+            sendErrorResponse(res, requestId, 'Participation limit reached for this event', 400);
             return;
         }
 
@@ -1823,6 +1843,187 @@ export const getPaidEventPayments = async (req: Request, res: Response): Promise
             eventId
         });
         console.log(error);
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+// JUDGE ROUTES HANDLERS
+export const addJudge = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const eventId = req.params.eventId as string;
+    const userId = req.id;
+    const { name, description, achievement } = req.body;
+
+    try {
+        if (!name || !description || !achievement) {
+            sendErrorResponse(res, requestId, 'Name, description, and achievement are required', 400);
+            return;
+        }
+
+        const judge = await prisma.judges.create({
+            data: {
+                name,
+                description,
+                achievement,
+                eventId
+            }
+        });
+
+        logger.info(`[${requestId}] Judge added successfully`, {
+            judgeId: judge.id,
+            eventId,
+            userId
+        });
+
+        res.status(201).json({
+            msg: 'Judge added successfully',
+            data: judge
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error adding judge`, {
+            error: error.message,
+            eventId,
+            userId
+        });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+export const getJudges = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const eventId = req.params.eventId as string;
+
+    try {
+        const event = await prisma.event.findUnique({
+            where: { id: eventId }
+        });
+
+        if (!event) {
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        const judges = await prisma.judges.findMany({
+            where: { eventId },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.status(200).json({
+            msg: 'Judges fetched successfully',
+            data: judges
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error fetching judges`, {
+            error: error.message,
+            eventId
+        });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+export const updateJudge = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const eventId = req.params.eventId as string;
+    const judgeId = req.params.judgeId as string;
+    const userId = req.id;
+    const { name, description, achievement } = req.body;
+
+    try {
+        if (!judgeId) {
+            sendErrorResponse(res, requestId, 'Judge ID is required', 400);
+            return;
+        }
+
+        const existingJudge = await prisma.judges.findFirst({
+            where: {
+                id: judgeId,
+                eventId
+            }
+        });
+
+        if (!existingJudge) {
+            sendErrorResponse(res, requestId, 'Judge not found for this event', 404);
+            return;
+        }
+
+        const updatedJudge = await prisma.judges.update({
+            where: { id: judgeId },
+            data: {
+                name: name ?? existingJudge.name,
+                description: description ?? existingJudge.description,
+                achievement: achievement ?? existingJudge.achievement
+            }
+        });
+
+        logger.info(`[${requestId}] Judge updated successfully`, {
+            judgeId,
+            eventId,
+            userId
+        });
+
+        res.status(200).json({
+            msg: 'Judge updated successfully',
+            data: updatedJudge
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error updating judge`, {
+            error: error.message,
+            judgeId,
+            eventId,
+            userId
+        });
+        sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+export const deleteJudge = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const eventId = req.params.eventId as string;
+    const judgeId = req.params.judgeId as string;
+    const userId = req.id;
+
+    try {
+        if (!judgeId) {
+            sendErrorResponse(res, requestId, 'Judge ID is required', 400);
+            return;
+        }
+
+        const existingJudge = await prisma.judges.findFirst({
+            where: {
+                id: judgeId,
+                eventId
+            }
+        });
+
+        if (!existingJudge) {
+            sendErrorResponse(res, requestId, 'Judge not found for this event', 404);
+            return;
+        }
+
+        await prisma.judges.delete({
+            where: { id: judgeId }
+        });
+
+        logger.info(`[${requestId}] Judge deleted successfully`, {
+            judgeId,
+            eventId,
+            userId
+        });
+
+        res.status(200).json({
+            msg: 'Judge deleted successfully'
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error deleting judge`, {
+            error: error.message,
+            judgeId,
+            eventId,
+            userId
+        });
         sendErrorResponse(res, requestId, 'Internal server error', 500);
     }
 };
