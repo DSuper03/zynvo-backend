@@ -1,3 +1,5 @@
+import { PUBLIC_APP_ORIGIN } from '../config';
+
 export function generatePasswordEmailHtml(name: string, generatedPassword: string): string {
   const year = new Date().getFullYear();
   const safeName = name ?? "User";
@@ -37,7 +39,7 @@ export function generatePasswordEmailHtml(name: string, generatedPassword: strin
         <div class="pw-box" aria-label="temporary-password">${escapeHtml(generatedPassword)}</div>
 
         <p>
-          <a class="btn" href="https://zynvo.social/auth/signin" target="_blank" rel="noopener noreferrer">Sign in to Zynvo</a>
+          <a class="btn" href="${PUBLIC_APP_ORIGIN}/auth/signin" target="_blank" rel="noopener noreferrer">Sign in to Zynvo</a>
         </p>
 
         <p class="note">

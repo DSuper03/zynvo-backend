@@ -120,7 +120,7 @@ export const TransferOwnership = async (req: Request, res: Response): Promise<vo
         
         if(!isThere || isThere.clubId != null) {
             res.status(404).json({
-                msg : "The user is not present on zynvo or is in another club"
+                msg : "The user is not present on Zynvo Social or is in another club"
             });
             return;
         }
