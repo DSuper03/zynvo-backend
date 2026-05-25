@@ -150,10 +150,17 @@ export const SpecificClubHeadAuthMiddleware = async (
             return;
           }
 
-          const isCreator = event.createdById === req.id;
+          const isAttender = await prisma.userEvents.findUnique({
+            where: {
+              userId_eventId: {
+                userId: req.id,
+                eventId: eventId
+              }
+            }
+          }) !== null;
           const isClubHead = userClub && event.clubId === userClub.id;
 
-          if (!isCreator && !isClubHead) {
+          if (!isAttender && !isClubHead) {
             res.status(403).json({ message: 'Access denied. You are not authorized to manage this event.' });
             return;
           }

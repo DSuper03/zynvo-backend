@@ -168,9 +168,18 @@ export const isFounder = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        // If user is the direct event creator, identify them as authorized
-        if (event.createdById === userId) {
-            logger.info(`[${requestId}] User is creator of the event`, { userId, eventId });
+        // If user is an event attender (registered for the event), identify them as authorized
+        const isAttender = await prisma.userEvents.findUnique({
+            where: {
+                userId_eventId: {
+                    userId,
+                    eventId
+                }
+            }
+        });
+
+        if (isAttender) {
+            logger.info(`[${requestId}] User is an attender of the event`, { userId, eventId });
             res.status(200).json({ msg: "identified" });
             return;
         }

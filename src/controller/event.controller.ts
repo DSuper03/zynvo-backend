@@ -2093,7 +2093,16 @@ export const addEventSession = async (req: Request, res: Response): Promise<void
             select: { id: true }
         }) : null;
 
-        const isAuthorized = (club && club.id === event.clubId) || event.createdById === userId;
+        const isAttender = await prisma.userEvents.findUnique({
+            where: {
+                userId_eventId: {
+                    userId,
+                    eventId
+                }
+            }
+        }) !== null;
+
+        const isAuthorized = (club && club.id === event.clubId) || isAttender;
 
         if (!isAuthorized) {
             res.status(403).json({ msg: 'Access denied. You are not authorized to manage this event.' });
@@ -2166,7 +2175,16 @@ export const deleteEventSession = async (req: Request, res: Response): Promise<v
             select: { id: true }
         }) : null;
 
-        const isAuthorized = (club && club.id === event.clubId) || event.createdById === userId;
+        const isAttender = await prisma.userEvents.findUnique({
+            where: {
+                userId_eventId: {
+                    userId,
+                    eventId
+                }
+            }
+        }) !== null;
+
+        const isAuthorized = (club && club.id === event.clubId) || isAttender;
 
         if (!isAuthorized) {
             res.status(403).json({ msg: 'Access denied. You are not authorized.' });
