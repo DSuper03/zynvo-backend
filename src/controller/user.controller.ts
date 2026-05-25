@@ -157,7 +157,32 @@ export const isFounder = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        console.log(user.email);
+        const event = await prisma.event.findUnique({
+            where: { id: eventId },
+            select: { clubId: true, createdById: true }
+        });
+
+        if (!event) {
+            logger.warn(`[${requestId}] Event not found`, { eventId });
+            res.json({ msg: "you are not a founder" });
+            return;
+        }
+
+        // If user is an event attender (registered for the event), identify them as authorized
+        const isAttender = await prisma.userEvents.findUnique({
+            where: {
+                userId_eventId: {
+                    userId,
+                    eventId
+                }
+            }
+        });
+
+        if (isAttender) {
+            logger.info(`[${requestId}] User is an attender of the event`, { userId, eventId });
+            res.status(200).json({ msg: "identified" });
+            return;
+        }
 
         const club = await prisma.clubs.findUnique({
             where: { founderEmail: user.email },
@@ -167,28 +192,7 @@ export const isFounder = async (req: Request, res: Response): Promise<void> => {
             }
         });
 
-        if (!club) {
-            logger.warn(`[${requestId}] User is not a founder`, { userId, email: user.email });
-            res.json({ msg: "you are not a founder" });
-            return;
-        }
-
-        console.log(club.name);
-
-        const event = await prisma.event.findUnique({
-            where: { id: eventId },
-            select: { clubId: true }
-        });
-
-        if (!event) {
-            logger.warn(`[${requestId}] Event not found`, { eventId });
-            res.json({ msg: "you are  not a founder" });
-            return;
-        }
-
-        console.log(event.clubId);
-
-        if (club.id === event.clubId) {
+        if (club && club.id === event.clubId) {
             logger.info(`[${requestId}] User is founder of event's club`, {
                 userId,
                 clubId: club.id,
@@ -196,15 +200,14 @@ export const isFounder = async (req: Request, res: Response): Promise<void> => {
             });
             res.status(200).json({ msg: "identified" });
             return;
-        } else {
-            logger.warn(`[${requestId}] User is founder but not of this event's club`, {
-                userId,
-                userClubId: club.id,
-                eventClubId: event.clubId
-            });
-            res.json({ msg: 'invalid president identification' });
-            return;
         }
+
+        logger.warn(`[${requestId}] User is not authorized as founder or creator`, {
+            userId,
+            eventId
+        });
+        res.json({ msg: 'you are not a founder' });
+        return;
     } catch (error: any) {
         logger.error(`[${requestId}] Error checking founder status`, {
             error: error.message,

@@ -36,6 +36,7 @@ model User {
   teamMemberships TeamMember[]
   club            clubs?         @relation(fields: [clubId], references: [id])
   eventAttended   userEvents[]
+  eventsCreated   event[]        @relation("EventCreator")
 }
 
 model clubs {
@@ -146,6 +147,9 @@ model event {
   judges               judges[]
   speakers             speakers[]
   attendees            userEvents[]
+  createdById          String?
+  createdBy            User?               @relation("EventCreator", fields: [createdById], references: [id])
+  schedule             ScheduleDay[]
 }
 
 model eventAnnouncement {
@@ -249,4 +253,27 @@ enum clubType {
   Literature
   Design
   General
+}
+
+model ScheduleDay {
+  id        String            @id @default(uuid())
+  day       Int
+  date      String
+  name      String
+  eventId   String
+  event     event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sessions  ScheduleSession[]
+
+  @@unique([eventId, day])
+}
+
+model ScheduleSession {
+  id            String      @id @default(uuid())
+  time          String
+  title         String
+  description   String      @default("")
+  location      String
+  speakers      String[]    @default([])
+  scheduleDayId String
+  scheduleDay   ScheduleDay @relation(fields: [scheduleDayId], references: [id], onDelete: Cascade)
 }

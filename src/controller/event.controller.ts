@@ -198,7 +198,8 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
                 whatsappLink: parsedData.data.whatsappLink || "",
                 isPaid: parsedData.data.isPaidEvent ?? parsedData.data.isPaid ?? false,
                 qrCodeUrl: parsedData.data.paymentQRCode || parsedData.data.qrCodeUrl || null,
-                maxParticipants: parsedData.data.maxParticipants ? parseInt(parsedData.data.maxParticipants.toString(), 10) : null
+                maxParticipants: parsedData.data.maxParticipants ? parseInt(parsedData.data.maxParticipants.toString(), 10) : null,
+                createdById: userId,
             },
             select: { id: true }
         });
@@ -2025,5 +2026,178 @@ export const deleteJudge = async (req: Request, res: Response): Promise<void> =>
             userId
         });
         sendErrorResponse(res, requestId, 'Internal server error', 500);
+    }
+};
+
+export const getEventSchedule = async (req: Request, res: Response): Promise<void> => {
+    const { eventId } = req.params;
+
+    try {
+        const days = await prisma.scheduleDay.findMany({
+            where: { eventId },
+            include: {
+                sessions: true
+            },
+            orderBy: {
+                day: 'asc'
+            }
+        });
+
+        if (days.length === 0) {
+            res.status(200).json({
+                response: [
+                    {
+                        id: 'default-day-1',
+                        day: 1,
+                        date: 'Day 1',
+                        name: 'Day 1',
+                        sessions: []
+                    }
+                ]
+            });
+            return;
+        }
+
+        res.status(200).json({
+            response: days
+        });
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ msg: 'Internal server error' });
+    }
+};
+
+export const addEventSession = async (req: Request, res: Response): Promise<void> => {
+    const { eventId } = req.params;
+    const { day, time, title, description, location, speakers } = req.body;
+    const userId = req.id;
+
+    try {
+        const event = await prisma.event.findUnique({
+            where: { id: eventId },
+            select: { clubId: true, createdById: true }
+        });
+
+        if (!event) {
+            res.status(404).json({ msg: 'Event not found' });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true }
+        });
+
+        const club = user ? await prisma.clubs.findUnique({
+            where: { founderEmail: user.email },
+            select: { id: true }
+        }) : null;
+
+        const isAttender = await prisma.userEvents.findUnique({
+            where: {
+                userId_eventId: {
+                    userId,
+                    eventId
+                }
+            }
+        }) !== null;
+
+        const isAuthorized = (club && club.id === event.clubId) || isAttender;
+
+        if (!isAuthorized) {
+            res.status(403).json({ msg: 'Access denied. You are not authorized to manage this event.' });
+            return;
+        }
+
+        let scheduleDay = await prisma.scheduleDay.findUnique({
+            where: {
+                eventId_day: {
+                    eventId,
+                    day: Number(day)
+                }
+            }
+        });
+
+        if (!scheduleDay) {
+            scheduleDay = await prisma.scheduleDay.create({
+                data: {
+                    eventId,
+                    day: Number(day),
+                    date: `Day ${day}`,
+                    name: `Day ${day}`
+                }
+            });
+        }
+
+        const session = await prisma.scheduleSession.create({
+            data: {
+                scheduleDayId: scheduleDay.id,
+                time,
+                title,
+                description: description || '',
+                location,
+                speakers: speakers || []
+            }
+        });
+
+        res.status(201).json({
+            msg: 'Session added',
+            response: session
+        });
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ msg: 'Internal server error' });
+    }
+};
+
+export const deleteEventSession = async (req: Request, res: Response): Promise<void> => {
+    const { eventId, sessionId } = req.params;
+    const userId = req.id;
+
+    try {
+        const event = await prisma.event.findUnique({
+            where: { id: eventId },
+            select: { clubId: true, createdById: true }
+        });
+
+        if (!event) {
+            res.status(404).json({ msg: 'Event not found' });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true }
+        });
+
+        const club = user ? await prisma.clubs.findUnique({
+            where: { founderEmail: user.email },
+            select: { id: true }
+        }) : null;
+
+        const isAttender = await prisma.userEvents.findUnique({
+            where: {
+                userId_eventId: {
+                    userId,
+                    eventId
+                }
+            }
+        }) !== null;
+
+        const isAuthorized = (club && club.id === event.clubId) || isAttender;
+
+        if (!isAuthorized) {
+            res.status(403).json({ msg: 'Access denied. You are not authorized.' });
+            return;
+        }
+
+        await prisma.scheduleSession.delete({
+            where: { id: sessionId }
+        });
+
+        res.status(200).json({ msg: 'Session deleted' });
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ msg: 'Internal server error' });
     }
 };

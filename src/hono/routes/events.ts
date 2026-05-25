@@ -295,6 +295,7 @@ events.post('/event', clubHeadAuthMiddleware, async (c) => {
         isPaid: parsedData.data.isPaidEvent ?? parsedData.data.isPaid ?? false,
         qrCodeUrl:
           parsedData.data.paymentQRCode || parsedData.data.qrCodeUrl || null,
+        createdById: userId,
       },
       select: { id: true },
     });

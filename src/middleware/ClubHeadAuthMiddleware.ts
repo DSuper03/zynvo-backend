@@ -137,33 +137,49 @@ export const SpecificClubHeadAuthMiddleware = async (
           select: { id: true, name: true }
         });
 
-        if (!userClub) {
-          res.status(403).json({ message: 'Access denied. Only club heads can perform this action.' });
-          return;
-        }
-
-        const eventId = req.params.eventId as string | undefined;
+        const eventId = (req.params.eventId || req.body.eventId || req.query.eventId || req.params.id) as string | undefined;
         const clubIdParam = req.params.clubId as string | undefined;
 
         if (eventId) {
-          const event = await prisma.event.findUnique({ where: { id: eventId }, select: { clubId: true } });
+          const event = await prisma.event.findUnique({ 
+            where: { id: eventId }, 
+            select: { clubId: true, createdById: true } 
+          });
           if (!event) {
             res.status(404).json({ message: 'Event not found' });
             return;
           }
-          if (event.clubId !== userClub.id) {
-            res.status(403).json({ message: 'Access denied. You are not the club head of the club that created this event.' });
+
+          const isAttender = await prisma.userEvents.findUnique({
+            where: {
+              userId_eventId: {
+                userId: req.id,
+                eventId: eventId
+              }
+            }
+          }) !== null;
+          const isClubHead = userClub && event.clubId === userClub.id;
+
+          if (!isAttender && !isClubHead) {
+            res.status(403).json({ message: 'Access denied. You are not authorized to manage this event.' });
             return;
           }
         } else if (clubIdParam) {
-          if (clubIdParam !== userClub.id) {
+          if (!userClub || clubIdParam !== userClub.id) {
             res.status(403).json({ message: 'Access denied. You are not the club head of this club.' });
+            return;
+          }
+        } else {
+          if (!userClub) {
+            res.status(403).json({ message: 'Access denied. Only club heads can perform this action.' });
             return;
           }
         }
 
-        req.clubId = userClub.id;
-        req.clubName = userClub.name;
+        if (userClub) {
+          req.clubId = userClub.id;
+          req.clubName = userClub.name;
+        }
 
         next();
       } else {
