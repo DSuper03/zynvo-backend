@@ -22,6 +22,9 @@ import {
   getJudges,
   updateJudge,
   deleteJudge,
+  getEventSchedule,
+  addEventSession,
+  deleteEventSession,
 } from '../controller/event.controller';
 import { 
   getAllannouncements, 
@@ -63,5 +66,10 @@ router.post('/:eventId/judges', AuthMiddleware, SpecificClubHeadAuthMiddleware, 
 router.get('/:eventId/judges', getJudges);
 router.put('/:eventId/judges/:judgeId', AuthMiddleware, SpecificClubHeadAuthMiddleware, updateJudge);
 router.delete('/:eventId/judges/:judgeId', AuthMiddleware, SpecificClubHeadAuthMiddleware, deleteJudge);
+
+// Schedule Routes
+router.get('/schedule/:eventId', getEventSchedule);
+router.post('/schedule/:eventId/session', AuthMiddleware, addEventSession);
+router.delete('/schedule/:eventId/session/:sessionId', AuthMiddleware, deleteEventSession);
 
 export const EventRouter = router;
