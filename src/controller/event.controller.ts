@@ -2030,9 +2030,14 @@ export const deleteJudge = async (req: Request, res: Response): Promise<void> =>
 };
 
 export const getEventSchedule = async (req: Request, res: Response): Promise<void> => {
-    const { eventId } = req.params;
+    const eventId = normalizeParam(req.params.eventId);
 
     try {
+        if (!eventId) {
+            res.status(400).json({ msg: 'Event ID is required' });
+            return;
+        }
+
         const days = await prisma.scheduleDay.findMany({
             where: { eventId },
             include: {
@@ -2068,11 +2073,16 @@ export const getEventSchedule = async (req: Request, res: Response): Promise<voi
 };
 
 export const addEventSession = async (req: Request, res: Response): Promise<void> => {
-    const { eventId } = req.params;
+    const eventId = normalizeParam(req.params.eventId);
     const { day, time, title, description, location, speakers } = req.body;
     const userId = req.id;
 
     try {
+        if (!eventId) {
+            res.status(400).json({ msg: 'Event ID is required' });
+            return;
+        }
+
         const event = await prisma.event.findUnique({
             where: { id: eventId },
             select: { clubId: true, createdById: true }
@@ -2151,10 +2161,16 @@ export const addEventSession = async (req: Request, res: Response): Promise<void
 };
 
 export const deleteEventSession = async (req: Request, res: Response): Promise<void> => {
-    const { eventId, sessionId } = req.params;
+    const eventId = normalizeParam(req.params.eventId);
+    const sessionId = normalizeParam(req.params.sessionId);
     const userId = req.id;
 
     try {
+        if (!eventId || !sessionId) {
+            res.status(400).json({ msg: 'Event ID and session ID are required' });
+            return;
+        }
+
         const event = await prisma.event.findUnique({
             where: { id: eventId },
             select: { clubId: true, createdById: true }
