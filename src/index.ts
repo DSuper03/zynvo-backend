@@ -14,7 +14,7 @@ console.log(`🔌 PORT: ${process.env.PORT || 8000}`);
 
 const requiredEnvVars = ['JWT_SECRET'];
 const conditionalEnvVars = process.env.NODE_ENV === 'production' 
-  ? ['DIRECT_DATABASE_URL', 'REDIS_URL']
+  ? ['DIRECT_DATABASE_URL']
   : [];
 
 const missingEnvVars = [
