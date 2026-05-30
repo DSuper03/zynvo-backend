@@ -100,6 +100,15 @@ const getApolloMiddleware = async () => {
   return apolloMiddleware;
 };
 
+// Warm up Apollo on startup so GraphQL readiness is visible immediately.
+void getApolloMiddleware()
+  .then(() => {
+    console.log('✅ GraphQL endpoint ready at /graphql');
+  })
+  .catch((error) => {
+    console.error('❌ Failed to initialize GraphQL endpoint:', error);
+  });
+
 app.use('/graphql', async (req, res, next) => {
   try {
     const middleware = await getApolloMiddleware();
@@ -138,6 +147,8 @@ app.use('/hono', (req, res, next) => {
     .catch(next)
     .finally(() => { req.url = originalUrl; });
 });
+console.log('✅ Hono routes mounted at /api/hono/v1 and /hono');
+console.log('✅ GraphQL route mounted at /graphql');
 
 // GraphQL endpoint will be added after server starts
 

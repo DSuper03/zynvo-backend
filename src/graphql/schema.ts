@@ -17,7 +17,6 @@ export const typeDefs = gql`
     usersByEmail(emails: [String!]!): [User!]!
     usersByCollege(collegeName: String!, limit: Int, skip: Int): [User!]!
     emailsByCollege(collegeName: String!, limit: Int, skip: Int): [String!]!
-    participantEmailsByEvent(eventId: String!): [String!]!
     verifiedUsers(limit: Int, skip: Int): [User!]!
   }
 
