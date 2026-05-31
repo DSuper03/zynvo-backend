@@ -14,7 +14,7 @@ console.log(`🔌 PORT: ${process.env.PORT || 8000}`);
 
 const requiredEnvVars = ['JWT_SECRET'];
 const conditionalEnvVars = process.env.NODE_ENV === 'production' 
-  ? ['DIRECT_DATABASE_URL', 'REDIS_URL']
+  ? ['DIRECT_DATABASE_URL']
   : [];
 
 const missingEnvVars = [
@@ -64,7 +64,13 @@ app.use(express.json());
 
 const FE_URL = process.env.FE_URL;
 
-const FRONTEND_URL = [ FE_URL,  'http://localhost:3000', 'https://zynvo.social', 'https://zynvo-main.vercel.app'].filter(Boolean) as string[];
+const FRONTEND_URL = [
+  FE_URL,
+  'http://localhost:3000',
+  'https://www.zynvosocial.com',
+  'https://zynvosocial.com',
+  'https://zynvo-main.vercel.app',
+].filter(Boolean) as string[];
 app.use(cors({
   origin: FRONTEND_URL,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],

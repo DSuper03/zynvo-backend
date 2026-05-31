@@ -11,8 +11,8 @@
       "description": "Development server"
     },
     {
-      "url": "https://zynvo.social",
-      "description": "Production server"
+      "url": "https://zynvosocial-be-274792984950.asia-south1.run.app",
+      "description": "Production API (Google Cloud Run)"
     }
   ],
   "paths": {
@@ -967,7 +967,7 @@
                   },
                   "eventWebsite": {
                     "type": "string",
-                    "example": "https://event.zynvo.social"
+                    "example": "https://event.zynvosocial.com"
                   },
                   "university": {
                     "type": "string",

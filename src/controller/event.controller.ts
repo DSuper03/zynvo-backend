@@ -2038,6 +2038,11 @@ export const getEventSchedule = async (req: Request, res: Response): Promise<voi
     }
 
     try {
+        if (!eventId) {
+            res.status(400).json({ msg: 'Event ID is required' });
+            return;
+        }
+
         const days = await prisma.scheduleDay.findMany({
             where: { eventId },
             include: {
@@ -2083,6 +2088,11 @@ export const addEventSession = async (req: Request, res: Response): Promise<void
     }
 
     try {
+        if (!eventId) {
+            res.status(400).json({ msg: 'Event ID is required' });
+            return;
+        }
+
         const event = await prisma.event.findUnique({
             where: { id: eventId },
             select: { clubId: true, createdById: true }
@@ -2171,6 +2181,11 @@ export const deleteEventSession = async (req: Request, res: Response): Promise<v
     }
 
     try {
+        if (!eventId || !sessionId) {
+            res.status(400).json({ msg: 'Event ID and session ID are required' });
+            return;
+        }
+
         const event = await prisma.event.findUnique({
             where: { id: eventId },
             select: { clubId: true, createdById: true }

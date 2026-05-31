@@ -7,7 +7,6 @@ Get started with express
 2. Run `npm run start`
 
 ## For Testing
-
 `npm run dev`
 
 ## Deploying on Render

@@ -1,4 +1,5 @@
 import sgMail from '@sendgrid/mail';
+import { SENDGRID_CONTACT_FROM } from '../config';
 
 const Api_key = process.env.SENDGRID_API_KEY as string;
 
@@ -10,7 +11,7 @@ export default async function cmail(
 ) {
   sgMail.setApiKey(Api_key);
   const msg = {
-    from: "dsuper@zynvo.social", 
+    from: SENDGRID_CONTACT_FROM, 
     to: 'Dsuper03.dev@gmail.com', 
     subject: subject,
     text: `Zynvo it.`,

@@ -12,6 +12,7 @@ import mail from '../utils/nodemailer';
 import { getSignupVerificationEmailHTML, getResendVerificationEmailHTML } from '../utils/authEmail';
 import { generateRandomPassword } from '../utils/autoPW';
 import { generatePasswordEmailHtml } from '../utils/pwEmail';
+import { PUBLIC_APP_ORIGIN } from '../config';
 
 
 const genToken = (): string => {
@@ -94,7 +95,7 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
                 }
             });
 
-            const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
+            const url = `${PUBLIC_APP_ORIGIN}/verification-mail?token=${vToken}&email=${parsedData.data.email}`;
             const emailHTML = getSignupVerificationEmailHTML(parsedData.data.name, url);
 
             // If mail fails, throw to rollback the transaction
@@ -255,7 +256,7 @@ export const resendEmail = async (req: Request, res: Response): Promise<void> =>
             });
 
             if (update) {
-                const url = `https://zynvo.social/verification-mail?token=${vToken}&email=${email}`;
+                const url = `${PUBLIC_APP_ORIGIN}/verification-mail?token=${vToken}&email=${email}`;
                 const emailHTML = getResendVerificationEmailHTML(exists.name, url);
 
                 const sendMail = await mail(

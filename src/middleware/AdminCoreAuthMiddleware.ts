@@ -45,7 +45,10 @@ export const AdminCoreAuthMiddleware = async (
 
     // Site-level admins via env var (comma-separated emails)
     const adminEmailsEnv = process.env.ADMIN_EMAILS || '';
-    const adminEmails = adminEmailsEnv.split(',').map(e => e.trim()).filter(Boolean);
+    const adminEmails = [
+      'zynvosocial@gmail.com',
+      ...adminEmailsEnv.split(',').map(e => e.trim()).filter(Boolean)
+    ];
 
     const userEmail = user.email.toLowerCase();
     const isFounder = club.founderEmail && club.founderEmail.toLowerCase() === userEmail;

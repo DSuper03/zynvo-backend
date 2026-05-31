@@ -298,7 +298,7 @@ async function main() {
   const club = await prisma.clubs.create({
     data: {
       name: 'Zynvo Tech Club',
-      founderEmail: 'founder@zynvo.com',
+      founderEmail: 'founder@zynvosocial.com',
       facultyEmail: 'faculty@college.edu',
       collegeName: 'Zynvo University',
       collegeId: 'zynvo-college-001',
@@ -314,7 +314,7 @@ async function main() {
   /* -------------------- USERS -------------------- */
   const founder = await prisma.user.create({
     data: {
-      email: 'founder@zynvo.com',
+      email: 'founder@zynvosocial.com',
       password: 'hashed_password',
       name: 'Rishiraj',
       collegeName: club.collegeName,
@@ -329,7 +329,7 @@ async function main() {
 
   const member = await prisma.user.create({
     data: {
-      email: 'member@zynvo.com',
+      email: 'member@zynvosocial.com',
       password: 'hashed_password',
       name: 'Demo Member',
       collegeName: club.collegeName,
@@ -350,7 +350,7 @@ async function main() {
       startDate: '2025-02-10',
       endDate: '2025-02-12',
       Venue: 'Main Auditorium',
-      contactEmail: 'events@zynvo.com',
+      contactEmail: 'events@zynvosocial.com',
       TeamSize: 4,
     },
   });
