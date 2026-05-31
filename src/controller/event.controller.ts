@@ -2038,11 +2038,6 @@ export const getEventSchedule = async (req: Request, res: Response): Promise<voi
     }
 
     try {
-        if (!eventId) {
-            res.status(400).json({ msg: 'Event ID is required' });
-            return;
-        }
-
         const days = await prisma.scheduleDay.findMany({
             where: { eventId },
             include: {
@@ -2088,11 +2083,6 @@ export const addEventSession = async (req: Request, res: Response): Promise<void
     }
 
     try {
-        if (!eventId) {
-            res.status(400).json({ msg: 'Event ID is required' });
-            return;
-        }
-
         const event = await prisma.event.findUnique({
             where: { id: eventId },
             select: { clubId: true, createdById: true }
@@ -2108,24 +2098,34 @@ export const addEventSession = async (req: Request, res: Response): Promise<void
             select: { email: true }
         });
 
-        const club = user ? await prisma.clubs.findUnique({
-            where: { founderEmail: user.email },
-            select: { id: true }
-        }) : null;
+        if (!user) {
+            res.status(404).json({ msg: 'User not found' });
+            return;
+        }
 
-        const isAttender = await prisma.userEvents.findUnique({
-            where: {
-                userId_eventId: {
-                    userId,
-                    eventId
-                }
+        const eventClub = await prisma.clubs.findUnique({
+            where: { id: event.clubId },
+            select: { 
+                id: true,
+                founderEmail: true,
+                coremember1: true,
+                coremember2: true,
+                coremember3: true
             }
-        }) !== null;
+        });
 
-        const isAuthorized = (club && club.id === event.clubId) || isAttender;
+        const isClubHead = eventClub && eventClub.founderEmail === user.email;
+        const isCoreMember = eventClub && (
+            eventClub.coremember1 === user.email || 
+            eventClub.coremember2 === user.email || 
+            eventClub.coremember3 === user.email
+        );
+        const isEventCreator = event.createdById === userId;
+
+        const isAuthorized = isClubHead || isCoreMember || isEventCreator;
 
         if (!isAuthorized) {
-            res.status(403).json({ msg: 'Access denied. You are not authorized to manage this event.' });
+            res.status(403).json({ msg: 'Access denied. Only club heads, core members, or event creators can manage this event.' });
             return;
         }
 
@@ -2181,11 +2181,6 @@ export const deleteEventSession = async (req: Request, res: Response): Promise<v
     }
 
     try {
-        if (!eventId || !sessionId) {
-            res.status(400).json({ msg: 'Event ID and session ID are required' });
-            return;
-        }
-
         const event = await prisma.event.findUnique({
             where: { id: eventId },
             select: { clubId: true, createdById: true }
@@ -2201,24 +2196,34 @@ export const deleteEventSession = async (req: Request, res: Response): Promise<v
             select: { email: true }
         });
 
-        const club = user ? await prisma.clubs.findUnique({
-            where: { founderEmail: user.email },
-            select: { id: true }
-        }) : null;
+        if (!user) {
+            res.status(404).json({ msg: 'User not found' });
+            return;
+        }
 
-        const isAttender = await prisma.userEvents.findUnique({
-            where: {
-                userId_eventId: {
-                    userId,
-                    eventId
-                }
+        const eventClub = await prisma.clubs.findUnique({
+            where: { id: event.clubId },
+            select: { 
+                id: true,
+                founderEmail: true,
+                coremember1: true,
+                coremember2: true,
+                coremember3: true
             }
-        }) !== null;
+        });
 
-        const isAuthorized = (club && club.id === event.clubId) || isAttender;
+        const isClubHead = eventClub && eventClub.founderEmail === user.email;
+        const isCoreMember = eventClub && (
+            eventClub.coremember1 === user.email || 
+            eventClub.coremember2 === user.email || 
+            eventClub.coremember3 === user.email
+        );
+        const isEventCreator = event.createdById === userId;
+
+        const isAuthorized = isClubHead || isCoreMember || isEventCreator;
 
         if (!isAuthorized) {
-            res.status(403).json({ msg: 'Access denied. You are not authorized.' });
+            res.status(403).json({ msg: 'Access denied. Only club heads, core members, or event creators can manage this event.' });
             return;
         }
 
@@ -2234,39 +2239,154 @@ export const deleteEventSession = async (req: Request, res: Response): Promise<v
 };
 
 export const updateEvent = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
     try {
-        const eventId = req.params.eventId || req.params.id;
-        const data = req.body;
+        // Use only req.params.id (route is /event/:id, not /:eventId)
+        const eventId = normalizeParam(req.params.id);
+        if (!eventId) {
+            res.status(400).json({ msg: 'Event ID is required' });
+            return;
+        }
+
+        const userId = req.id;
         
-        const event = await prisma.event.findUnique({ where: { id: eventId } });
+        const event = await prisma.event.findUnique({ 
+            where: { id: eventId },
+            select: { id: true, clubId: true, createdById: true }
+        });
         if (!event) {
             res.status(404).json({ msg: 'Event not found' });
             return;
         }
+
+        // Verify ownership: only club head, core member or event creator can update
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true }
+        });
+
+        if (!user) {
+            res.status(404).json({ msg: 'User not found' });
+            return;
+        }
+
+        const eventClub = await prisma.clubs.findUnique({
+            where: { id: event.clubId },
+            select: {
+                founderEmail: true,
+                coremember1: true,
+                coremember2: true,
+                coremember3: true
+            }
+        });
+
+        const isClubHead = eventClub && eventClub.founderEmail === user.email;
+        const isCoreMember = eventClub && (
+            eventClub.coremember1 === user.email ||
+            eventClub.coremember2 === user.email ||
+            eventClub.coremember3 === user.email
+        );
+        const isEventCreator = event.createdById === userId;
+
+        if (!isClubHead && !isCoreMember && !isEventCreator) {
+            res.status(403).json({ msg: 'Access denied. Only club heads, core members, or event creators can update this event.' });
+            return;
+        }
         
-        const { id, clubId, clubName, createdById, createdAt, ...updateData } = data;
+        // Explicitly define which fields can be updated (allowlist approach)
+        const allowedFields = [
+            'EventName', 'description', 'tagline', 'EventMode', 'EventType',
+            'EventUrl', 'Venue', 'TeamSize', 'prizes', 'startDate', 'endDate',
+            'applicationStartDate', 'applicationEndDate', 'collegeStudentsOnly',
+            'contactEmail', 'contactPhone', 'participationFee', 'posterUrl',
+            'link1', 'link2', 'link3', 'whatsappLink', 'qrCodeUrl', 'maxParticipants',
+            'eventHeaderImage', 'Form', 'Fees'
+        ];
+
+        // Extract only allowed fields from request body
+        const updateData: Record<string, any> = {};
+        for (const field of allowedFields) {
+            if (field in req.body) {
+                updateData[field] = req.body[field];
+            }
+        }
+
+        // Reject if no valid fields provided
+        if (Object.keys(updateData).length === 0) {
+            res.status(400).json({ msg: 'No valid fields provided for update' });
+            return;
+        }
         
         await prisma.event.update({
             where: { id: eventId },
             data: updateData
         });
 
+        logger.info(`[${requestId}] Event updated successfully`, { eventId, userId });
         res.status(200).json({ msg: 'Event updated successfully' });
     } catch (error: any) {
+        logger.error(`[${requestId}] Error updating event`, { error: error.message, stack: error.stack });
         console.error(error);
         res.status(500).json({ msg: 'Internal server error' });
     }
 };
 
 export const deleteEvent = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
     try {
-        const eventId = req.params.eventId || req.params.id;
+        // Use only req.params.id (route is /event/:id, not /:eventId)
+        const eventId = normalizeParam(req.params.id);
+        if (!eventId) {
+            res.status(400).json({ msg: 'Event ID is required' });
+            return;
+        }
         
-        const event = await prisma.event.findUnique({ where: { id: eventId } });
+        const userId = req.id;
+        
+        const event = await prisma.event.findUnique({ 
+            where: { id: eventId },
+            select: { id: true, clubId: true, createdById: true }
+        });
         if (!event) {
             res.status(404).json({ msg: 'Event not found' });
             return;
         }
+
+        // Verify ownership: only club head, core member or event creator can delete
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true }
+        });
+
+        if (!user) {
+            res.status(404).json({ msg: 'User not found' });
+            return;
+        }
+
+        const eventClub = await prisma.clubs.findUnique({
+            where: { id: event.clubId },
+            select: {
+                founderEmail: true,
+                coremember1: true,
+                coremember2: true,
+                coremember3: true
+            }
+        });
+
+        const isClubHead = eventClub && eventClub.founderEmail === user.email;
+        const isCoreMember = eventClub && (
+            eventClub.coremember1 === user.email ||
+            eventClub.coremember2 === user.email ||
+            eventClub.coremember3 === user.email
+        );
+        const isEventCreator = event.createdById === userId;
+
+        if (!isClubHead && !isCoreMember && !isEventCreator) {
+            res.status(403).json({ msg: 'Access denied. Only club heads, core members, or event creators can delete this event.' });
+            return;
+        }
+
+        logger.info(`[${requestId}] Deleting event`, { eventId, userId });
 
         // Delete dependent records first to avoid foreign key constraints
         await prisma.$transaction([
@@ -2282,8 +2402,10 @@ export const deleteEvent = async (req: Request, res: Response): Promise<void> =>
             prisma.event.delete({ where: { id: eventId } })
         ]);
 
+        logger.info(`[${requestId}] Event deleted successfully`, { eventId, userId });
         res.status(200).json({ msg: 'Event deleted successfully' });
     } catch (error: any) {
+        logger.error(`[${requestId}] Error deleting event`, { error: error.message, stack: error.stack });
         console.error(error);
         res.status(500).json({ msg: 'Internal server error' });
     }
