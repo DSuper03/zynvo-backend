@@ -150,33 +150,85 @@ export const SpecificClubHeadAuthMiddleware = async (
             return;
           }
 
-          const isAttender = await prisma.userEvents.findUnique({
-            where: {
-              userId_eventId: {
-                userId: req.id,
-                eventId: eventId
-              }
+          // Fetch the event's club to check if user is a core member
+          const eventClub = await prisma.clubs.findUnique({
+            where: { id: event.clubId },
+            select: { 
+              id: true, 
+              name: true, 
+              founderEmail: true, 
+              coremember1: true, 
+              coremember2: true, 
+              coremember3: true 
             }
-          }) !== null;
-          const isClubHead = userClub && event.clubId === userClub.id;
+          });
 
-          if (!isAttender && !isClubHead) {
-            res.status(403).json({ message: 'Access denied. You are not authorized to manage this event.' });
+          // Check if user is the club head of the event's club
+          const isClubHead = eventClub && eventClub.founderEmail === user.email;
+          
+          // Check if user is a core member of the event's club
+          const isCoreMember = eventClub && (
+            eventClub.coremember1 === user.email || 
+            eventClub.coremember2 === user.email || 
+            eventClub.coremember3 === user.email
+          );
+          
+          // Check if user is the creator of the event
+          const isEventCreator = event.createdById === req.id;
+
+          if (!isClubHead && !isCoreMember && !isEventCreator) {
+            res.status(403).json({ message: 'Access denied. Only club heads, core members, or event creators can manage this event.' });
             return;
+          }
+
+          // Set club info from event's club if not already set
+          if (!userClub && eventClub) {
+            req.clubId = eventClub.id;
+            req.clubName = eventClub.name;
           }
         } else if (clubIdParam) {
-          if (!userClub || clubIdParam !== userClub.id) {
-            res.status(403).json({ message: 'Access denied. You are not the club head of this club.' });
+          // For club-level operations, check if user is club head or core member
+          const club = await prisma.clubs.findUnique({
+            where: { id: clubIdParam },
+            select: { 
+              id: true, 
+              name: true, 
+              founderEmail: true, 
+              coremember1: true, 
+              coremember2: true, 
+              coremember3: true 
+            }
+          });
+
+          if (!club) {
+            res.status(404).json({ message: 'Club not found' });
             return;
           }
+
+          const isClubHead = club.founderEmail === user.email;
+          const isCoreMember = (
+            club.coremember1 === user.email || 
+            club.coremember2 === user.email || 
+            club.coremember3 === user.email
+          );
+
+          if (!isClubHead && !isCoreMember) {
+            res.status(403).json({ message: 'Access denied. Only club heads and core members can perform this action.' });
+            return;
+          }
+
+          req.clubId = club.id;
+          req.clubName = club.name;
         } else {
+          // No specific event or club - check if user is a club head
           if (!userClub) {
             res.status(403).json({ message: 'Access denied. Only club heads can perform this action.' });
             return;
           }
         }
 
-        if (userClub) {
+        // Ensure club info is set
+        if (!req.clubId && userClub) {
           req.clubId = userClub.id;
           req.clubName = userClub.name;
         }
