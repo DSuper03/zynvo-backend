@@ -2032,6 +2032,11 @@ export const deleteJudge = async (req: Request, res: Response): Promise<void> =>
 export const getEventSchedule = async (req: Request, res: Response): Promise<void> => {
     const eventId = normalizeParam(req.params.eventId);
 
+    if (!eventId) {
+        res.status(400).json({ msg: 'Event id required' });
+        return;
+    }
+
     try {
         if (!eventId) {
             res.status(400).json({ msg: 'Event ID is required' });
@@ -2076,6 +2081,11 @@ export const addEventSession = async (req: Request, res: Response): Promise<void
     const eventId = normalizeParam(req.params.eventId);
     const { day, time, title, description, location, speakers } = req.body;
     const userId = req.id;
+
+    if (!eventId) {
+        res.status(400).json({ msg: 'Event id required' });
+        return;
+    }
 
     try {
         if (!eventId) {
@@ -2165,6 +2175,11 @@ export const deleteEventSession = async (req: Request, res: Response): Promise<v
     const sessionId = normalizeParam(req.params.sessionId);
     const userId = req.id;
 
+    if (!eventId || !sessionId) {
+        res.status(400).json({ msg: 'Event id and session id are required' });
+        return;
+    }
+
     try {
         if (!eventId || !sessionId) {
             res.status(400).json({ msg: 'Event ID and session ID are required' });
@@ -2212,6 +2227,62 @@ export const deleteEventSession = async (req: Request, res: Response): Promise<v
         });
 
         res.status(200).json({ msg: 'Session deleted' });
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ msg: 'Internal server error' });
+    }
+};
+
+export const updateEvent = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const eventId = req.params.eventId || req.params.id;
+        const data = req.body;
+        
+        const event = await prisma.event.findUnique({ where: { id: eventId } });
+        if (!event) {
+            res.status(404).json({ msg: 'Event not found' });
+            return;
+        }
+        
+        const { id, clubId, clubName, createdById, createdAt, ...updateData } = data;
+        
+        await prisma.event.update({
+            where: { id: eventId },
+            data: updateData
+        });
+
+        res.status(200).json({ msg: 'Event updated successfully' });
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ msg: 'Internal server error' });
+    }
+};
+
+export const deleteEvent = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const eventId = req.params.eventId || req.params.id;
+        
+        const event = await prisma.event.findUnique({ where: { id: eventId } });
+        if (!event) {
+            res.status(404).json({ msg: 'Event not found' });
+            return;
+        }
+
+        // Delete dependent records first to avoid foreign key constraints
+        await prisma.$transaction([
+            prisma.eventAnnouncement.deleteMany({ where: { eventId } }),
+            prisma.eventGallery.deleteMany({ where: { eventId } }),
+            prisma.judges.deleteMany({ where: { eventId } }),
+            prisma.speakers.deleteMany({ where: { eventId } }),
+            prisma.userEvents.deleteMany({ where: { eventId } }),
+            prisma.teamMember.deleteMany({ where: { team: { eventId } } }),
+            prisma.team.deleteMany({ where: { eventId } }),
+            prisma.scheduleSession.deleteMany({ where: { scheduleDay: { eventId } } }),
+            prisma.scheduleDay.deleteMany({ where: { eventId } }),
+            prisma.event.delete({ where: { id: eventId } })
+        ]);
+
+        res.status(200).json({ msg: 'Event deleted successfully' });
     } catch (error: any) {
         console.error(error);
         res.status(500).json({ msg: 'Internal server error' });

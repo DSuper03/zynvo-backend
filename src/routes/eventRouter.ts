@@ -25,6 +25,8 @@ import {
   getEventSchedule,
   addEventSession,
   deleteEventSession,
+  updateEvent,
+  deleteEvent,
 } from '../controller/event.controller';
 import { 
   getAllannouncements, 
@@ -71,5 +73,9 @@ router.delete('/:eventId/judges/:judgeId', AuthMiddleware, SpecificClubHeadAuthM
 router.get('/schedule/:eventId', getEventSchedule);
 router.post('/schedule/:eventId/session', AuthMiddleware, addEventSession);
 router.delete('/schedule/:eventId/session/:sessionId', AuthMiddleware, deleteEventSession);
+
+// Edit & Delete Event
+router.put('/event/:id', AuthMiddleware, SpecificClubHeadAuthMiddleware, updateEvent);
+router.delete('/event/:id', AuthMiddleware, SpecificClubHeadAuthMiddleware, deleteEvent);
 
 export const EventRouter = router;

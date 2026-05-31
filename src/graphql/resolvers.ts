@@ -91,6 +91,30 @@ export const resolvers = {
       return users.map(user => user.email);
     },
 
+    // participantEmailsByEvent: async (_: any, { eventId }: { eventId: string }) => {
+    //   const event = await prisma.event.findUnique({
+    //     where: { id: eventId },
+    //     select: { id: true },
+    //   });
+
+    //   if (!event) {
+    //     throw new Error('Event not found');
+    //   }
+
+    //   const registrations = await prisma.userEvents.findMany({
+    //     where: { eventId },
+    //     select: {
+    //       user: {
+    //         select: {
+    //           email: true,
+    //         },
+    //       },
+    //     },
+    //   });
+
+    //   return registrations.map(registration => registration.user.email);
+    // },
+
     verifiedUsers: async (_: any, { limit = 50, skip = 0 }: { limit?: number; skip?: number }) => {
       const safeLimit = Math.min(limit, 1000);
       const safeSkip = Math.max(skip, 0);
