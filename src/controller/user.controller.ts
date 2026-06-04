@@ -2,10 +2,19 @@ import { Request, Response } from 'express';
 import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { generateRequestId } from '../utils/helper';
+import { z } from 'zod';
 
 // Normalize query/param values that might be arrays into a single string
 const normalizeParam = (value: string | string[] | undefined): string | undefined =>
     Array.isArray(value) ? value[0] : value;
+
+const updateAvatarSchema = z.object({
+    profileAvatar: z.string().url('profileAvatar must be a valid URL')
+});
+
+const updateCollegeNameSchema = z.object({
+    collegeName: z.string().trim().min(2, 'collegeName must be at least 2 characters')
+});
 
 
 export const getUser = async (req: Request, res: Response): Promise<void> => {
@@ -255,6 +264,86 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
         });
         console.log(error);
         res.status(500).json({ msg: "Internal server error" });
+    }
+};
+
+export const updateAvatar = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const userId = req.id;
+
+    logger.info(`[${requestId}] PUT /updateAvatar - Starting request`, { userId });
+
+    try {
+        const parsed = updateAvatarSchema.safeParse(req.body);
+        if (!parsed.success) {
+            const message = parsed.error.errors[0]?.message || 'Invalid request body';
+            res.status(400).json({ msg: message });
+            return;
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: { profileAvatar: parsed.data.profileAvatar },
+            select: {
+                id: true,
+                profileAvatar: true
+            }
+        });
+
+        logger.info(`[${requestId}] Avatar updated successfully`, { userId: updatedUser.id });
+        res.status(200).json({
+            msg: 'Avatar updated successfully',
+            user: updatedUser
+        });
+        return;
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error updating avatar`, {
+            error: error.message,
+            stack: error.stack,
+            userId
+        });
+        res.status(500).json({ msg: 'Internal server error' });
+        return;
+    }
+};
+
+export const updateCollegeName = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const userId = req.id;
+
+    logger.info(`[${requestId}] PUT /updateCollegeName - Starting request`, { userId });
+
+    try {
+        const parsed = updateCollegeNameSchema.safeParse(req.body);
+        if (!parsed.success) {
+            const message = parsed.error.errors[0]?.message || 'Invalid request body';
+            res.status(400).json({ msg: message });
+            return;
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: { collegeName: parsed.data.collegeName },
+            select: {
+                id: true,
+                collegeName: true
+            }
+        });
+
+        logger.info(`[${requestId}] College name updated successfully`, { userId: updatedUser.id });
+        res.status(200).json({
+            msg: 'College name updated successfully',
+            user: updatedUser
+        });
+        return;
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error updating college name`, {
+            error: error.message,
+            stack: error.stack,
+            userId
+        });
+        res.status(500).json({ msg: 'Internal server error' });
+        return;
     }
 };
 

@@ -14,6 +14,8 @@ import {
   joinClub, 
   isFounder, 
   updateProfile, 
+  updateAvatar,
+  updateCollegeName,
   getSidebarUser, 
   searchUser, 
   getPublicUser, 
@@ -44,6 +46,8 @@ router.get('/getUser', AuthMiddleware, getUser);
 router.post('/joinClub/:id', AuthMiddleware, joinClub);
 router.get('/isFounder', AuthMiddleware, isFounder);
 router.put('/updateProfile', AuthMiddleware, updateProfile);
+router.put('/updateAvatar', AuthMiddleware, updateAvatar);
+router.put('/updateCollegeName', AuthMiddleware, updateCollegeName);
 router.get('/getSidebarUser', AuthMiddleware, getSidebarUser);
 router.get('/SearchUser', searchUser);
 router.get('/getPublicUser', AuthMiddleware, getPublicUser);
