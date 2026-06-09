@@ -1,3 +1,0 @@
--- AlterTable
-ALTER TABLE "User" ALTER COLUMN "clubId" DROP DEFAULT,
-ALTER COLUMN "clubName" DROP DEFAULT;
