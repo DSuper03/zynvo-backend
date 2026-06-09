@@ -37,6 +37,7 @@ model User {
   club          clubs?         @relation(fields: [clubId], references: [id])
   event         event[]       @relation("EventCreator")
   eventAttended userEvents[]
+  registrationAnswers RegistrationAnswer[]
 }
 
 model clubs {
@@ -140,6 +141,8 @@ model event {
   judges               judges[]
   speakers             speakers[]
   attendees            userEvents[]
+  customQuestions      EventCustomQuestion[]
+  registrationAnswers  RegistrationAnswer[]
 }
 
 model eventAnnouncement {
@@ -279,4 +282,34 @@ enum clubType {
   General
 }
 
+model EventCustomQuestion {
+  id        String   @id @default(uuid())
+  eventId   String
+  label     String
+  type      String   @default("text")
+  options   String[] @default([])
+  required  Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  event   event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  answers RegistrationAnswer[]
+}
+
+model RegistrationAnswer {
+  id         String   @id @default(uuid())
+  questionId String
+  userId     String
+  eventId    String
+  answer     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  question EventCustomQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event    event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, eventId, questionId])
+}
 
