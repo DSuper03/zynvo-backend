@@ -35,7 +35,7 @@ model User {
   Team          Team[]
   TeamMember    TeamMember[]
   club          clubs?         @relation(fields: [clubId], references: [id])
-  event         event[]
+  event         event[]       @relation("EventCreator")
   eventAttended userEvents[]
 }
 
@@ -54,6 +54,7 @@ model clubs {
   coremember2   String?            @default("none")
   coremember3   String?            @default("none")
   type          String             @default("General")
+  collegeStudentsOnly Boolean      @default(true)
   wings         String[]           @default([])
   instagram     String?
   linkedin      String?
@@ -129,11 +130,11 @@ model event {
   tagline              String?             @default("")
   maxParticipants      Int?
   createdById          String?
-  ScheduleDay          ScheduleDay[]
+  schedule             ScheduleDay[]
   Team                 Team[]
   TeamMember           TeamMember[]
   club                 clubs               @relation(fields: [clubId], references: [id])
-  User                 User?               @relation(fields: [createdById], references: [id])
+  createdBy            User?               @relation("EventCreator", fields: [createdById], references: [id])
   announcements        eventAnnouncement[]
   galleries            eventGallery[]
   judges               judges[]
@@ -208,63 +209,63 @@ model PostDownvote {
 }
 
 model ScheduleDay {
-  id              String            @id
+  id              String            @id @default(uuid())
   day             Int
   date            String
   name            String
   eventId         String
   event           event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  ScheduleSession ScheduleSession[]
+  sessions        ScheduleSession[]
 
   @@unique([eventId, day])
 }
 
 model ScheduleSession {
-  id            String      @id
+  id            String      @id @default(uuid())
   time          String
   title         String
   description   String      @default("")
   location      String
   speakers      String[]    @default([])
   scheduleDayId String
-  ScheduleDay   ScheduleDay @relation(fields: [scheduleDayId], references: [id], onDelete: Cascade)
+  scheduleDay   ScheduleDay @relation(fields: [scheduleDayId], references: [id], onDelete: Cascade)
 }
 
 model Team {
-  id          String       @id
+  id          String       @id @default(uuid())
   teamName    String
   teamCode    String       @unique
   eventId     String
   createdById String
   createdAt   DateTime     @default(now())
-  User        User         @relation(fields: [createdById], references: [id])
+  user        User         @relation(fields: [createdById], references: [id])
   event       event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  TeamMember  TeamMember[]
+  members     TeamMember[]
 }
 
 model TeamMember {
-  id       String   @id
+  id       String   @id @default(uuid())
   teamId   String
   userId   String
   role     String   @default("member")
   joinedAt DateTime @default(now())
   eventId  String
   event    event    @relation(fields: [eventId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  Team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  User     User     @relation(fields: [userId], references: [id])
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
 
   @@unique([eventId, userId])
   @@unique([teamId, userId])
 }
 
 model judges {
-  id          String   @id
+  id          String   @id @default(uuid())
   name        String
   description String
   achievement String
   eventId     String
   createdAt   DateTime @default(now())
-  updatedAt   DateTime
+  updatedAt   DateTime @updatedAt
   event       event    @relation(fields: [eventId], references: [id])
 }
 
@@ -277,3 +278,5 @@ enum clubType {
   Design
   General
 }
+
+

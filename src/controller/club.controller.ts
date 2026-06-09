@@ -12,6 +12,7 @@ const clubSelectBase = {
     id: true,
     name: true,
     collegeName: true,
+    collegeStudentsOnly: true,
     description: true,
     type: true,
     profilePicUrl: true,
@@ -418,7 +419,8 @@ export const createClub = async (req: Request, res: Response): Promise<void> => 
             wings,
             instagram,
             twitter,
-            linkedin
+            linkedin,
+            collegeStudentsOnly
         } = req.body;
 
         const userId = req.id;
@@ -427,7 +429,8 @@ export const createClub = async (req: Request, res: Response): Promise<void> => 
             userId,
             clubName: name,
             founderEmail: FounderEmail,
-            type
+            type,
+            collegeStudentsOnly
         });
 
         if (!name || !description || !FounderEmail || !facultyEmail) {
@@ -453,7 +456,7 @@ export const createClub = async (req: Request, res: Response): Promise<void> => 
             // Check if founder exists
             prisma.user.findUnique({
                 where: { email: FounderEmail },
-                select: { id: true, name: true },
+                select: { id: true, name: true, collegeName: true },
             }),
             // Check if founder is already a president
             prisma.clubs.findFirst({
@@ -481,6 +484,18 @@ export const createClub = async (req: Request, res: Response): Promise<void> => 
             founderId: founder.id,
             founderName: founder.name
         });
+
+        // If the club is restricted to college students only, ensure the chosen founder belongs to the same college
+        if (collegeStudentsOnly && founder.collegeName !== college.collegeName) {
+            logger.warn(`[${requestId}] User doesn't college mismatch for restricted club`, {
+                FounderEmail,
+                founderCollege: founder.collegeName,
+                userCollege: college.collegeName
+            });
+
+            sendErrorResponse(res, requestId, 'Founder must belong to the same college when club is restricted to college students only', 400);
+            return;
+        }
 
         const duplicateClub = await prisma.clubs.findFirst({
             where: {
@@ -532,6 +547,7 @@ export const createClub = async (req: Request, res: Response): Promise<void> => 
                     description: description,
                     type: type,
                     founderEmail: FounderEmail,
+                    collegeStudentsOnly: Boolean(collegeStudentsOnly === undefined ? true : collegeStudentsOnly),
                     clubContact: clubContact,
                     requirements: requirements,
                     facultyEmail: facultyEmail,

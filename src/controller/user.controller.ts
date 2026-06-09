@@ -94,13 +94,14 @@ export const joinClub = async (req: Request, res: Response): Promise<void> => {
         const [club, userClub] = await Promise.all([
             prisma.clubs.findUnique({
                 where: { id: clubId },
-                select: { name: true }
+                select: { name: true, collegeName: true, collegeStudentsOnly: true }
             }),
             prisma.user.findUnique({
                 where: { id: userId },
                 select: {
                     clubName: true,
-                    clubId: true
+                    clubId: true,
+                    collegeName: true
                 }
             })
         ]);
@@ -117,6 +118,18 @@ export const joinClub = async (req: Request, res: Response): Promise<void> => {
                 currentClub: userClub.clubId
             });
             res.json({ msg: "you are already a part of club, leave that first to join this." });
+            return;
+        }
+
+        // If the club restricts membership to same-college students, enforce the check
+        if (club.collegeStudentsOnly && userClub?.collegeName !== club.collegeName) {
+            logger.warn(`[${requestId}] User college mismatch for restricted club`, {
+                userId,
+                userCollege: userClub?.collegeName,
+                clubCollege: club.collegeName
+            });
+
+            res.status(403).json({ msg: 'Only students from the club founder\'s college can join this club' });
             return;
         }
 
