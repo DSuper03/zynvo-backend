@@ -136,8 +136,15 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
             return;
         }
 
-        const club = await prisma.clubs.findUnique({
-            where: { founderEmail: user.email },
+        const club = await prisma.clubs.findFirst({
+            where: {
+                OR: [
+                    { founderEmail: { equals: user.email, mode: 'insensitive' } },
+                    { coremember1: { equals: user.email, mode: 'insensitive' } },
+                    { coremember2: { equals: user.email, mode: 'insensitive' } },
+                    { coremember3: { equals: user.email, mode: 'insensitive' } }
+                ]
+            },
             select: {
                 name: true,
                 id: true,
@@ -146,11 +153,11 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         });
 
         if (!club) {
-            logger.warn(`[${requestId}] User is not a club president`, {
+            logger.warn(`[${requestId}] User is not a club head or core member`, {
                 userId,
                 userEmail: user.email
             });
-            sendErrorResponse(res, requestId, 'invalid president identification', 403);
+            sendErrorResponse(res, requestId, 'invalid club member identification', 403);
             return;
         }
 
