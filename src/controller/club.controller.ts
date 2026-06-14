@@ -39,8 +39,12 @@ export const getAllClubs = async (req: Request, res: Response): Promise<void> =>
     });
 
     try {
-        const pages = parseInt(req.query.page as string) || 1;
-        const limit = 10;
+        const requestedPage = parseInt(req.query.page as string, 10);
+        const requestedLimit = parseInt(req.query.limit as string, 10);
+        const pages = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+        const limit = Number.isFinite(requestedLimit)
+            ? Math.min(Math.max(requestedLimit, 1), 100)
+            : 10;
         const skip = (pages - 1) * limit;
 
         logger.info(`[${requestId}] Fetching clubs with pagination`, {
@@ -54,7 +58,10 @@ export const getAllClubs = async (req: Request, res: Response): Promise<void> =>
                 skip,
                 take: limit,
                 select: clubSelectWithMembers,
-                orderBy: { createdAt: 'desc' },
+                orderBy: [
+                    { createdAt: 'desc' },
+                    { id: 'asc' },
+                ],
             }),
             prisma.clubs.count()
         ]);
