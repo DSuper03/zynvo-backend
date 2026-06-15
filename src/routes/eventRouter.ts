@@ -27,6 +27,8 @@ import {
   deleteEventSession,
   updateEvent,
   deleteEvent,
+  getEventQueue,
+  acceptUserfromEventQueue,
 } from '../controller/event.controller';
 import { 
   getAllannouncements, 
@@ -77,5 +79,9 @@ router.delete('/schedule/:eventId/session/:sessionId', AuthMiddleware, deleteEve
 // Edit & Delete Event
 router.put('/event/:id', AuthMiddleware, SpecificClubHeadAuthMiddleware, updateEvent);
 router.delete('/event/:id', AuthMiddleware, SpecificClubHeadAuthMiddleware, deleteEvent);
+
+// event Queue routes
+router.get('/eventQueue/:eventId', AuthMiddleware, AuthMiddleware, getEventQueue);
+router.put('/eventQueue/:eventId/approve', AuthMiddleware, acceptUserfromEventQueue);
 
 export const EventRouter = router;
