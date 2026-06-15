@@ -643,11 +643,23 @@ export const isClubAdmin = async(req : Request, res: Response) : Promise<void> =
 
         const clubFounder = await prisma.clubs.findUnique({
             where : {
-                id : userDetails.clubId,
-                founderEmail : userDetails.email
+                id : userDetails.clubId
+            },
+            select : {
+                coremember1 : true,
+                coremember2 : true,
+                coremember3 : true,
+                founderEmail : true
             }
         })
 
+        if (!clubFounder || (clubFounder.founderEmail !== userDetails.email && clubFounder.coremember1 !== userDetails.email && clubFounder.coremember2 !== userDetails.email && clubFounder.coremember3 !== userDetails.email)) {
+            res.status(403).json({
+                msg : "you are not an admin"
+            })
+            return;
+        
+        }
         res.status(200).json({
             msg : "Fetched",
             founder : clubFounder ? 'true' : 'false'
