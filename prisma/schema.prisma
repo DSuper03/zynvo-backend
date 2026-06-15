@@ -38,6 +38,7 @@ model User {
   event         event[]       @relation("EventCreator")
   eventAttended userEvents[]
   registrationAnswers RegistrationAnswer[]
+  eventQueue eventQueue[]
 }
 
 model clubs {
@@ -105,6 +106,7 @@ model event {
   endDate              String?
   eventHeaderImage     String?             @default("none")
   prizes               String              @default("no prizes given")
+  acceptanceBased      Boolean?             @default(false)
   EventMode            String              @default("Hybrid")
   EventType            String              @default("general")
   EventUrl             String?             @default("")
@@ -143,6 +145,7 @@ model event {
   attendees            userEvents[]
   customQuestions      EventCustomQuestion[]
   registrationAnswers  RegistrationAnswer[]
+  eventQueue           eventQueue[]
 }
 
 model eventAnnouncement {
@@ -183,6 +186,7 @@ model userEvents {
   paymentScreenshotUrl String?   @default("")
   paymentStatus        String    @default("CONFIRMED")
   paymentVerifiedAt    DateTime?
+  approvalStatus       String    @default("approved")
   event                event     @relation(fields: [eventId], references: [id])
   user                 User      @relation(fields: [userId], references: [id])
 
@@ -313,3 +317,16 @@ model RegistrationAnswer {
   @@unique([userId, eventId, questionId])
 }
 
+model eventQueue {
+  id       String   @id @default(uuid())
+  eventId   String
+  userId    String
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  event event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, eventId])
+}

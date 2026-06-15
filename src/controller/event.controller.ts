@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import e, { Request, Response } from 'express';
 import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { EventSchema } from '../types/formtypes';
@@ -95,6 +95,7 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         applicationEndDate,
         coreTeamOnly,
         customQuestions,
+        acceptanceBased,
     } = req.body;
 
     const userId = req.id;
@@ -210,6 +211,7 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
             qrCodeUrl: parsedData.data.paymentQRCode || parsedData.data.qrCodeUrl || null,
             maxParticipants: parsedData.data.maxParticipants ? parseInt(parsedData.data.maxParticipants.toString(), 10) : null,
             createdById: userId,
+            acceptanceBased: acceptanceBased ?? false,
         };
 
         if (customQuestions && Array.isArray(customQuestions) && customQuestions.length > 0) {
@@ -462,7 +464,8 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
                 maxParticipants: true,
                 _count: {
                     select: { attendees: true }
-                }
+                },
+                acceptanceBased: true
             }
         });
 
@@ -534,6 +537,70 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             isPaid: event.isPaid
         });
 
+
+        // acceptance based event registration flow
+
+        if(event.acceptanceBased) {
+
+    
+        const response = await prisma.userEvents.create({
+            data: {
+                userId: userId,
+                eventId: eventId,
+                uniquePassId: generateUUID(),
+                paymentScreenshotUrl: paymentScreenshot || null,
+                paymentStatus: event.isPaid
+                    ? (paymentScreenshot ? 'CONFIRMED' : 'PENDING')
+                    : 'CONFIRMED',
+                approvalStatus: 'pending'
+            },
+            select: {
+                uniquePassId: true,
+                paymentStatus: true
+            }
+        });
+
+        if (customAnswers && Array.isArray(customAnswers) && customAnswers.length > 0) {
+         await prisma.registrationAnswer.createMany({
+                data: customAnswers.map((ans: any) => ({
+                    questionId: ans.questionId,
+                    userId: userId,
+                    eventId: eventId,
+                    answer: ans.answer
+                })),
+                skipDuplicates: true ,
+                
+            }, );
+        }
+
+
+        logger.info(`[${requestId}] User registered successfully`, {
+            userId,
+            eventId,
+            passId: response.uniquePassId,
+            paymentStatus: response.paymentStatus
+        });
+
+            const registred : boolean = await addToEventQueue(req , res, eventId); 
+            if(registred === false){
+                res.status(500).json({ msg: 'Failed to add registration to event queue' });
+                return;
+            } else {
+                logger.info(`[${requestId}] User added to event queue for acceptance-based event`, {
+                    userId,
+                    eventId
+                });
+                res.status(200).json({
+            msg: 'registered successfully , waiting for approval',
+            ForkedUpId: response.uniquePassId,
+            paymentStatus: response.paymentStatus,
+            requiresPaymentVerification: event.isPaid ,
+            approvalStatus: 'pending'
+                });
+            return;
+            }
+        }
+
         const response = await prisma.userEvents.create({
             data: {
                 userId: userId,
@@ -573,7 +640,8 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             msg: 'registered successfully',
             ForkedUpId: response.uniquePassId,
             paymentStatus: response.paymentStatus,
-            requiresPaymentVerification: event.isPaid
+            requiresPaymentVerification: event.isPaid,
+            approvalStatus : "confirmed"
         });
 
     } catch (error: any) {
@@ -2459,3 +2527,219 @@ export const deleteEvent = async (req: Request, res: Response): Promise<void> =>
         res.status(500).json({ msg: 'Internal server error' });
     }
 };
+
+
+// event queue for accepting or rejecting event registrations in bulk (for large events with many registrations)
+
+
+export const getEventQueue = async (req: Request, res: Response): Promise<void> => {
+
+    const userId = req.id;
+    const eventId = req.params.eventId as string;
+
+    if (!userId) {
+        res.status(401).json({ msg: 'Unauthorized' });
+        return;
+    }
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true }
+        });
+
+        if (!user) {
+            res.status(404).json({ msg: 'User not found' });
+            return;
+        }
+
+        const event = await prisma.event.findUnique({
+            where: { id: eventId },
+            select: { clubId: true }
+        });
+
+        if (!event) {
+            res.status(404).json({ msg: 'Event not found' });
+            return;
+        }
+
+        const club = await prisma.clubs.findUnique({
+            where: {
+                id: event.clubId,
+            },
+            select: {
+                founderEmail: true,
+                coremember1: true,
+                coremember2: true,
+                coremember3: true
+            }
+        });
+
+        if (!club) {
+            res.status(404).json({ msg: 'Club not found' });
+            return;
+        }
+
+        if (club.founderEmail !== user.email && club.coremember1 !== user.email && club.coremember2 !== user.email && club.coremember3 !== user.email) {
+            res.status(403).json({ msg: 'Access denied. Only club heads or core members can view the event queue' });
+            return;
+        }
+
+        const queueEntries = await prisma.eventQueue.findMany({
+            where: { eventId },
+            orderBy: { createdAt: 'asc' }
+        });
+
+        const registrationAnswers = await prisma.registrationAnswer.findMany({
+            where : {
+                eventId : eventId,
+                userId: { in: queueEntries.map(q => q.userId) }
+            }, 
+            select : {
+                question : true,
+                answer : true,
+                userId : true
+            }
+        })
+
+        const registrationInfo = await prisma.userEvents.findMany({
+            where: {
+                eventId,
+                userId: { in: queueEntries.map(q => q.userId) }
+            },
+            select: {
+                userId: true,
+                uniquePassId: true,
+                paymentStatus: true,
+                paymentScreenshotUrl: true,
+                paymentVerifiedAt: true,
+                joinedAt: true,
+                user: {
+                    select: {
+                        name: true,
+                        email: true,
+                        collegeName: true
+                    }
+                }
+            }
+        });
+        
+        const queueEntriesWithDetails = queueEntries.map(entry => {
+            const registration = registrationInfo.find(r => r.userId === entry.userId);
+            return {
+                ...entry,
+                registration,
+                registrationAnswers: registrationAnswers.filter(a => a.userId === entry.userId) 
+            };
+        });
+
+        res.status(200).json({
+            msg: 'Event queue fetched successfully',
+            total: queueEntries.length,
+            queue: queueEntriesWithDetails
+        });
+
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ msg: 'Internal server error' });
+    }   
+
+}
+
+export const addToEventQueue = async (req: Request, res: Response, eventId: string): Promise<boolean> => { 
+
+    const requestId = generateRequestId();
+    const userId = req.id;
+
+    logger.info(`[${requestId}] Adding registration to event queue`, {
+        userId,
+        eventId
+    });
+    
+    if (!userId) {
+        res.status(401).json({ msg: 'Unauthorized' });
+        return false;
+    }
+
+    const addToEventQueue = await prisma.eventQueue.create({
+        data: {
+            eventId,
+            userId
+        }
+    });
+
+    logger.info(`[${requestId}] Registration added to event queue`, {
+        userId,
+        eventId,
+        queueEntryId: addToEventQueue.id
+    });
+
+    if (!addToEventQueue) {
+        logger.error(`[${requestId}] Failed to add registration to event queue`, {
+            userId,
+            eventId
+        });
+        res.status(500).json({ msg: 'Failed to add registration to event queue' });
+        return false;
+    } else {
+        logger.info(`[${requestId}] Registration successfully added to event queue`, {
+            userId,
+            eventId,
+            queueEntryId: addToEventQueue.id
+        });
+        return true;
+    }
+}
+
+export const acceptUserfromEventQueue = async (req: Request, res: Response): Promise<void> => { 
+    const requestId = generateRequestId();
+    const { userId , accepted } = req.body;
+    const eventId = req.params.eventId as string;
+
+    logger.info(`[${requestId}] Accepting user from event queue`, {
+        userId,
+        eventId
+    });
+
+    if (!userId) {
+        res.status(400).json({ msg: 'User ID is required' });
+        return;
+    }
+
+    try {
+        // Update registration status to approved
+        await prisma.userEvents.updateMany({
+            where: {
+                eventId,
+                userId
+            },
+            data: {
+                approvalStatus: accepted ? 'approved' : 'rejected'
+            }
+        });
+
+        // Remove from event queue
+        await prisma.eventQueue.deleteMany({
+            where: {
+                eventId,
+                userId
+            }
+        });
+
+        logger.info(`[${requestId}] User accepted from event queue`, {
+            userId,
+            eventId
+        });
+
+        res.status(200).json({ msg: 'User accepted successfully' });
+    } catch (error: any) {
+        console.error(error);
+        logger.error(`[${requestId}] Error accepting user from event queue`, {
+            error: error.message,
+            stack: error.stack,
+            userId,
+            eventId
+        });
+        res.status(500).json({ msg: 'Internal server error' });
+    }
+}
