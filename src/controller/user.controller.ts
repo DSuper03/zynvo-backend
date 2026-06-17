@@ -50,6 +50,7 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
                             select: {
                                 EventName: true,
                                 id: true,
+                                posterUrl : true
                             },
                         },
                     },
@@ -58,7 +59,8 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
                     where: { authorId: userId },
                     select: {
                         id: true,
-                        description: true
+                        description: true,
+                        image: true
                     }
                 }
             },
