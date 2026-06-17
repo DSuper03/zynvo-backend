@@ -4,6 +4,7 @@ import { prisma } from '../db/db';
 import { EventSchema } from '../types/formtypes';
 import { generateRequestId, generateUUID, sendErrorResponse } from '../utils/helper';
 import { Prisma, PrismaClient } from '@prisma/client';
+import app from '..';
 
 
 
@@ -853,13 +854,16 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
                             }
                         },
                         startDate: true,
+                        Venue: true,
+                        posterUrl: true
                     }
                 },
                 user: {
                     select: {
                         profileAvatar: true
                     }
-                }
+                },
+                approvalStatus : true
             }
         });
 
@@ -875,7 +879,10 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
                     clubName: findUser.event.clubName,
                     collegeName: findUser.event.club.collegeName,
                     startDate: findUser.event.startDate,
-                    profilePic: findUser.user.profileAvatar
+                    profilePic: findUser.user.profileAvatar,
+                    approvalStatus : findUser.approvalStatus,
+                    venue: findUser.event.Venue,
+                    posterUrl: findUser.event.posterUrl
                 }
             });
         } else {
