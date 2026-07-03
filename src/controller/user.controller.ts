@@ -50,6 +50,7 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
                             select: {
                                 EventName: true,
                                 id: true,
+                                posterUrl : true
                             },
                         },
                     },
@@ -58,7 +59,8 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
                     where: { authorId: userId },
                     select: {
                         id: true,
-                        description: true
+                        description: true,
+                        image: true
                     }
                 }
             },
@@ -202,25 +204,28 @@ export const isFounder = async (req: Request, res: Response): Promise<void> => {
 
         if (isAttender) {
             logger.info(`[${requestId}] User is an attender of the event`, { userId, eventId });
-            res.status(200).json({ msg: "identified" });
+            res.status(200).json({ msg: "identified as attendee" });
             return;
         }
 
         const club = await prisma.clubs.findUnique({
-            where: { founderEmail: user.email },
+            where: { id: event.clubId },
             select: {
                 name: true,
-                id: true,
+                founderEmail : true,
+                coremember1 : true,
+                coremember2 : true,
+                coremember3 : true,
             }
         });
 
-        if (club && club.id === event.clubId) {
+        if (club && (user.email === club.founderEmail || user.email === club.coremember1 || user.email === club.coremember2 || user.email === club.coremember3)) {
             logger.info(`[${requestId}] User is founder of event's club`, {
                 userId,
-                clubId: club.id,
+                clubId: club.name,
                 eventId
             });
-            res.status(200).json({ msg: "identified" });
+            res.status(200).json({ msg: "identified as founder" });
             return;
         }
 
@@ -643,11 +648,23 @@ export const isClubAdmin = async(req : Request, res: Response) : Promise<void> =
 
         const clubFounder = await prisma.clubs.findUnique({
             where : {
-                id : userDetails.clubId,
-                founderEmail : userDetails.email
+                id : userDetails.clubId
+            },
+            select : {
+                coremember1 : true,
+                coremember2 : true,
+                coremember3 : true,
+                founderEmail : true
             }
         })
 
+        if (!clubFounder || (clubFounder.founderEmail !== userDetails.email && clubFounder.coremember1 !== userDetails.email && clubFounder.coremember2 !== userDetails.email && clubFounder.coremember3 !== userDetails.email)) {
+            res.status(403).json({
+                msg : "you are not an admin"
+            })
+            return;
+        
+        }
         res.status(200).json({
             msg : "Fetched",
             founder : clubFounder ? 'true' : 'false'

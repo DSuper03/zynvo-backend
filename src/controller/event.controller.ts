@@ -1,9 +1,10 @@
-import { Request, Response } from 'express';
+import e, { Request, Response } from 'express';
 import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { EventSchema } from '../types/formtypes';
 import { generateRequestId, generateUUID, sendErrorResponse } from '../utils/helper';
 import { Prisma, PrismaClient } from '@prisma/client';
+import app from '..';
 
 
 
@@ -42,6 +43,9 @@ const eventSelectBase = {
     maxParticipants: true,
     _count: {
         select: { attendees: true }
+    },
+    customQuestions: {
+        orderBy: { sortOrder: 'asc' }
     }
 } as const;
 
@@ -91,6 +95,8 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         applicationStartDate,
         applicationEndDate,
         coreTeamOnly,
+        customQuestions,
+        acceptanceBased,
     } = req.body;
 
     const userId = req.id;
@@ -132,8 +138,15 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
             return;
         }
 
-        const club = await prisma.clubs.findUnique({
-            where: { founderEmail: user.email },
+        const club = await prisma.clubs.findFirst({
+            where: {
+                OR: [
+                    { founderEmail: { equals: user.email, mode: 'insensitive' } },
+                    { coremember1: { equals: user.email, mode: 'insensitive' } },
+                    { coremember2: { equals: user.email, mode: 'insensitive' } },
+                    { coremember3: { equals: user.email, mode: 'insensitive' } }
+                ]
+            },
             select: {
                 name: true,
                 id: true,
@@ -142,11 +155,11 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         });
 
         if (!club) {
-            logger.warn(`[${requestId}] User is not a club president`, {
+            logger.warn(`[${requestId}] User is not a club head or core member`, {
                 userId,
                 userEmail: user.email
             });
-            sendErrorResponse(res, requestId, 'invalid president identification', 403);
+            sendErrorResponse(res, requestId, 'invalid club member identification', 403);
             return;
         }
 
@@ -166,41 +179,56 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
             clubName: club.name
         });
 
+        const eventDataPayload: any = {
+            EventName: parsedData.data.eventName,
+            description: parsedData.data.description || '',
+            tagline: parsedData.data.tagline || '',
+            EventMode: eventMode,
+            EventType: eventType,
+            EventUrl: eventWebsite || '',
+            Venue: venue,
+            TeamSize: parseInt(maxTeamSize),
+            clubName: club.name,
+            clubId: club.id,
+            prizes: prizes || '',
+            startDate: eventStartDate,
+            endDate: eventEndDate,
+            applicationStartDate: parsedData.data.applicationStartDate || '',
+            applicationEndDate: parsedData.data.applicationEndDate || '',
+            university: club.collegeName,
+            collegeStudentsOnly: collegeStudentsOnly,
+            contactEmail: contactEmail,
+            contactPhone: parsedData.data.contactPhone || contactPhone || '',
+            participationFee: noParticipationFee,
+            posterUrl: parsedData.data.image,
+            eventHeaderImage : parsedData.data.image,
+            Form : parsedData.data.form ? parsedData.data.form : "none",
+            Fees : parsedData.data.paymentAmount ?? parsedData.data.fees ?? "none",
+            link1 : parsedData.data.link1 ? parsedData.data.link1 : null,
+            link2 : parsedData.data.link2 ? parsedData.data.link2 : null,
+            link3 : parsedData.data.link3 ? parsedData.data.link3 : null,
+            whatsappLink: parsedData.data.whatsappLink || "",
+            isPaid: parsedData.data.isPaidEvent ?? parsedData.data.isPaid ?? false,
+            qrCodeUrl: parsedData.data.paymentQRCode || parsedData.data.qrCodeUrl || null,
+            maxParticipants: parsedData.data.maxParticipants ? parseInt(parsedData.data.maxParticipants.toString(), 10) : null,
+            createdById: userId,
+            acceptanceBased: acceptanceBased ?? false,
+        };
+
+        if (customQuestions && Array.isArray(customQuestions) && customQuestions.length > 0) {
+            eventDataPayload.customQuestions = {
+                create: customQuestions.map((q: any) => ({
+                    label: q.label,
+                    type: q.type || 'text',
+                    options: q.options || [],
+                    required: q.required || false,
+                    sortOrder: q.sortOrder || 0
+                }))
+            };
+        }
+
         const response = await prisma.event.create({
-            data: {
-                EventName: parsedData.data.eventName,
-                description: parsedData.data.description || '',
-                tagline: parsedData.data.tagline || '',
-                EventMode: eventMode,
-                EventType: eventType,
-                EventUrl: eventWebsite || '',
-                Venue: venue,
-                TeamSize: parseInt(maxTeamSize),
-                clubName: club.name,
-                clubId: club.id,
-                prizes: prizes || '',
-                startDate: eventStartDate,
-                endDate: eventEndDate,
-                applicationStartDate: parsedData.data.applicationStartDate || '',
-                applicationEndDate: parsedData.data.applicationEndDate || '',
-                university: club.collegeName,
-                collegeStudentsOnly: collegeStudentsOnly,
-                contactEmail: contactEmail,
-                contactPhone: parsedData.data.contactPhone || contactPhone || '',
-                participationFee: noParticipationFee,
-                posterUrl: parsedData.data.image,
-                eventHeaderImage : parsedData.data.image,
-                Form : parsedData.data.form ? parsedData.data.form : "none",
-                Fees : parsedData.data.paymentAmount ?? parsedData.data.fees ?? "none",
-                link1 : parsedData.data.link1 ? parsedData.data.link1 : null,
-                link2 : parsedData.data.link2 ? parsedData.data.link2 : null,
-                link3 : parsedData.data.link3 ? parsedData.data.link3 : null,
-                whatsappLink: parsedData.data.whatsappLink || "",
-                isPaid: parsedData.data.isPaidEvent ?? parsedData.data.isPaid ?? false,
-                qrCodeUrl: parsedData.data.paymentQRCode || parsedData.data.qrCodeUrl || null,
-                maxParticipants: parsedData.data.maxParticipants ? parseInt(parsedData.data.maxParticipants.toString(), 10) : null,
-                createdById: userId,
-            },
+            data: eventDataPayload,
             select: { id: true }
         });
 
@@ -393,7 +421,7 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
 export const registerForEvent = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const userId = req.id;
-    const { eventId, paymentScreenshotUrl, paymentProofUrl } = req.body;
+    const { eventId, paymentScreenshotUrl, paymentProofUrl, customAnswers } = req.body;
     const paymentScreenshot = paymentScreenshotUrl ?? paymentProofUrl;
 
     logger.info(`[${requestId}] POST /registerEvent - Starting registration`, {
@@ -437,7 +465,8 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
                 maxParticipants: true,
                 _count: {
                     select: { attendees: true }
-                }
+                },
+                acceptanceBased: true
             }
         });
 
@@ -509,6 +538,70 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             isPaid: event.isPaid
         });
 
+
+        // acceptance based event registration flow
+
+        if(event.acceptanceBased) {
+
+    
+        const response = await prisma.userEvents.create({
+            data: {
+                userId: userId,
+                eventId: eventId,
+                uniquePassId: generateUUID(),
+                paymentScreenshotUrl: paymentScreenshot || null,
+                paymentStatus: event.isPaid
+                    ? (paymentScreenshot ? 'CONFIRMED' : 'PENDING')
+                    : 'CONFIRMED',
+                approvalStatus: 'pending'
+            },
+            select: {
+                uniquePassId: true,
+                paymentStatus: true
+            }
+        });
+
+        if (customAnswers && Array.isArray(customAnswers) && customAnswers.length > 0) {
+         await prisma.registrationAnswer.createMany({
+                data: customAnswers.map((ans: any) => ({
+                    questionId: ans.questionId,
+                    userId: userId,
+                    eventId: eventId,
+                    answer: ans.answer
+                })),
+                skipDuplicates: true ,
+                
+            }, );
+        }
+
+
+        logger.info(`[${requestId}] User registered successfully`, {
+            userId,
+            eventId,
+            passId: response.uniquePassId,
+            paymentStatus: response.paymentStatus
+        });
+
+            const registred : boolean = await addToEventQueue(req , res, eventId); 
+            if(registred === false){
+                res.status(500).json({ msg: 'Failed to add registration to event queue' });
+                return;
+            } else {
+                logger.info(`[${requestId}] User added to event queue for acceptance-based event`, {
+                    userId,
+                    eventId
+                });
+                res.status(200).json({
+            msg: 'registered successfully , waiting for approval',
+            ForkedUpId: response.uniquePassId,
+            paymentStatus: response.paymentStatus,
+            requiresPaymentVerification: event.isPaid ,
+            approvalStatus: 'pending'
+                });
+            return;
+            }
+        }
+
         const response = await prisma.userEvents.create({
             data: {
                 userId: userId,
@@ -525,6 +618,18 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             }
         });
 
+        if (customAnswers && Array.isArray(customAnswers) && customAnswers.length > 0) {
+            await prisma.registrationAnswer.createMany({
+                data: customAnswers.map((ans: any) => ({
+                    questionId: ans.questionId,
+                    userId: userId,
+                    eventId: eventId,
+                    answer: ans.answer
+                })),
+                skipDuplicates: true
+            });
+        }
+
         logger.info(`[${requestId}] User registered successfully`, {
             userId,
             eventId,
@@ -536,7 +641,8 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             msg: 'registered successfully',
             ForkedUpId: response.uniquePassId,
             paymentStatus: response.paymentStatus,
-            requiresPaymentVerification: event.isPaid
+            requiresPaymentVerification: event.isPaid,
+            approvalStatus : "confirmed"
         });
 
     } catch (error: any) {
@@ -748,13 +854,16 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
                             }
                         },
                         startDate: true,
+                        Venue: true,
+                        posterUrl: true
                     }
                 },
                 user: {
                     select: {
                         profileAvatar: true
                     }
-                }
+                },
+                approvalStatus : true
             }
         });
 
@@ -770,7 +879,10 @@ export const getEventDetails = async (req: Request, res: Response): Promise<void
                     clubName: findUser.event.clubName,
                     collegeName: findUser.event.club.collegeName,
                     startDate: findUser.event.startDate,
-                    profilePic: findUser.user.profileAvatar
+                    profilePic: findUser.user.profileAvatar,
+                    approvalStatus : findUser.approvalStatus,
+                    venue: findUser.event.Venue,
+                    posterUrl: findUser.event.posterUrl
                 }
             });
         } else {
@@ -1002,120 +1114,112 @@ export const getUserDetailsByPassId = async (req: Request, res: Response): Promi
 
 export const eventAttendees = async (req: Request, res: Response) => {
   const requestId = generateRequestId();
-    const eventId = normalizeParam(req.params.eventId);
+  const eventId = normalizeParam(req.params.eventId);
   if (!eventId) {
     res.status(400).json({ message: "Event id required" });
     return;
   }
 
   try {
-        const format = req.query.format as string | undefined;
-        if (format === "csv") {
-            const sinceParam = req.query.since as string | undefined;
-            let sinceDate: Date | null = null;
+    const format = req.query.format as string | undefined;
+    
+    // Fetch custom questions for this event to know the headers/fields
+    const customQuestions = await prisma.eventCustomQuestion.findMany({
+        where: { eventId },
+        orderBy: { sortOrder: 'asc' }
+    });
 
-            if (sinceParam) {
-                const parsedSince = new Date(sinceParam);
-                if (Number.isNaN(parsedSince.getTime())) {
-                    res.status(400).json({ message: "Invalid since timestamp" });
-                    return;
-                }
-                sinceDate = parsedSince;
-            }
-      // Pre-validate that the event exists before starting the stream
-      const eventExists = await prisma.event.findUnique({
-        where: { id: eventId },
-        select: { id: true }
-      });
+    if (format === "csv") {
+        const sinceParam = req.query.since as string | undefined;
+        let sinceDate: Date | null = null;
 
-      if (!eventExists) {
-        res.status(404).json({ message: "Event not found" });
-        return;
-      }
-
-            const [latestRegistration, totalRegistrations] = await prisma.$transaction([
-                prisma.userEvents.findFirst({
-                    where: { eventId },
-                    orderBy: { joinedAt: "desc" },
-                    select: { joinedAt: true }
-                }),
-                prisma.userEvents.count({ where: { eventId } })
-            ]);
-
-            const etag = latestRegistration
-                ? `${totalRegistrations}-${latestRegistration.joinedAt.getTime()}`
-                : `0-${totalRegistrations}`;
-
-            res.setHeader("ETag", etag);
-            res.setHeader("Cache-Control", "no-cache");
-
-            if (req.headers["if-none-match"] === etag) {
-                res.status(304).end();
+        if (sinceParam) {
+            const parsedSince = new Date(sinceParam);
+            if (Number.isNaN(parsedSince.getTime())) {
+                res.status(400).json({ message: "Invalid since timestamp" });
                 return;
             }
+            sinceDate = parsedSince;
+        }
+        
+        const eventExists = await prisma.event.findUnique({
+            where: { id: eventId },
+            select: { id: true }
+        });
 
-      res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="participants_${eventId}.csv"`
-      );
+        if (!eventExists) {
+            res.status(404).json({ message: "Event not found" });
+            return;
+        }
 
-      try {
-        // UTF-8 BOM (Excel compatibility)
-        res.write("\uFEFF");
+        const [latestRegistration, totalRegistrations] = await prisma.$transaction([
+            prisma.userEvents.findFirst({
+                where: { eventId },
+                orderBy: { joinedAt: "desc" },
+                select: { joinedAt: true }
+            }),
+            prisma.userEvents.count({ where: { eventId } })
+        ]);
 
-      const headers = [
-        "User ID",
-        "Name",
-        "Email",
-        "College",
-        "Joined At",
-        "Pass ID",
-        "Payment Status",
-        "Payment Screenshot URL"
-      ];
+        const etag = latestRegistration
+            ? `${totalRegistrations}-${latestRegistration.joinedAt.getTime()}`
+            : `0-${totalRegistrations}`;
 
-        const escapeCsv = (v: any) => {
-          if (v == null) return "";
-          const s = String(v);
-          return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-        };
+        res.setHeader("ETag", etag);
+        res.setHeader("Cache-Control", "no-cache");
 
-        // write header
-        res.write(headers.map(escapeCsv).join(",") + "\n");
+        if (req.headers["if-none-match"] === etag) {
+            res.status(304).end();
+            return;
+        }
 
-                const batchSize = 500;
-                let lastJoinedAt: Date | null = null;
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="participants_${eventId}.csv"`
+        );
 
-                const joinedAtFilter = sinceDate ? { gt: sinceDate } : undefined;
+        try {
+            res.write("\uFEFF");
 
-      while (true) {
-        const batch: Prisma.userEventsGetPayload<{
-          select: {
-            joinedAt: true;
-            uniquePassId: true;
-            paymentStatus: true;
-            paymentScreenshotUrl: true;
-            user: {
-              select: {
-                id: true;
-                name: true;
-                email: true;
-                collegeName: true;
-              };
+            const headers = [
+                "User ID", "Name", "Email", "College", "Joined At", "Pass ID", "Payment Status", "Payment Screenshot URL",
+                ...customQuestions.map(q => q.label)
+            ];
+
+            const escapeCsv = (v: any) => {
+                if (v == null) return "";
+                const s = String(v);
+                return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
             };
-          };
-                }>[] = await prisma.userEvents.findMany({
+
+            res.write(headers.map(escapeCsv).join(",") + "\n");
+
+            const batchSize = 500;
+            let lastJoinedAt: Date | null = null;
+            const joinedAtFilter = sinceDate ? { gt: sinceDate } : undefined;
+
+            while (true) {
+                const batch: Array<{
+                    joinedAt: Date;
+                    uniquePassId: string | null;
+                    paymentStatus: string | null;
+                    paymentScreenshotUrl: string | null;
+                    user: {
+                        id: string | null;
+                        name: string | null;
+                        email: string | null;
+                        collegeName: string | null;
+                    };
+                }> = await prisma.userEvents.findMany({
                     where: {
                         eventId,
-                        ...(joinedAtFilter || lastJoinedAt
-                            ? {
-                                    joinedAt: {
-                                        ...(joinedAtFilter ?? {}),
-                                        ...(lastJoinedAt ? { lt: lastJoinedAt } : {})
-                                    }
-                                }
-                            : {})
+                        ...(joinedAtFilter || lastJoinedAt ? {
+                            joinedAt: {
+                                ...(joinedAtFilter ?? {}),
+                                ...(lastJoinedAt ? { lt: lastJoinedAt } : {})
+                            }
+                        } : {})
                     },
                     take: batchSize,
                     orderBy: { joinedAt: "desc" },
@@ -1125,109 +1229,114 @@ export const eventAttendees = async (req: Request, res: Response) => {
                         paymentStatus: true,
                         paymentScreenshotUrl: true,
                         user: {
-                            select: {
-                                id: true,
-                                name: true,
-                                email: true,
-                                collegeName: true,
-                            }
+                            select: { id: true, name: true, email: true, collegeName: true }
                         }
                     }
                 });
 
+                if (batch.length === 0) break;
 
-          if (batch.length === 0) break;
+                // Fetch answers for this batch
+                const userIds = batch.map((p: typeof batch[0]) => p.user.id).filter((id: string | null) => id) as string[];
+                const answers = await prisma.registrationAnswer.findMany({
+                    where: { eventId, userId: { in: userIds } }
+                });
+                const answersMap = answers.reduce((acc: any, ans) => {
+                    if (!acc[ans.userId]) acc[ans.userId] = {};
+                    acc[ans.userId][ans.questionId] = ans.answer;
+                    return acc;
+                }, {});
 
-        for (const p of batch) {
-          const u = p.user;
+                for (const p of batch) {
+                    const u = p.user;
+                    const userAnswers = u.id ? answersMap[u.id] || {} : {};
+                    
+                    const row = [
+                        u.id ?? "",
+                        u.name ?? "",
+                        u.email ?? "",
+                        u.collegeName ?? "",
+                        p.joinedAt.toISOString(),
+                        p.uniquePassId ?? "",
+                        p.paymentStatus ?? "CONFIRMED",
+                        p.paymentScreenshotUrl ?? "",
+                        ...customQuestions.map(q => userAnswers[q.id] || "")
+                    ];
 
-          const row = [
-            u.id ?? "",
-            u.name ?? "",
-            u.email ?? "",
-            u.collegeName ?? "",
-            p.joinedAt.toISOString(),
-            p.uniquePassId ?? "",
-            p.paymentStatus ?? "CONFIRMED",
-            p.paymentScreenshotUrl ?? ""
-          ];
+                    res.write(row.map(escapeCsv).join(",") + "\n");
+                }
 
-            res.write(row.map(escapeCsv).join(",") + "\n");
-          }
+                lastJoinedAt = batch[batch.length - 1].joinedAt;
+            }
 
-          lastJoinedAt = batch[batch.length - 1].joinedAt;
+            res.end();
+        } catch (streamError: any) {
+            logger.error(`[${requestId}] Error during CSV streaming`, {
+                requestId, eventId, error: streamError.message, stack: streamError.stack
+            });
+            if (!res.writableEnded) res.end();
         }
-
-        res.end();
-      } catch (streamError: any) {
-        // Error during streaming - headers already sent, log the error
-        logger.error(`[${requestId}] Error during CSV streaming`, {
-          requestId,
-          eventId,
-          error: streamError.message,
-          stack: streamError.stack
-        });
-        // Attempt to end the response if possible
-        if (!res.writableEnded) {
-          res.end();
-        }
-      }
-      return;
+        return;
     }
 
-      // NORMAL PAGINATED JSON
-
+    // NORMAL PAGINATED JSON
     const page = Math.max(parseInt(req.query.page as string) || 1, 1);
-    const rawLimit = parseInt(req.query.limit as string);
-    const MAX_LIMIT = 100;
-    const limit = Math.min(Math.max(rawLimit || 50, 1), MAX_LIMIT);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
     const skip = (page - 1) * limit;
-        const participantSelect = {
-            joinedAt: true,
-            uniquePassId: true,
-            user: {
-                select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                    collegeName: true,
-                    course: true,
-                    year: true,
-                }
-            }
-        } as const;
 
-        const [participants, total] = await Promise.all([
-            prisma.userEvents.findMany({
-                where: { eventId },
-                take: limit,
-                skip,
-                orderBy: { joinedAt: "desc" },
-                select: participantSelect,
-            }) as Promise<Prisma.userEventsGetPayload<{ select: typeof participantSelect; }>[]> ,
-            prisma.userEvents.count({ where: { eventId } })
-        ]);
+    const [participants, total] = await Promise.all([
+        prisma.userEvents.findMany({
+            where: { eventId },
+            take: limit,
+            skip,
+            orderBy: { joinedAt: "desc" },
+            select: {
+                joinedAt: true,
+                uniquePassId: true,
+                user: {
+                    select: { id: true, name: true, email: true, collegeName: true, course: true, year: true }
+                }
+            },
+        }),
+        prisma.userEvents.count({ where: { eventId } })
+    ]);
+
+    // Fetch answers
+    const userIds = participants.map(p => p.user?.id).filter(id => id) as string[];
+    const answers = await prisma.registrationAnswer.findMany({
+        where: { eventId, userId: { in: userIds } },
+        include: { question: { select: { label: true } } }
+    });
+    
+    const answersMap = answers.reduce((acc: any, ans) => {
+        if (!acc[ans.userId]) acc[ans.userId] = [];
+        acc[ans.userId].push({ label: ans.question.label, answer: ans.answer });
+        return acc;
+    }, {});
 
     res.status(200).json({
-      msg: "participants fetched",
-      data: participants.map(p => ({
-        joinedAt: p.joinedAt,
-        passId: p.uniquePassId,
-        user: p.user
-      })),
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit)
-      }
+        msg: "participants fetched",
+        data: participants.map(p => ({
+            joinedAt: p.joinedAt,
+            passId: p.uniquePassId,
+            user: p.user,
+            customAnswers: p.user?.id ? answersMap[p.user.id] || [] : []
+        })),
+        pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit)
+        }
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: "internal server error" });
+
+  } catch (error: any) {
+      logger.error(`[${requestId}] Error fetching event attendees`, {
+          error: error.message, stack: error.stack, eventId
+      });
+      sendErrorResponse(res, requestId, 'Internal server error', 500);
   }
 };
-
 
 export const addToGallery = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
@@ -2312,9 +2421,22 @@ export const updateEvent = async (req: Request, res: Response): Promise<void> =>
         }
 
         // Reject if no valid fields provided
-        if (Object.keys(updateData).length === 0) {
+        if (Object.keys(updateData).length === 0 && !('customQuestions' in req.body)) {
             res.status(400).json({ msg: 'No valid fields provided for update' });
             return;
+        }
+
+        if ('customQuestions' in req.body && Array.isArray(req.body.customQuestions)) {
+            updateData.customQuestions = {
+                deleteMany: {},
+                create: req.body.customQuestions.map((q: any) => ({
+                    label: q.label,
+                    type: q.type || 'text',
+                    options: q.options || [],
+                    required: q.required || false,
+                    sortOrder: q.sortOrder || 0
+                }))
+            };
         }
         
         await prisma.event.update({
@@ -2390,6 +2512,8 @@ export const deleteEvent = async (req: Request, res: Response): Promise<void> =>
 
         // Delete dependent records first to avoid foreign key constraints
         await prisma.$transaction([
+            prisma.registrationAnswer.deleteMany({ where: { eventId } }),
+            prisma.eventCustomQuestion.deleteMany({ where: { eventId } }),
             prisma.eventAnnouncement.deleteMany({ where: { eventId } }),
             prisma.eventGallery.deleteMany({ where: { eventId } }),
             prisma.judges.deleteMany({ where: { eventId } }),
@@ -2410,3 +2534,219 @@ export const deleteEvent = async (req: Request, res: Response): Promise<void> =>
         res.status(500).json({ msg: 'Internal server error' });
     }
 };
+
+
+// event queue for accepting or rejecting event registrations in bulk (for large events with many registrations)
+
+
+export const getEventQueue = async (req: Request, res: Response): Promise<void> => {
+
+    const userId = req.id;
+    const eventId = req.params.eventId as string;
+
+    if (!userId) {
+        res.status(401).json({ msg: 'Unauthorized' });
+        return;
+    }
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true }
+        });
+
+        if (!user) {
+            res.status(404).json({ msg: 'User not found' });
+            return;
+        }
+
+        const event = await prisma.event.findUnique({
+            where: { id: eventId },
+            select: { clubId: true }
+        });
+
+        if (!event) {
+            res.status(404).json({ msg: 'Event not found' });
+            return;
+        }
+
+        const club = await prisma.clubs.findUnique({
+            where: {
+                id: event.clubId,
+            },
+            select: {
+                founderEmail: true,
+                coremember1: true,
+                coremember2: true,
+                coremember3: true
+            }
+        });
+
+        if (!club) {
+            res.status(404).json({ msg: 'Club not found' });
+            return;
+        }
+
+        if (club.founderEmail !== user.email && club.coremember1 !== user.email && club.coremember2 !== user.email && club.coremember3 !== user.email) {
+            res.status(403).json({ msg: 'Access denied. Only club heads or core members can view the event queue' });
+            return;
+        }
+
+        const queueEntries = await prisma.eventQueue.findMany({
+            where: { eventId },
+            orderBy: { createdAt: 'asc' }
+        });
+
+        const registrationAnswers = await prisma.registrationAnswer.findMany({
+            where : {
+                eventId : eventId,
+                userId: { in: queueEntries.map(q => q.userId) }
+            }, 
+            select : {
+                question : true,
+                answer : true,
+                userId : true
+            }
+        })
+
+        const registrationInfo = await prisma.userEvents.findMany({
+            where: {
+                eventId,
+                userId: { in: queueEntries.map(q => q.userId) }
+            },
+            select: {
+                userId: true,
+                uniquePassId: true,
+                paymentStatus: true,
+                paymentScreenshotUrl: true,
+                paymentVerifiedAt: true,
+                joinedAt: true,
+                user: {
+                    select: {
+                        name: true,
+                        email: true,
+                        collegeName: true
+                    }
+                }
+            }
+        });
+        
+        const queueEntriesWithDetails = queueEntries.map(entry => {
+            const registration = registrationInfo.find(r => r.userId === entry.userId);
+            return {
+                ...entry,
+                registration,
+                registrationAnswers: registrationAnswers.filter(a => a.userId === entry.userId) 
+            };
+        });
+
+        res.status(200).json({
+            msg: 'Event queue fetched successfully',
+            total: queueEntries.length,
+            queue: queueEntriesWithDetails
+        });
+
+    } catch (error: any) {
+        console.error(error);
+        res.status(500).json({ msg: 'Internal server error' });
+    }   
+
+}
+
+export const addToEventQueue = async (req: Request, res: Response, eventId: string): Promise<boolean> => { 
+
+    const requestId = generateRequestId();
+    const userId = req.id;
+
+    logger.info(`[${requestId}] Adding registration to event queue`, {
+        userId,
+        eventId
+    });
+    
+    if (!userId) {
+        res.status(401).json({ msg: 'Unauthorized' });
+        return false;
+    }
+
+    const addToEventQueue = await prisma.eventQueue.create({
+        data: {
+            eventId,
+            userId
+        }
+    });
+
+    logger.info(`[${requestId}] Registration added to event queue`, {
+        userId,
+        eventId,
+        queueEntryId: addToEventQueue.id
+    });
+
+    if (!addToEventQueue) {
+        logger.error(`[${requestId}] Failed to add registration to event queue`, {
+            userId,
+            eventId
+        });
+        res.status(500).json({ msg: 'Failed to add registration to event queue' });
+        return false;
+    } else {
+        logger.info(`[${requestId}] Registration successfully added to event queue`, {
+            userId,
+            eventId,
+            queueEntryId: addToEventQueue.id
+        });
+        return true;
+    }
+}
+
+export const acceptUserfromEventQueue = async (req: Request, res: Response): Promise<void> => { 
+    const requestId = generateRequestId();
+    const { userId , accepted } = req.body;
+    const eventId = req.params.eventId as string;
+
+    logger.info(`[${requestId}] Accepting user from event queue`, {
+        userId,
+        eventId
+    });
+
+    if (!userId) {
+        res.status(400).json({ msg: 'User ID is required' });
+        return;
+    }
+
+    try {
+        // Update registration status to approved
+        await prisma.userEvents.updateMany({
+            where: {
+                eventId,
+                userId
+            },
+            data: {
+                approvalStatus: accepted ? 'approved' : 'rejected'
+            }
+        });
+
+        // Remove from event queue
+        await prisma.eventQueue.deleteMany({
+            where: {
+                eventId,
+                userId
+            }
+        });
+
+        logger.info(`[${requestId}] User accepted from event queue`, {
+            userId,
+            eventId
+        });
+
+        res.status(200).json({ msg: 'User accepted successfully' });
+    } catch (error: any) {
+        console.error(error);
+        logger.error(`[${requestId}] Error accepting user from event queue`, {
+            error: error.message,
+            stack: error.stack,
+            userId,
+            eventId
+        });
+        res.status(500).json({ msg: 'Internal server error' });
+    }
+}

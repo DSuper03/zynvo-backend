@@ -1,4 +1,4 @@
-name: Deploy to GCP
+name: Deploy ZynvoSocial to GCP
 
 on:
   push:
@@ -13,6 +13,7 @@ env:
   PROJECT_ID: project-fb9c80cd-f235-4d28-ac9
   SERVICE: zynvo-backend
   REGION: asia-south1
+  REPOSITORY: zynvo-repo
 
 jobs:
   deploy:
@@ -35,15 +36,15 @@ jobs:
 
       - name: Configure Docker auth
         run: |
-          gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
       - name: Build Docker image
         run: |
-          docker build -t asia-south1-docker.pkg.dev/${{ env.PROJECT_ID }}/zynvo-repo/zynvo-backend:$GITHUB_SHA .
+          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE }}:$GITHUB_SHA .
 
       - name: Push Docker image
         run: |
-          docker push asia-south1-docker.pkg.dev/${{ env.PROJECT_ID }}/zynvo-repo/zynvo-backend:$GITHUB_SHA
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE }}:$GITHUB_SHA
 
       - name: Deploy to Cloud Run
         env:
@@ -52,10 +53,12 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
           FE_URL: ${{ secrets.FE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
         run: |
           gcloud run deploy ${{ env.SERVICE }} \
-            --image asia-south1-docker.pkg.dev/${{ env.PROJECT_ID }}/zynvo-repo/zynvo-backend:$GITHUB_SHA \
+            --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE }}:$GITHUB_SHA \
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
-            --set-env-vars "^|^JWT_SECRET=$JWT_SECRET|DIRECT_DATABASE_URL=$DIRECT_DATABASE_URL|DATABASE_URL=$DATABASE_URL|SENDGRID_API_KEY=$SENDGRID_API_KEY|FE_URL=$FE_URL"
+            --port 8000 \
+            --set-env-vars "^|^JWT_SECRET=$JWT_SECRET|DIRECT_DATABASE_URL=$DIRECT_DATABASE_URL|DATABASE_URL=$DATABASE_URL|SENDGRID_API_KEY=$SENDGRID_API_KEY|FE_URL=$FE_URL|REDIS_URL=$REDIS_URL|NODE_ENV=production"

@@ -254,7 +254,32 @@ export const getPostById = async (req: Request, res: Response): Promise<void> =>
     try {
         const post = await prisma.createPost.findUnique({
             where: { id: postId },
-            select: postSelectBase,
+            select: { ...postSelectBase,
+                author : {
+                    select : {
+                        name : true,
+                        profileAvatar : true
+                    }
+                }, 
+                upvotes : {
+                    select : {
+                        user : {
+                            select : {
+                                name : true
+                            }
+                        }
+                    }
+                },
+                downvotes : {
+                    select : {
+                        user : {
+                            select : {
+                                name : true
+                            }
+                        }
+                    }
+                }
+            },
         });
 
         if (!post) {

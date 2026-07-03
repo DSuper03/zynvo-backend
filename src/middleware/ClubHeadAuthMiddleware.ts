@@ -46,7 +46,7 @@ export const ClubHeadAuthMiddleware = async (
         req.id = (decoded as jwt.JwtPayload).id as string;
         req.isVerified = (decoded as jwt.JwtPayload).isVerified as boolean;
 
-        // Check if user is a club head (founder)
+        // Check if user is a club head (founder) or core member.
         const user = await prisma.user.findUnique({
           where: { id: req.id },
           select: { email: true }
@@ -57,14 +57,21 @@ export const ClubHeadAuthMiddleware = async (
           return;
         }
 
-        const club = await prisma.clubs.findUnique({
-          where: { founderEmail: user.email },
+        const club = await prisma.clubs.findFirst({
+          where: {
+            OR: [
+              { founderEmail: { equals: user.email, mode: 'insensitive' } },
+              { coremember1: { equals: user.email, mode: 'insensitive' } },
+              { coremember2: { equals: user.email, mode: 'insensitive' } },
+              { coremember3: { equals: user.email, mode: 'insensitive' } },
+            ],
+          },
           select: { id: true, name: true }
         });
 
         if (!club) {
           res.status(403).json({ 
-            message: 'Access denied. Only club heads can perform this action.' 
+            message: 'Access denied. Only club heads and core members can perform this action.' 
           });
           return;
         }
