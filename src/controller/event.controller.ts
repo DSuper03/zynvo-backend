@@ -124,6 +124,29 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         return;
     }
 
+    // startDate is required (non-null) in the schema; reject early with a clear 400
+    // instead of letting Prisma throw a generic 500 later.
+    if (!eventStartDate) {
+        logger.warn(`[${requestId}] Missing event start date`, { userId });
+        sendErrorResponse(res, requestId, 'Event start date is required', 400);
+        return;
+    }
+
+    // Basic date sanity: if an end date is provided it must not precede the start date.
+    if (eventEndDate) {
+        const start = new Date(eventStartDate);
+        const end = new Date(eventEndDate);
+        if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && start > end) {
+            logger.warn(`[${requestId}] Event start date is after end date`, { userId });
+            sendErrorResponse(res, requestId, 'Event start date must be on or before the end date', 400);
+            return;
+        }
+    }
+
+    // Guard against NaN team size (parseInt of undefined/garbage) — default to a solo team.
+    const parsedTeamSize = parseInt(maxTeamSize, 10);
+    const teamSize = Number.isNaN(parsedTeamSize) || parsedTeamSize < 1 ? 1 : parsedTeamSize;
+
     try {
         logger.info(`[${requestId}] Fetching user and club information`, { userId });
 
@@ -187,7 +210,7 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
             EventType: eventType,
             EventUrl: eventWebsite || '',
             Venue: venue,
-            TeamSize: parseInt(maxTeamSize),
+            TeamSize: teamSize,
             clubName: club.name,
             clubId: club.id,
             prizes: prizes || '',
@@ -252,6 +275,13 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
             userId
         });
         console.log(error);
+
+        // EventName has a global unique constraint; surface a clean 409 instead of a generic 500.
+        if (error.code === 'P2002') {
+            sendErrorResponse(res, requestId, 'An event with this name already exists. Please choose a different name.', 409);
+            return;
+        }
+
         sendErrorResponse(res, requestId, 'internal server error', 500);
     }
 };
@@ -418,6 +448,117 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
     }
 };
 
+export const searchEvents = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+
+    // Accept both `q` and `name` for the free-text term, and `college` as an alias for `university`.
+    // Cap query length at 200 chars to prevent abuse.
+    const rawTerm = (normalizeParam(req.query.q as any) ?? normalizeParam(req.query.name as any) ?? '').trim();
+    const term = rawTerm.substring(0, 200);
+
+    const eventType = normalizeParam(req.query.eventType as any)?.trim().substring(0, 100);
+    const eventMode = normalizeParam(req.query.eventMode as any)?.trim().substring(0, 50);
+    const university = (normalizeParam(req.query.university as any) ?? normalizeParam(req.query.college as any))?.trim().substring(0, 200);
+    const isPaidRaw = normalizeParam(req.query.isPaid as any)?.trim().toLowerCase();
+    const clubId = normalizeParam(req.query.clubId as any)?.trim();
+    const upcomingRaw = normalizeParam(req.query.upcoming as any)?.trim().toLowerCase();
+
+    logger.info(`[${requestId}] GET /search - Starting event search`, {
+        term,
+        eventType,
+        eventMode,
+        university,
+        isPaid: isPaidRaw,
+        clubId,
+        upcoming: upcomingRaw
+    });
+
+    try {
+        // Clamp page and limit to sane values
+        const rawPage = parseInt(req.query.page as string);
+        const rawLimit = parseInt(req.query.limit as string);
+        const page = Number.isNaN(rawPage) || rawPage < 1 ? 1 : rawPage;
+        const limit = Number.isNaN(rawLimit) ? 10 : Math.min(Math.max(rawLimit, 1), 50);
+        const skip = (page - 1) * limit;
+
+        // Build an AND of filters; each clause is only added when the caller supplied it.
+        const andFilters: Prisma.eventWhereInput[] = [];
+
+        if (term) {
+            andFilters.push({
+                OR: [
+                    { EventName: { contains: term, mode: 'insensitive' } },
+                    { tagline: { contains: term, mode: 'insensitive' } },
+                    { description: { contains: term, mode: 'insensitive' } },
+                    { clubName: { contains: term, mode: 'insensitive' } },
+                ]
+            });
+        }
+
+        if (eventType) {
+            andFilters.push({ EventType: { equals: eventType, mode: 'insensitive' } });
+        }
+
+        if (eventMode) {
+            andFilters.push({ EventMode: { equals: eventMode, mode: 'insensitive' } });
+        }
+
+        if (university) {
+            andFilters.push({ university: { contains: university, mode: 'insensitive' } });
+        }
+
+        if (clubId) {
+            andFilters.push({ clubId: { equals: clubId } });
+        }
+
+        if (isPaidRaw === 'true' || isPaidRaw === 'false') {
+            andFilters.push({ isPaid: isPaidRaw === 'true' });
+        }
+
+        // upcoming=true → only return events whose startDate is today or in the future
+        if (upcomingRaw === 'true') {
+            const todayPrefix = new Date().toISOString().substring(0, 10); // YYYY-MM-DD
+            andFilters.push({ startDate: { gte: todayPrefix } });
+        }
+
+        const where: Prisma.eventWhereInput = andFilters.length > 0 ? { AND: andFilters } : {};
+
+        const [events, total] = await Promise.all([
+            prisma.event.findMany({
+                where,
+                take: limit,
+                skip,
+                orderBy: { createdAt: 'desc' },
+                select: eventSelectBase
+            }),
+            prisma.event.count({ where })
+        ]);
+
+        logger.info(`[${requestId}] Event search completed`, {
+            resultsCount: events.length,
+            total,
+            page
+        });
+
+        // Search returns an empty list (200) rather than 404 when nothing matches.
+        res.status(200).json({
+            msg: 'search completed',
+            response: events.map(mapEventFees),
+            total,
+            page,
+            totalPages: Math.ceil(total / limit)
+        });
+
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error searching events`, {
+            error: error.message,
+            stack: error.stack
+        });
+        console.log(error);
+        sendErrorResponse(res, requestId, 'internal server error', 500);
+    }
+};
+
 export const registerForEvent = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
     const userId = req.id;
@@ -456,6 +597,8 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
         }
 
         // Fetch event first so we can fail early for missing events.
+        // This single fetch backs every downstream check (limit, college, paid,
+        // registration window, required questions) — no re-querying.
         const event = await prisma.event.findUnique({
             where: { id: eventId },
             select: {
@@ -466,7 +609,13 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
                 _count: {
                     select: { attendees: true }
                 },
-                acceptanceBased: true
+                acceptanceBased: true,
+                applicationStatus: true,
+                applicationEndDate: true,
+                customQuestions: {
+                    where: { required: true },
+                    select: { id: true, label: true }
+                }
             }
         });
 
@@ -474,6 +623,40 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             logger.warn(`[${requestId}] Event not found`, { eventId });
             sendErrorResponse(res, requestId, 'Event not found', 404);
             return;
+        }
+
+        // Enforce the registration window: closed status or a past application end date blocks new sign-ups.
+        if (event.applicationStatus && event.applicationStatus.toLowerCase() !== 'open') {
+            logger.warn(`[${requestId}] Registration closed (applicationStatus)`, { eventId, applicationStatus: event.applicationStatus });
+            sendErrorResponse(res, requestId, 'Registration is closed for this event', 400);
+            return;
+        }
+
+        if (event.applicationEndDate) {
+            const deadline = new Date(event.applicationEndDate);
+            if (!Number.isNaN(deadline.getTime()) && deadline.getTime() < Date.now()) {
+                logger.warn(`[${requestId}] Registration deadline passed`, { eventId, applicationEndDate: event.applicationEndDate });
+                sendErrorResponse(res, requestId, 'Registration is closed for this event', 400);
+                return;
+            }
+        }
+
+        // Ensure every required custom question has been answered.
+        if (event.customQuestions.length > 0) {
+            const answeredIds = new Set(
+                (Array.isArray(customAnswers) ? customAnswers : [])
+                    .filter((a: any) => a && a.answer !== undefined && a.answer !== null && String(a.answer).trim() !== '')
+                    .map((a: any) => a.questionId)
+            );
+            const missing = event.customQuestions.filter(q => !answeredIds.has(q.id));
+            if (missing.length > 0) {
+                logger.warn(`[${requestId}] Missing required custom question answers`, {
+                    eventId,
+                    missing: missing.map(q => q.label)
+                });
+                sendErrorResponse(res, requestId, `Please answer all required questions: ${missing.map(q => q.label).join(', ')}`, 400);
+                return;
+            }
         }
 
         // Check if participation limit is reached
@@ -602,21 +785,45 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
             }
         }
 
-        const response = await prisma.userEvents.create({
-            data: {
-                userId: userId,
-                eventId: eventId,
-                uniquePassId: generateUUID(),
-                paymentScreenshotUrl: paymentScreenshot || null,
-                paymentStatus: event.isPaid
-                    ? (paymentScreenshot ? 'CONFIRMED' : 'PENDING')
-                    : 'CONFIRMED'
-            },
-            select: {
-                uniquePassId: true,
-                paymentStatus: true
+        // Re-count inside a transaction so concurrent registrations can't blow past
+        // maxParticipants (the earlier check is best-effort; this closes most of the race).
+        let response;
+        try {
+            response = await prisma.$transaction(async (tx) => {
+                if (event.maxParticipants !== null && event.maxParticipants !== undefined) {
+                    const currentCount = await tx.userEvents.count({ where: { eventId } });
+                    if (currentCount >= event.maxParticipants) {
+                        throw new Error('PARTICIPATION_LIMIT_REACHED');
+                    }
+                }
+
+                return tx.userEvents.create({
+                    data: {
+                        userId: userId,
+                        eventId: eventId,
+                        uniquePassId: generateUUID(),
+                        paymentScreenshotUrl: paymentScreenshot || null,
+                        paymentStatus: event.isPaid
+                            ? (paymentScreenshot ? 'CONFIRMED' : 'PENDING')
+                            : 'CONFIRMED'
+                    },
+                    select: {
+                        uniquePassId: true,
+                        paymentStatus: true
+                    }
+                });
+            });
+        } catch (txError: any) {
+            if (txError.message === 'PARTICIPATION_LIMIT_REACHED') {
+                logger.warn(`[${requestId}] Event participation limit reached (transaction)`, {
+                    eventId,
+                    maxParticipants: event.maxParticipants
+                });
+                sendErrorResponse(res, requestId, 'Participation limit reached for this event', 400);
+                return;
             }
-        });
+            throw txError;
+        }
 
         if (customAnswers && Array.isArray(customAnswers) && customAnswers.length > 0) {
             await prisma.registrationAnswer.createMany({
@@ -668,6 +875,11 @@ export const addSpeaker = async (req: Request, res: Response): Promise<void> => 
         speakerEmail: email
     });
 
+    if (!eventId) {
+        sendErrorResponse(res, requestId, 'Event ID is required', 400);
+        return;
+    }
+
     try {
         logger.info(`[${requestId}] Validating user as club president`, { userId });
 
@@ -682,8 +894,29 @@ export const addSpeaker = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
-        const club = await prisma.clubs.findUnique({
-            where: { founderEmail: user.email },
+        // The speaker must attach to a real event, and the requester must belong to
+        // that event's club (founder or core member) — not merely be *a* club founder.
+        const event = await prisma.event.findUnique({
+            where: { id: eventId },
+            select: { clubId: true }
+        });
+
+        if (!event) {
+            logger.warn(`[${requestId}] Event not found`, { eventId });
+            sendErrorResponse(res, requestId, 'Event not found', 404);
+            return;
+        }
+
+        const club = await prisma.clubs.findFirst({
+            where: {
+                id: event.clubId,
+                OR: [
+                    { founderEmail: { equals: user.email, mode: 'insensitive' } },
+                    { coremember1: { equals: user.email, mode: 'insensitive' } },
+                    { coremember2: { equals: user.email, mode: 'insensitive' } },
+                    { coremember3: { equals: user.email, mode: 'insensitive' } }
+                ]
+            },
             select: {
                 name: true,
                 id: true,
@@ -691,11 +924,12 @@ export const addSpeaker = async (req: Request, res: Response): Promise<void> => 
         });
 
         if (!club) {
-            logger.warn(`[${requestId}] User is not a club president`, {
+            logger.warn(`[${requestId}] User is not authorized for this event's club`, {
                 userId,
-                userEmail: user.email
+                userEmail: user.email,
+                eventId
             });
-            sendErrorResponse(res, requestId, 'invalid president identification', 402);
+            sendErrorResponse(res, requestId, 'Only club heads or core members can add speakers to this event', 403);
             return;
         }
 
@@ -734,6 +968,13 @@ export const addSpeaker = async (req: Request, res: Response): Promise<void> => 
             eventId
         });
         console.log(error);
+
+        // speakers.email has a global unique constraint; return a clean 409 instead of a 500.
+        if (error.code === 'P2002') {
+            sendErrorResponse(res, requestId, 'A speaker with this email already exists', 409);
+            return;
+        }
+
         sendErrorResponse(res, requestId, 'internal server error', 500);
     }
 };
@@ -1694,9 +1935,10 @@ export const verifyPayment = async (req: Request, res: Response): Promise<void> 
             return;
         }
 
-        // 7️⃣ Prevent double verification
-        if (registration.paymentStatus === 'APPROVED') {
-            sendErrorResponse(res, requestId, 'Payment already approved', 409);
+        // 7️⃣ Prevent double verification — a payment that's already been decided
+        // (approved OR rejected) must not be silently overwritten.
+        if (registration.paymentStatus === 'APPROVED' || registration.paymentStatus === 'REJECTED') {
+            sendErrorResponse(res, requestId, `Payment already ${registration.paymentStatus.toLowerCase()}`, 409);
             return;
         }
 
@@ -1750,11 +1992,16 @@ export const checkEventDates = async (req: Request, res: Response): Promise<void
             isValid: boolean;
             errors: string[];
             warnings: string[];
+            info: string[];
+            sameDayEventsAllowed: boolean;
             existingEvents?: any[];
         } = {
             isValid: true,
             errors: [],
-            warnings: []
+            warnings: [],
+            info: [],
+            // Multiple events on the same day are explicitly allowed; overlap is informational only.
+            sameDayEventsAllowed: true
         };
 
         const now = new Date();
@@ -1806,8 +2053,10 @@ export const checkEventDates = async (req: Request, res: Response): Promise<void
             });
 
             if (existingEvents.length > 0) {
+                // Purely informational: creating another event on the same day/period is allowed
+                // and must not block submission. Do NOT flip isValid or add a blocking warning.
                 validationResults.existingEvents = existingEvents;
-                validationResults.warnings.push(`Found ${existingEvents.length} event(s) during the same period`);
+                validationResults.info.push(`${existingEvents.length} other event(s) exist during the same period. This does not prevent creating your event.`);
             }
         }
 
@@ -2439,13 +2688,19 @@ export const updateEvent = async (req: Request, res: Response): Promise<void> =>
             };
         }
         
-        await prisma.event.update({
+        const updatedEvent = await prisma.event.update({
             where: { id: eventId },
-            data: updateData
+            data: updateData,
+            select: eventSelectBase
         });
 
         logger.info(`[${requestId}] Event updated successfully`, { eventId, userId });
-        res.status(200).json({ msg: 'Event updated successfully' });
+        // Return the fresh event (incl. application start/end dates) so the edit form
+        // can repopulate without a second fetch.
+        res.status(200).json({
+            msg: 'Event updated successfully',
+            response: mapEventFees(updatedEvent)
+        });
     } catch (error: any) {
         logger.error(`[${requestId}] Error updating event`, { error: error.message, stack: error.stack });
         console.error(error);
