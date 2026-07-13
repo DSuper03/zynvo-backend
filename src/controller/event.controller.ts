@@ -60,6 +60,19 @@ const mapEventFees = <T extends { Fees?: string | null }>(event: T) => ({
 const normalizeParam = (value: string | string[] | undefined): string | undefined =>
     Array.isArray(value) ? value[0] : value;
 
+// Parse a user-supplied date string; returns a Date or null if unparseable.
+// Used to reject garbage like "tomorrow" with a clean 400 instead of storing it.
+const parseDate = (value: unknown): Date | null => {
+    if (value === undefined || value === null || value === '') return null;
+    const d = new Date(value as string);
+    return Number.isNaN(d.getTime()) ? null : d;
+};
+
+// Minimal email shape check. contactEmail is NOT NULL in the DB, so validating
+// here turns a missing/garbage value into a 400 instead of a Prisma 500.
+const isValidEmail = (value: unknown): value is string =>
+    typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
 export const createEvent = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
 
@@ -124,28 +137,94 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         return;
     }
 
-    // startDate is required (non-null) in the schema; reject early with a clear 400
-    // instead of letting Prisma throw a generic 500 later.
+    // Event name must be present and not just whitespace (z.string() alone allows "   ").
+    if (typeof eventName !== 'string' || eventName.trim() === '') {
+        logger.warn(`[${requestId}] Missing or empty event name`, { userId });
+        sendErrorResponse(res, requestId, 'Event name is required', 400);
+        return;
+    }
+
+    // contactEmail is NOT NULL in the DB; validate here so a bad/missing value
+    // returns a 400 rather than surfacing as a generic Prisma 500 during create.
+    if (!isValidEmail(contactEmail)) {
+        logger.warn(`[${requestId}] Missing or invalid contact email`, { userId });
+        sendErrorResponse(res, requestId, 'A valid contact email is required', 400);
+        return;
+    }
+
+    // startDate is required (non-null) in the schema, and must be a real date.
     if (!eventStartDate) {
         logger.warn(`[${requestId}] Missing event start date`, { userId });
         sendErrorResponse(res, requestId, 'Event start date is required', 400);
         return;
     }
+    const startDate = parseDate(eventStartDate);
+    if (!startDate) {
+        logger.warn(`[${requestId}] Unparseable event start date`, { userId, eventStartDate });
+        sendErrorResponse(res, requestId, 'Event start date is not a valid date', 400);
+        return;
+    }
 
-    // Basic date sanity: if an end date is provided it must not precede the start date.
+    // If an end date is provided it must be a real date and not precede the start date.
     if (eventEndDate) {
-        const start = new Date(eventStartDate);
-        const end = new Date(eventEndDate);
-        if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && start > end) {
+        const end = parseDate(eventEndDate);
+        if (!end) {
+            logger.warn(`[${requestId}] Unparseable event end date`, { userId, eventEndDate });
+            sendErrorResponse(res, requestId, 'Event end date is not a valid date', 400);
+            return;
+        }
+        if (startDate > end) {
             logger.warn(`[${requestId}] Event start date is after end date`, { userId });
             sendErrorResponse(res, requestId, 'Event start date must be on or before the end date', 400);
             return;
         }
     }
 
+    // Application window: each provided date must be real, and start must not follow end.
+    const appStart = applicationStartDate ? parseDate(applicationStartDate) : null;
+    if (applicationStartDate && !appStart) {
+        logger.warn(`[${requestId}] Unparseable application start date`, { userId });
+        sendErrorResponse(res, requestId, 'Application start date is not a valid date', 400);
+        return;
+    }
+    const appEnd = applicationEndDate ? parseDate(applicationEndDate) : null;
+    if (applicationEndDate && !appEnd) {
+        logger.warn(`[${requestId}] Unparseable application end date`, { userId });
+        sendErrorResponse(res, requestId, 'Application end date is not a valid date', 400);
+        return;
+    }
+    if (appStart && appEnd && appStart > appEnd) {
+        logger.warn(`[${requestId}] Application start date is after end date`, { userId });
+        sendErrorResponse(res, requestId, 'Application start date must be on or before the application end date', 400);
+        return;
+    }
+
+    // Resolve the paid flag and fee exactly the way the payload does, so we can
+    // reject a paid event that carries no fee amount instead of silently storing "none".
+    const resolvedIsPaid = parsedData.data.isPaidEvent ?? parsedData.data.isPaid ?? false;
+    const resolvedFee = parsedData.data.paymentAmount ?? parsedData.data.fees ?? null;
+    if (resolvedIsPaid && (resolvedFee === null || resolvedFee === '' || resolvedFee === 'none')) {
+        logger.warn(`[${requestId}] Paid event missing fee amount`, { userId });
+        sendErrorResponse(res, requestId, 'A paid event must include a fee amount', 400);
+        return;
+    }
+
     // Guard against NaN team size (parseInt of undefined/garbage) — default to a solo team.
     const parsedTeamSize = parseInt(maxTeamSize, 10);
     const teamSize = Number.isNaN(parsedTeamSize) || parsedTeamSize < 1 ? 1 : parsedTeamSize;
+
+    // maxParticipants, when provided, must be a positive integer (treat '' as "no limit").
+    const rawMax = parsedData.data.maxParticipants;
+    let maxParticipants: number | null = null;
+    if (rawMax !== undefined && rawMax !== null && rawMax !== '') {
+        const parsedMax = parseInt(rawMax.toString(), 10);
+        if (Number.isNaN(parsedMax) || parsedMax < 1) {
+            logger.warn(`[${requestId}] Invalid maxParticipants`, { userId, rawMax });
+            sendErrorResponse(res, requestId, 'Max participants must be a positive number', 400);
+            return;
+        }
+        maxParticipants = parsedMax;
+    }
 
     try {
         logger.info(`[${requestId}] Fetching user and club information`, { userId });
@@ -186,7 +265,7 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
             return;
         }
 
-        if (university !== club.collegeName) {
+        if ((university ?? '').trim().toLowerCase() !== (club.collegeName ?? '').trim().toLowerCase()) {
             logger.warn(`[${requestId}] College mismatch`, {
                 userId,
                 providedUniversity: university,
@@ -226,26 +305,38 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
             posterUrl: parsedData.data.image,
             eventHeaderImage : parsedData.data.image,
             Form : parsedData.data.form ? parsedData.data.form : "none",
-            Fees : parsedData.data.paymentAmount ?? parsedData.data.fees ?? "none",
+            Fees : resolvedFee ?? "none",
             link1 : parsedData.data.link1 ? parsedData.data.link1 : null,
             link2 : parsedData.data.link2 ? parsedData.data.link2 : null,
             link3 : parsedData.data.link3 ? parsedData.data.link3 : null,
             whatsappLink: parsedData.data.whatsappLink || "",
-            isPaid: parsedData.data.isPaidEvent ?? parsedData.data.isPaid ?? false,
+            isPaid: resolvedIsPaid,
             qrCodeUrl: parsedData.data.paymentQRCode || parsedData.data.qrCodeUrl || null,
-            maxParticipants: parsedData.data.maxParticipants ? parseInt(parsedData.data.maxParticipants.toString(), 10) : null,
+            maxParticipants: maxParticipants,
             createdById: userId,
             acceptanceBased: acceptanceBased ?? false,
         };
 
         if (customQuestions && Array.isArray(customQuestions) && customQuestions.length > 0) {
+            const ALLOWED_QUESTION_TYPES = ['text', 'textarea', 'number', 'email', 'select', 'radio', 'checkbox', 'date'];
+
+            // Reject a question with no label instead of persisting a blank/NULL one.
+            const invalidQuestion = customQuestions.find(
+                (q: any) => !q || typeof q.label !== 'string' || q.label.trim() === ''
+            );
+            if (invalidQuestion) {
+                logger.warn(`[${requestId}] Custom question missing label`, { userId });
+                sendErrorResponse(res, requestId, 'Each custom question must have a label', 400);
+                return;
+            }
+
             eventDataPayload.customQuestions = {
                 create: customQuestions.map((q: any) => ({
-                    label: q.label,
-                    type: q.type || 'text',
-                    options: q.options || [],
-                    required: q.required || false,
-                    sortOrder: q.sortOrder || 0
+                    label: q.label.trim(),
+                    type: ALLOWED_QUESTION_TYPES.includes(q.type) ? q.type : 'text',
+                    options: Array.isArray(q.options) ? q.options : [],
+                    required: q.required === true,
+                    sortOrder: Number.isInteger(q.sortOrder) ? q.sortOrder : 0
                 }))
             };
         }
