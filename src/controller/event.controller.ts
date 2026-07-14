@@ -477,7 +477,7 @@ export const getAllEvents = async (req: Request, res: Response): Promise<void> =
     });
 
     try {
-        const page = parseInt(req.query.page as string) || 1;
+        const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
         const limit = 10;
         const skip = (page - 1) * limit;
 
@@ -944,6 +944,10 @@ export const registerForEvent = async (req: Request, res: Response): Promise<voi
         });
 
     } catch (error: any) {
+        if (error?.code === 'P2002') {
+            sendErrorResponse(res, requestId, 'you are already registered for this event', 409);
+            return;
+        }
         logger.error(`[${requestId}] Error registering for event`, {
             error: error.message,
             stack: error.stack,
@@ -2531,6 +2535,16 @@ export const addEventSession = async (req: Request, res: Response): Promise<void
         return;
     }
 
+    const dayNum = Number(day);
+    if (!Number.isInteger(dayNum) || dayNum < 1) {
+        res.status(400).json({ msg: 'day must be a positive integer' });
+        return;
+    }
+    if (!time || !title || !location) {
+        res.status(400).json({ msg: 'time, title and location are required' });
+        return;
+    }
+
     try {
         const event = await prisma.event.findUnique({
             where: { id: eventId },
@@ -2582,7 +2596,7 @@ export const addEventSession = async (req: Request, res: Response): Promise<void
             where: {
                 eventId_day: {
                     eventId,
-                    day: Number(day)
+                    day: dayNum
                 }
             }
         });
@@ -2591,9 +2605,9 @@ export const addEventSession = async (req: Request, res: Response): Promise<void
             scheduleDay = await prisma.scheduleDay.create({
                 data: {
                     eventId,
-                    day: Number(day),
-                    date: `Day ${day}`,
-                    name: `Day ${day}`
+                    day: dayNum,
+                    date: `Day ${dayNum}`,
+                    name: `Day ${dayNum}`
                 }
             });
         }

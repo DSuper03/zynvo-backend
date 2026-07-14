@@ -143,6 +143,10 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
             throw err;
         }
     } catch (error: any) {
+        if (error?.code === 'P2002') {
+            res.status(409).json({ msg: 'an account with this email already exists' });
+            return;
+        }
         logger.error(`[${requestId}] Error in signup`, {
             error: error.message,
             stack: error.stack,
