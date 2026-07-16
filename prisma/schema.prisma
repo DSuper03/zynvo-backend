@@ -39,6 +39,10 @@ model User {
   eventAttended userEvents[]
   registrationAnswers RegistrationAnswer[]
   eventQueue eventQueue[]
+
+  @@index([name])
+  @@index([collegeName])
+  @@index([clubId])
 }
 
 model clubs {
@@ -66,6 +70,10 @@ model clubs {
   members       User[]
   announcements clubAnnouncement[]
   events        event[]
+
+  @@index([name])
+  @@index([collegeName])
+  @@index([name, collegeName])
 }
 
 model CreatePost {
@@ -146,6 +154,14 @@ model event {
   customQuestions      EventCustomQuestion[]
   registrationAnswers  RegistrationAnswer[]
   eventQueue           eventQueue[]
+
+  @@index([clubId])
+  @@index([EventType])
+  @@index([EventMode])
+  @@index([university])
+  @@index([isPaid])
+  @@index([startDate])
+  @@index([createdAt])
 }
 
 model eventAnnouncement {

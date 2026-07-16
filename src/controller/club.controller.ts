@@ -594,6 +594,10 @@ export const createClub = async (req: Request, res: Response): Promise<void> => 
         });
 
     } catch (error: any) {
+        if (error?.code === 'P2002') {
+            sendErrorResponse(res, requestId, 'a club with these details already exists', 409, error);
+            return;
+        }
         logger.error(`[${requestId}] Error in POST /club`, {
             error: error.message,
             stack: error.stack,

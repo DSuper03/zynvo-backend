@@ -1,7 +1,8 @@
 import { Response } from 'express';
+import { randomUUID } from 'crypto';
 
 
-const generateRequestId = (): string => Math.random().toString(36).substring(7);
+const generateRequestId = (): string => randomUUID();
 
 const sendErrorResponse = (res: Response, requestId: string, message: string, statusCode: number = 500, error?: any) => {
     res.status(statusCode).json({
@@ -12,14 +13,8 @@ const sendErrorResponse = (res: Response, requestId: string, message: string, st
 };
 
 const generateUUID = (): string => {
-    return 'Zynvo xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
-        /[xy]/g,
-        function (c) {
-            const r = (Math.random() * 16) | 0;
-            const v = c === 'x' ? r : (r & 0x3) | 0x8;
-            return v.toString(16);
-        }
-    );
+    // Cryptographically-secure, unguessable pass IDs (was Math.random-based).
+    return `Zynvo ${randomUUID()}`;
 };
 
 export { generateRequestId, sendErrorResponse, generateUUID };

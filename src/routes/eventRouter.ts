@@ -8,6 +8,7 @@ import {
   getEventById,
   getEventsByClub,
   getAllEvents,
+  searchEvents,
   registerForEvent,
   addSpeaker,
   getSpeakers,
@@ -49,6 +50,7 @@ router.post('/checkEventDates', checkEventDates);
 router.get('/event/:id', getEventById);
 router.get('/eventByClub/:id', AuthMiddleware, getEventsByClub);
 router.get('/all', getAllEvents);
+router.get('/search', searchEvents);
 router.post('/registerEvent', AuthMiddleware, registerForEvent);
 router.post('/addSpeakers',AuthMiddleware,SpecificClubHeadAuthMiddleware, addSpeaker);
 router.get('/getSpeakers', getSpeakers);
