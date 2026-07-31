@@ -91,8 +91,23 @@ export const clubHeadAuthMiddleware: MiddlewareHandler<HonoEnv> = async (
       return c.json({ message: 'User not found' }, toContentfulStatus(404));
     }
 
-    const club = await prisma.clubs.findUnique({
-      where: { founderEmail: user.email },
+    // Guard against "none" or empty email matching default coremember values in DB
+    if (!user.email || user.email.toLowerCase() === 'none') {
+      return c.json(
+        { message: 'Invalid user email. Cannot verify club membership.' },
+        toContentfulStatus(403),
+      );
+    }
+
+    const club = await prisma.clubs.findFirst({
+      where: {
+        OR: [
+          { founderEmail: { equals: user.email, mode: 'insensitive' } },
+          { coremember1: { equals: user.email, mode: 'insensitive' } },
+          { coremember2: { equals: user.email, mode: 'insensitive' } },
+          { coremember3: { equals: user.email, mode: 'insensitive' } },
+        ],
+      },
       select: { id: true, name: true, collegeName: true },
     });
 

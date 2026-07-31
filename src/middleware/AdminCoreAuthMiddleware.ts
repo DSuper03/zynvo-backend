@@ -53,7 +53,7 @@ export const AdminCoreAuthMiddleware = async (
     const userEmail = user.email.toLowerCase();
     const isFounder = club.founderEmail && club.founderEmail.toLowerCase() === userEmail;
     const isCore = [club.coremember1, club.coremember2, club.coremember3].some(
-      (c) => c && c.toLowerCase() === userEmail
+      (c) => c && c.toLowerCase() !== 'none' && c.toLowerCase() === userEmail
     );
     const isSiteAdmin = adminEmails.map(e => e.toLowerCase()).includes(userEmail);
 
