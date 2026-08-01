@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { postSchema } from '../types/formtypes';
 import { generateRequestId, sendErrorResponse } from '../utils/helper';
+import { notifyAllUsersNewPost } from '../utils/fcm';
 
 // Normalize query/param values that might be arrays into a single string
 const normalizeParam = (value: string | string[] | undefined): string | undefined =>
@@ -104,7 +105,19 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
             select: { id: true }
         });
 
-   
+        // Fire-and-forget: don't block the create response on FCM
+        void notifyAllUsersNewPost({
+            postId: post.id,
+            title: parsedData.data.title,
+            description: parsedData.data.description,
+            authorName: user.name,
+            image: image ?? null,
+        }).catch((error: any) => {
+            logger.error(`[${requestId}] Failed to send new-post FCM`, {
+                error: error.message,
+                postId: post.id,
+            });
+        });
 
         logger.info(`[${requestId}] Post created successfully`, {
             postId: post.id,
