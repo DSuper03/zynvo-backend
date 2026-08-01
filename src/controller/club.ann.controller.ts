@@ -121,6 +121,13 @@ export const updateClubAnnouncement = async(req : Request, res : Response) => {
   const id = req.id
   const clubId = req.params.clubId as string
   try {
+    if(!annId) {
+        res.status(400).json({
+            msg : "annId is required"
+        });
+        return;
+    }
+
     const {
         Title,
         Description
@@ -174,7 +181,7 @@ export const updateClubAnnouncement = async(req : Request, res : Response) => {
         where : {
             id : annId,
             clubId : clubId
-        }, 
+        },
         data : updateData
     })
 
@@ -192,14 +199,20 @@ export const updateClubAnnouncement = async(req : Request, res : Response) => {
     return;
 
 
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 'P2025') {
+        res.status(404).json({
+            msg : "announcement not found"
+        })
+        return;
+    }
     console.log(error);
     res.status(500).json({
         msg : "internal server error"
     })
     return;
   }
-    
+
 }
 
 export const deleteClubAnnouncement = async(req : Request, res : Response) => {
@@ -207,6 +220,12 @@ export const deleteClubAnnouncement = async(req : Request, res : Response) => {
   const clubId = req.params.clubId as string
   const annId = req.query.annId as string
   try {
+    if(!annId) {
+        res.status(400).json({
+            msg : "annId is required"
+        });
+        return;
+    }
 
     const userEmail = await prisma.user.findUnique({
         where : {
@@ -252,11 +271,17 @@ export const deleteClubAnnouncement = async(req : Request, res : Response) => {
         return;
     } else {
         res.status(200).json({
-            msg : "Deleted" 
+            msg : "Deleted"
         })
         return;
     }
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 'P2025') {
+        res.status(404).json({
+            msg : "announcement not found"
+        })
+        return;
+    }
     console.log(error);
     res.status(500).json({
         msg : "internal server error"

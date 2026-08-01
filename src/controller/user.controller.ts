@@ -413,6 +413,13 @@ export const searchUser = async (req: Request, res: Response): Promise<void> => 
     }
 
     try {
+        // Clamp page and limit so a single search can never scan/return the whole table.
+        const rawPage = parseInt(req.query.page as string);
+        const rawLimit = parseInt(req.query.limit as string);
+        const page = Number.isNaN(rawPage) || rawPage < 1 ? 1 : rawPage;
+        const limit = Number.isNaN(rawLimit) ? 20 : Math.min(Math.max(rawLimit, 1), 50);
+        const skip = (page - 1) * limit;
+
         const users = await prisma.user.findMany({
             where: {
                 name: {
@@ -425,7 +432,10 @@ export const searchUser = async (req: Request, res: Response): Promise<void> => 
                 name: true,
                 profileAvatar: true,
                 collegeName: true
-            }
+            },
+            take: limit,
+            skip,
+            orderBy: { name: "asc" }
         });
 
         if (users) {

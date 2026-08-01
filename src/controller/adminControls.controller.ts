@@ -10,7 +10,17 @@ export const removeMember = async (req: Request, res: Response): Promise<void> =
     const {
         member
     } = req.body 
-    const clubId = normalizeParam(req.params.clubId); 
+    const clubId = normalizeParam(req.params.clubId);
+
+    if (!member || typeof member !== 'string') {
+        res.status(400).json({ msg: "member id is required" });
+        return;
+    }
+    if (!clubId) {
+        res.status(400).json({ msg: "clubId is required" });
+        return;
+    }
+
     try {
 
         const userEmail = await prisma.user.findUnique({
@@ -64,9 +74,10 @@ export const removeMember = async (req: Request, res: Response): Promise<void> =
             msg : "members remove"
         })
         return;
-        
+
     } catch (error) {
-        
+        res.status(500).json({ msg: "internal server error" });
+        return;
     }
 }
 

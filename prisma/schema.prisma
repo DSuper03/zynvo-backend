@@ -39,19 +39,10 @@ model User {
   eventAttended userEvents[]
   registrationAnswers RegistrationAnswer[]
   eventQueue eventQueue[]
-  deviceTokens  DeviceToken[]
-}
 
-model DeviceToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  platform  String?  // "android" | "ios" | "web"
-  userId    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
+  @@index([name])
+  @@index([collegeName])
+  @@index([clubId])
 }
 
 model clubs {
@@ -79,6 +70,10 @@ model clubs {
   members       User[]
   announcements clubAnnouncement[]
   events        event[]
+
+  @@index([name])
+  @@index([collegeName])
+  @@index([name, collegeName])
 }
 
 model CreatePost {
@@ -159,6 +154,14 @@ model event {
   customQuestions      EventCustomQuestion[]
   registrationAnswers  RegistrationAnswer[]
   eventQueue           eventQueue[]
+
+  @@index([clubId])
+  @@index([EventType])
+  @@index([EventMode])
+  @@index([university])
+  @@index([isPaid])
+  @@index([startDate])
+  @@index([createdAt])
 }
 
 model eventAnnouncement {

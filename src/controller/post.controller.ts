@@ -150,6 +150,11 @@ export const editPost = async (req: Request, res: Response): Promise<void> => {
         userId: req.id
     });
 
+    if (!postId) {
+        sendErrorResponse(res, requestId, 'post id required', 400);
+        return;
+    }
+
     const parsedData = postSchema.safeParse(req.body);
     if (!parsedData.success) {
         logger.warn(`[${requestId}] Invalid post format`, {
@@ -184,6 +189,10 @@ export const editPost = async (req: Request, res: Response): Promise<void> => {
             stack: error.stack,
             postId
         });
+        if (error.code === 'P2025') {
+            sendErrorResponse(res, requestId, 'no such post found', 404);
+            return;
+        }
         sendErrorResponse(res, requestId, 'error editing post', 500);
     }
 };
@@ -196,7 +205,7 @@ export const getAllPosts = async (req: Request, res: Response): Promise<void> =>
     });
 
     try {
-        const pages = parseInt(req.query.page as string) || 1;
+        const pages = Math.max(1, parseInt(req.query.page as string, 10) || 1);
         const limit = 30;
         const skip = (pages - 1) * limit;
 
@@ -333,6 +342,11 @@ export const deletePost = async (req: Request, res: Response): Promise<void> => 
         userId: req.id
     });
 
+    if (!postId) {
+        sendErrorResponse(res, requestId, 'post id required', 400);
+        return;
+    }
+
     try {
         const post = await prisma.createPost.delete({
             where: { id: postId },
@@ -438,13 +452,17 @@ res.status(200).json({
     downvoteCount: result.downvotesCount
 });
 return;
-    } catch (error) {
+    } catch (error: any) {
+        if (error?.code === 'P2002') {
+            res.status(409).json({ msg: "already upvoted" });
+            return;
+        }
         console.log("error" , error)
         res.status(500).json({
             msg : "internal server error"
         })
     }
- 
+
 }
 
 export const toggleDownvotePost = async (req: Request, res: Response): Promise<void> => {
@@ -511,7 +529,11 @@ export const toggleDownvotePost = async (req: Request, res: Response): Promise<v
             downvoteCount: result.downvoteCount,
         });
         return;
-    } catch (error) {
+    } catch (error: any) {
+        if (error?.code === 'P2002') {
+            res.status(409).json({ msg: "already downvoted" });
+            return;
+        }
         console.log("error", error);
         res.status(500).json({
             msg: "internal server error"
