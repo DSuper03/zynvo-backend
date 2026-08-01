@@ -42,11 +42,13 @@ import { clubRouter } from './routes/clubRouter';
 import openapiSpec from '../openapispecfile.json';
 import { adminControlRouter } from './routes/adminRouter';
 import { teamRouter } from './routes/teamRouter';
+import { notificationRouter } from './routes/notificationRouter';
 // ort atomicdocs from 'atomicdocs';
 import { createHonoExpressMiddleware } from './hono/expressAdapter';
 import { honoApp } from './hono/app';
 import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
 import { getRequestListener } from '@hono/node-server';
+import { initFcm } from './utils/fcm';
 
 const app = express()
 const PORT = Number(process.env.PORT || 8000);
@@ -134,6 +136,7 @@ app.use('/api/v1/events', EventRouter);
 app.use('/api/v1/clubs', clubRouter);
 app.use('/api/v1/contact', contactRouter);
 app.use('/api/v1/teams', teamRouter);
+app.use('/api/v1/notifications', notificationRouter);
 
 //------------------- V2 routes --------------------
 
@@ -169,6 +172,7 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 });
 
 console.log('✅ Middleware and routes configured successfully');
+initFcm();
 
 } catch (error) {
   console.error('❌ Failed to configure middleware/routes:', error);
