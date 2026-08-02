@@ -39,11 +39,31 @@ model User {
   eventAttended userEvents[]
   registrationAnswers RegistrationAnswer[]
   eventQueue eventQueue[]
+  
   deviceTokens DeviceToken[]
+
+  wavesSent     Wave[] @relation("WaveSender")
+  wavesReceived Wave[] @relation("WaveReceiver")
 
   @@index([name])
   @@index([collegeName])
   @@index([clubId])
+}
+
+// One "wave" push per sender -> receiver pair. `createdAt` is refreshed on
+// repeat waves so it doubles as the rate-limit timestamp (30 min window).
+model Wave {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  createdAt  DateTime @default(now())
+
+  sender   User @relation("WaveSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("WaveReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@unique([senderId, receiverId])
 }
 
 model DeviceToken {
