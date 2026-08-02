@@ -43,6 +43,7 @@ import openapiSpec from '../openapispecfile.json';
 import { adminControlRouter } from './routes/adminRouter';
 import { teamRouter } from './routes/teamRouter';
 import { notificationRouter } from './routes/notificationRouter';
+import { waveRouter } from './routes/wave.routes';
 // ort atomicdocs from 'atomicdocs';
 import { createHonoExpressMiddleware } from './hono/expressAdapter';
 import { honoApp } from './hono/app';
@@ -137,6 +138,7 @@ app.use('/api/v1/clubs', clubRouter);
 app.use('/api/v1/contact', contactRouter);
 app.use('/api/v1/teams', teamRouter);
 app.use('/api/v1/notifications', notificationRouter);
+app.use('/api/v1/users', waveRouter);
 
 //------------------- V2 routes --------------------
 
