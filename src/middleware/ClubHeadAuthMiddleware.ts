@@ -98,22 +98,7 @@ export const ClubHeadAuthMiddleware = async (
     req.clubId = club.id;
     req.clubName = club.name;
 
-        next();
-      } else {
-        res.status(401).json({
-          message: 'Invalid token format',
-        });
-        return;
-      }
-    } catch (error: any) {
-      logger.error(error);
-      return;
-      if (error instanceof jwt.TokenExpiredError) {
-        res.status(401).json({ msg: 'Token expired' });
-        return;
-      }
-      res.status(401).json({ msg: 'Invalid token' });
-    }
+    next();
   } catch (error) {
     logger.error(error);
     res.status(500).json({ msg: 'Internal server error processing authentication' });
