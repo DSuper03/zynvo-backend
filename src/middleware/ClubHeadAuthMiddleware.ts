@@ -61,9 +61,67 @@ export const ClubHeadAuthMiddleware = async (
     const userId = getUserId(req, res);
     if (!userId) return;
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true }
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET!);
+
+      if (typeof decoded === 'object' && 'id' in decoded) {
+        req.id = (decoded as jwt.JwtPayload).id as string;
+        req.isVerified = (decoded as jwt.JwtPayload).isVerified as boolean;
+
+        // Check if user is a club head (founder) or core member.
+        const user = await prisma.user.findUnique({
+          where: { id: req.id },
+          select: { email: true }
+        });
+
+        if (!user) {
+          res.status(404).json({ message: 'User not found' });
+          return;
+        }
+
+        const club = await prisma.clubs.findFirst({
+          where: {
+            OR: [
+              { founderEmail: { equals: user.email, mode: 'insensitive' } },
+              { coremember1: { equals: user.email, mode: 'insensitive' } },
+              { coremember2: { equals: user.email, mode: 'insensitive' } },
+              { coremember3: { equals: user.email, mode: 'insensitive' } },
+            ],
+          },
+          select: { id: true, name: true }
+        });
+
+        if (!club) {
+          res.status(403).json({ 
+            message: 'Access denied. Only club heads and core members can perform this action.' 
+          });
+          return;
+        }
+
+        // Add club info to request for potential use
+        (req as any).clubId = club.id;
+        (req as any).clubName = club.name;
+
+        next();
+      } else {
+        res.status(401).json({
+          message: 'Invalid token format',
+        });
+        return;
+      }
+    } catch (error: any) {
+      logger.error(error);
+      return;
+      if (error instanceof jwt.TokenExpiredError) {
+        res.status(401).json({ msg: 'Token expired' });
+        return;
+      }
+      res.status(401).json({ msg: 'Invalid token' });
+    }
+  } catch (error) {
+    console.log(error);
+    res.status(401).json({
+      msg: 'error occured in processing token, either token not found or is invalid.',
     });
 
     if (!user) {
