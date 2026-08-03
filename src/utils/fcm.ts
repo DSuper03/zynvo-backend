@@ -70,12 +70,11 @@ type NewPostNotificationInput = {
   image?: string | null;
 };
 
-export const notifyAllUsersNewPost = async (input: NewPostNotificationInput): Promise<void> => {
-  if (!initFcm()) {
-    logger.warn('Skipping new-post push — FCM not configured');
-    return;
-  }
-
+// Single source of truth for the new-post notification copy, shared by the
+// FCM push and the in-app notification that gets persisted to the DB.
+export const buildNewPostNotification = (
+  input: NewPostNotificationInput
+): { title: string; body: string } => {
   const bodyPreview =
     input.description.length > 100
       ? `${input.description.slice(0, 97)}...`
@@ -83,17 +82,31 @@ export const notifyAllUsersNewPost = async (input: NewPostNotificationInput): Pr
 
   const authorLabel = input.authorName?.trim() || 'Someone';
 
+  return {
+    title: `${authorLabel} posted something new`,
+    body: input.title || bodyPreview,
+  };
+};
+
+export const notifyAllUsersNewPost = async (input: NewPostNotificationInput): Promise<void> => {
+  if (!initFcm()) {
+    logger.warn('Skipping new-post push — FCM not configured');
+    return;
+  }
+
+  const { title, body } = buildNewPostNotification(input);
+
   const message: Message = {
     topic: ALL_USERS_TOPIC,
     notification: {
-      title: `${authorLabel} posted something new`,
-      body: input.title || bodyPreview,
+      title,
+      body,
     },
     data: {
       type: 'new_post',
       postId: input.postId,
       title: input.title,
-      description: bodyPreview,
+      description: body,
       ...(input.image ? { image: input.image } : {}),
     },
     android: {

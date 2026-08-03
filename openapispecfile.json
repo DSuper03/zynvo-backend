@@ -2314,6 +2314,2472 @@
         }
       }
     },
+    "/api/v1/teams/create": {
+      "post": {
+        "summary": "Create a team",
+        "description": "Create a new team for an event",
+        "tags": ["Teams"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["eventId", "teamName"],
+                "properties": {
+                  "eventId": {
+                    "type": "string",
+                    "description": "Event ID to create team for"
+                  },
+                  "teamName": {
+                    "type": "string",
+                    "description": "Name of the team"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Team created successfully"
+          },
+          "400": {
+            "description": "Bad request"
+          }
+        }
+      }
+    },
+    "/api/v1/teams/join": {
+      "post": {
+        "summary": "Join a team",
+        "description": "Join an existing team for an event",
+        "tags": ["Teams"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["teamId"],
+                "properties": {
+                  "teamId": {
+                    "type": "string",
+                    "description": "Team ID to join"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Joined team successfully"
+          },
+          "400": {
+            "description": "Bad request"
+          }
+        }
+      }
+    },
+    "/api/v1/teams/details/{teamId}": {
+      "get": {
+        "summary": "Get team details",
+        "description": "Get detailed information about a specific team",
+        "tags": ["Teams"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Team ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Team details retrieved successfully"
+          },
+          "404": {
+            "description": "Team not found"
+          }
+        }
+      }
+    },
+    "/api/v1/teams/my-team/{eventId}": {
+      "get": {
+        "summary": "Get my team",
+        "description": "Get the authenticated user's team for a specific event",
+        "tags": ["Teams"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Team retrieved successfully"
+          },
+          "404": {
+            "description": "Team not found"
+          }
+        }
+      }
+    },
+    "/api/v1/teams/leave/{teamId}": {
+      "delete": {
+        "summary": "Leave team",
+        "description": "Leave the current team",
+        "tags": ["Teams"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "teamId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Team ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Left team successfully"
+          },
+          "400": {
+            "description": "Bad request"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "summary": "List notifications",
+        "description": "List the authenticated user's in-app notifications, newest first, with unread count and pagination",
+        "tags": ["Notifications"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number (1-based)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 50
+            },
+            "description": "Notifications per page"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notifications fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": { "type": "string" },
+                    "notifications": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "userId": { "type": "string" },
+                          "type": { "type": "string" },
+                          "title": { "type": "string" },
+                          "body": { "type": "string" },
+                          "data": { "type": "object" },
+                          "read": { "type": "boolean" },
+                          "createdAt": { "type": "string", "format": "date-time" }
+                        }
+                      }
+                    },
+                    "unreadCount": { "type": "integer" },
+                    "total": { "type": "integer" },
+                    "totalPages": { "type": "integer" },
+                    "page": { "type": "integer" },
+                    "limit": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/read": {
+      "post": {
+        "summary": "Mark notification as read",
+        "description": "Mark a single notification of the authenticated user as read",
+        "tags": ["Notifications"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Notification id"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Notification marked as read"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "Notification not found"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "post": {
+        "summary": "Mark all notifications as read",
+        "description": "Mark all of the authenticated user's notifications as read",
+        "tags": ["Notifications"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "All notifications marked as read"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/register": {
+      "post": {
+        "summary": "Register device token",
+        "description": "Register a device token for push notifications",
+        "tags": ["Notifications"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "FCM device token"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Device token registered successfully"
+          },
+          "400": {
+            "description": "Bad request"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/unregister": {
+      "post": {
+        "summary": "Unregister device token",
+        "description": "Unregister a device token from push notifications",
+        "tags": ["Notifications"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "FCM device token"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Device token unregistered successfully"
+          },
+          "400": {
+            "description": "Bad request"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/test": {
+      "post": {
+        "summary": "Test push notification",
+        "description": "Send a test push notification to the authenticated user",
+        "tags": ["Notifications"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Test notification sent successfully"
+          },
+          "400": {
+            "description": "Bad request"
+          }
+        }
+      }
+    },
+    "/api/v1/users/{userId}/wave": {
+      "post": {
+        "summary": "Wave at a user",
+        "description": "Send a wave notification to another user",
+        "tags": ["Social"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "User ID to wave at"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Wave sent successfully"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/api/v1/contact/contact": {
+      "post": {
+        "summary": "Send contact message",
+        "description": "Send a contact message to the support team",
+        "tags": ["Contact"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "subject", "message"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Sender name"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Sender email"
+                  },
+                  "subject": {
+                    "type": "string",
+                    "description": "Message subject"
+                  },
+                  "message": {
+                    "type": "string",
+                    "description": "Message content"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Message sent successfully"
+          },
+          "400": {
+            "description": "Error sending message"
+          }
+        }
+      }
+    },
+    "/api/v1/contact/feedback": {
+      "post": {
+        "summary": "Send feedback",
+        "description": "Send feedback about the platform",
+        "tags": ["Contact"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["subject", "category", "description"],
+                "properties": {
+                  "subject": {
+                    "type": "string",
+                    "description": "Feedback subject"
+                  },
+                  "category": {
+                    "type": "string",
+                    "description": "Feedback category"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Feedback description"
+                  },
+                  "improvements": {
+                    "type": "string",
+                    "description": "Suggested improvements"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Feedback sent successfully"
+          },
+          "400": {
+            "description": "Error sending feedback"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/api/v1/clubs/getAnn/{clubId}": {
+      "get": {
+        "summary": "Get club announcements",
+        "description": "Get all announcements for a specific club",
+        "tags": ["Clubs"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Club ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Announcements retrieved successfully"
+          },
+          "404": {
+            "description": "Club not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/checkEventDates": {
+      "post": {
+        "summary": "Check event dates",
+        "description": "Check if event dates are available",
+        "tags": ["Events"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["eventStartDate", "eventEndDate"],
+                "properties": {
+                  "eventStartDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "eventEndDate": {
+                    "type": "string",
+                    "format": "date"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dates checked successfully"
+          },
+          "400": {
+            "description": "Invalid dates"
+          }
+        }
+      }
+    },
+    "/api/v1/events/search": {
+      "get": {
+        "summary": "Search events",
+        "description": "Search for events by name or description",
+        "tags": ["Events"],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Events found"
+          },
+          "404": {
+            "description": "No events found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/event-details": {
+      "get": {
+        "summary": "Get event details",
+        "description": "Get detailed information about an event",
+        "tags": ["Events"],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event details retrieved successfully"
+          },
+          "404": {
+            "description": "Event not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/user-details": {
+      "get": {
+        "summary": "Get user details by pass ID",
+        "description": "Get user information using event pass ID",
+        "tags": ["Events"],
+        "parameters": [
+          {
+            "name": "passId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event pass ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User details retrieved successfully"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/participants/{eventId}": {
+      "get": {
+        "summary": "Get event participants",
+        "description": "Get all participants for a specific event (admin/core members only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Participants retrieved successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin/core member"
+          },
+          "404": {
+            "description": "Event not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/verifyPayment": {
+      "post": {
+        "summary": "Verify event payment",
+        "description": "Verify payment for a paid event (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["userId", "eventId"],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "description": "User ID"
+                  },
+                  "eventId": {
+                    "type": "string",
+                    "description": "Event ID"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Payment verified successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          }
+        }
+      }
+    },
+    "/api/v1/events/paidEventPayments/{eventId}": {
+      "get": {
+        "summary": "Get paid event payments",
+        "description": "Get all payment records for a paid event (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payments retrieved successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          }
+        }
+      }
+    },
+    "/api/v1/events/getAnn/{eventId}": {
+      "get": {
+        "summary": "Get event announcements",
+        "description": "Get all announcements for a specific event",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Announcements retrieved successfully"
+          },
+          "404": {
+            "description": "Event not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/announcement/{eventId}": {
+      "post": {
+        "summary": "Create event announcement",
+        "description": "Create a new announcement for an event (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "content"],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "Announcement title"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "Announcement content"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Announcement created successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          }
+        }
+      }
+    },
+    "/api/v1/events/announcement/{eventId}": {
+      "put": {
+        "summary": "Update event announcement",
+        "description": "Update an existing event announcement (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          },
+          {
+            "name": "annId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Announcement ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Announcement updated successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          }
+        }
+      }
+    },
+    "/api/v1/events/announcement/{eventId}": {
+      "delete": {
+        "summary": "Delete event announcement",
+        "description": "Delete an event announcement (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          },
+          {
+            "name": "annId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Announcement ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Announcement deleted successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/gallery": {
+      "post": {
+        "summary": "Add to event gallery",
+        "description": "Add images to event gallery (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["imageUrl"],
+                "properties": {
+                  "imageUrl": {
+                    "type": "string",
+                    "description": "Image URL"
+                  },
+                  "caption": {
+                    "type": "string",
+                    "description": "Image caption"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Image added to gallery successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/gallery": {
+      "get": {
+        "summary": "Get event gallery",
+        "description": "Get all images from event gallery",
+        "tags": ["Events"],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gallery retrieved successfully"
+          },
+          "404": {
+            "description": "Event not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/gallery": {
+      "put": {
+        "summary": "Update gallery item",
+        "description": "Update a gallery item (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["galleryItemId"],
+                "properties": {
+                  "galleryItemId": {
+                    "type": "string",
+                    "description": "Gallery item ID"
+                  },
+                  "caption": {
+                    "type": "string",
+                    "description": "Updated caption"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gallery item updated successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/gallery": {
+      "delete": {
+        "summary": "Delete gallery item",
+        "description": "Delete a gallery item (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["galleryItemId"],
+                "properties": {
+                  "galleryItemId": {
+                    "type": "string",
+                    "description": "Gallery item ID"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gallery item deleted successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/judges": {
+      "post": {
+        "summary": "Add judge to event",
+        "description": "Add a judge to an event (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "about"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Judge name"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Judge email"
+                  },
+                  "about": {
+                    "type": "string",
+                    "description": "About the judge"
+                  },
+                  "profilePic": {
+                    "type": "string",
+                    "description": "Judge profile picture URL"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Judge added successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/judges": {
+      "get": {
+        "summary": "Get event judges",
+        "description": "Get all judges for an event",
+        "tags": ["Events"],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Judges retrieved successfully"
+          },
+          "404": {
+            "description": "Event not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/judges/{judgeId}": {
+      "put": {
+        "summary": "Update judge",
+        "description": "Update a judge's information (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          },
+          {
+            "name": "judgeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Judge ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "about": {
+                    "type": "string"
+                  },
+                  "profilePic": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Judge updated successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/judges/{judgeId}": {
+      "delete": {
+        "summary": "Delete judge",
+        "description": "Remove a judge from an event (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          },
+          {
+            "name": "judgeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Judge ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Judge deleted successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          }
+        }
+      }
+    },
+    "/api/v1/events/schedule/{eventId}": {
+      "get": {
+        "summary": "Get event schedule",
+        "description": "Get the complete schedule for an event",
+        "tags": ["Events"],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Schedule retrieved successfully"
+          },
+          "404": {
+            "description": "Event not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/schedule/{eventId}/session": {
+      "post": {
+        "summary": "Add event session",
+        "description": "Add a new session to the event schedule",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "startTime", "endTime"],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "Session title"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Session description"
+                  },
+                  "startTime": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Session start time"
+                  },
+                  "endTime": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Session end time"
+                  },
+                  "location": {
+                    "type": "string",
+                    "description": "Session location"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session added successfully"
+          },
+          "400": {
+            "description": "Bad request"
+          }
+        }
+      }
+    },
+    "/api/v1/events/schedule/{eventId}/session/{sessionId}": {
+      "delete": {
+        "summary": "Delete event session",
+        "description": "Delete a session from the event schedule",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          },
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Session ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session deleted successfully"
+          },
+          "404": {
+            "description": "Session not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/event/{id}": {
+      "put": {
+        "summary": "Update event",
+        "description": "Update an existing event (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "eventName": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "eventStartDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "eventEndDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "eventMode": {
+                    "type": "string"
+                  },
+                  "eventType": {
+                    "type": "string"
+                  },
+                  "maxTeamSize": {
+                    "type": "integer"
+                  },
+                  "venue": {
+                    "type": "string"
+                  },
+                  "eventWebsite": {
+                    "type": "string"
+                  },
+                  "university": {
+                    "type": "string"
+                  },
+                  "collegeStudentsOnly": {
+                    "type": "boolean"
+                  },
+                  "contactEmail": {
+                    "type": "string"
+                  },
+                  "contactPhone": {
+                    "type": "string"
+                  },
+                  "noParticipationFee": {
+                    "type": "boolean"
+                  },
+                  "prizes": {
+                    "type": "string"
+                  },
+                  "image": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event updated successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          },
+          "404": {
+            "description": "Event not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/event/{id}": {
+      "delete": {
+        "summary": "Delete event",
+        "description": "Delete an event (club presidents only)",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event deleted successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not club president"
+          },
+          "404": {
+            "description": "Event not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/eventQueue/{eventId}": {
+      "get": {
+        "summary": "Get event queue",
+        "description": "Get all users in the event waiting queue",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Queue retrieved successfully"
+          },
+          "404": {
+            "description": "Event not found"
+          }
+        }
+      }
+    },
+    "/api/v1/events/eventQueue/{eventId}/approve": {
+      "put": {
+        "summary": "Approve user from queue",
+        "description": "Approve a user from the event waiting queue",
+        "tags": ["Events"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["userId"],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "description": "User ID to approve"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User approved successfully"
+          },
+          "404": {
+            "description": "User or event not found"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/updateClubLinks/{id}": {
+      "put": {
+        "summary": "Update club links",
+        "description": "Update social media links for a club (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "instagram": {
+                    "type": "string"
+                  },
+                  "linkedin": {
+                    "type": "string"
+                  },
+                  "twitter": {
+                    "type": "string"
+                  },
+                  "website": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Club links updated successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/addWings/{id}": {
+      "put": {
+        "summary": "Add club wings",
+        "description": "Add wings to a club (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["wings"],
+                "properties": {
+                  "wings": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "List of wing names"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Wings added successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/deleteEvent/{eventId}": {
+      "post": {
+        "summary": "Delete event",
+        "description": "Delete an event (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event deleted successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          },
+          "404": {
+            "description": "Event not found"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/removeMember/{clubId}": {
+      "post": {
+        "summary": "Remove club member",
+        "description": "Remove a member from a club (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["userId"],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "description": "User ID to remove"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Member removed successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/addCoreMembers/{clubId}": {
+      "post": {
+        "summary": "Add core members",
+        "description": "Add core members to a club (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["memberIds"],
+                "properties": {
+                  "memberIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "List of user IDs to add as core members"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Core members added successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/removeCoremembers/{clubId}": {
+      "post": {
+        "summary": "Remove core members",
+        "description": "Remove core members from a club (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["memberIds"],
+                "properties": {
+                  "memberIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "List of user IDs to remove from core members"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Core members removed successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/transferOwnership/{clubId}": {
+      "put": {
+        "summary": "Transfer club ownership",
+        "description": "Transfer club ownership to another member (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["newOwnerId"],
+                "properties": {
+                  "newOwnerId": {
+                    "type": "string",
+                    "description": "User ID to transfer ownership to"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ownership transferred successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/updateEventLinks/{eventId}": {
+      "put": {
+        "summary": "Update event links",
+        "description": "Update social media links for an event (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "instagram": {
+                    "type": "string"
+                  },
+                  "linkedin": {
+                    "type": "string"
+                  },
+                  "twitter": {
+                    "type": "string"
+                  },
+                  "website": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Event links updated successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/createAnn/{clubId}": {
+      "post": {
+        "summary": "Create club announcement",
+        "description": "Create a new announcement for a club (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Club ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "content"],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "Announcement title"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "Announcement content"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Announcement created successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/UpdateAnn/{clubId}": {
+      "put": {
+        "summary": "Update club announcement",
+        "description": "Update an existing club announcement (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Club ID"
+          },
+          {
+            "name": "annId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Announcement ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Announcement updated successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/DeleteAnn/{clubId}": {
+      "delete": {
+        "summary": "Delete club announcement",
+        "description": "Delete a club announcement (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Club ID"
+          },
+          {
+            "name": "annId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Announcement ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Announcement deleted successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/createEventAnn/{eventId}": {
+      "post": {
+        "summary": "Create event announcement",
+        "description": "Create a new announcement for an event (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "content"],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "Announcement title"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "Announcement content"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Announcement created successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/UpdateEventAnn/{eventId}": {
+      "put": {
+        "summary": "Update event announcement",
+        "description": "Update an existing event announcement (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          },
+          {
+            "name": "annId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Announcement ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Announcement updated successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/DeleteEventAnn/{eventId}": {
+      "delete": {
+        "summary": "Delete event announcement",
+        "description": "Delete an event announcement (admin only)",
+        "tags": ["Admin"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Event ID"
+          },
+          {
+            "name": "annId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Announcement ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Announcement deleted successfully"
+          },
+          "403": {
+            "description": "Unauthorized - not admin"
+          }
+        }
+      }
+    },
+    "/api/v1/user/password-login": {
+      "post": {
+        "summary": "Password login",
+        "description": "Login using email and password (legacy method)",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          }
+        }
+      }
+    },
+    "/api/v1/user/checkUserExists": {
+      "post": {
+        "summary": "Check if user exists",
+        "description": "Check if a user exists by email",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User existence checked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "exists": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/user/clerkLogin": {
+      "post": {
+        "summary": "Clerk login",
+        "description": "Login using Clerk authentication",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["clerkId"],
+                "properties": {
+                  "clerkId": {
+                    "type": "string",
+                    "description": "Clerk user ID"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/api/v1/user/syncWithClerk": {
+      "post": {
+        "summary": "Sync with Clerk",
+        "description": "Sync user data with Clerk",
+        "tags": ["Authentication"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["clerkId"],
+                "properties": {
+                  "clerkId": {
+                    "type": "string",
+                    "description": "Clerk user ID"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sync successful"
+          },
+          "400": {
+            "description": "Sync failed"
+          }
+        }
+      }
+    },
+    "/api/v1/user/updateAvatar": {
+      "put": {
+        "summary": "Update user avatar",
+        "description": "Update authenticated user's profile avatar",
+        "tags": ["User Management"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["avatarUrl"],
+                "properties": {
+                  "avatarUrl": {
+                    "type": "string",
+                    "description": "New avatar URL"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Avatar updated successfully"
+          },
+          "400": {
+            "description": "Error occurred"
+          }
+        }
+      }
+    },
+    "/api/v1/user/updateCollegeName": {
+      "put": {
+        "summary": "Update user college name",
+        "description": "Update authenticated user's college name",
+        "tags": ["User Management"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["collegeName"],
+                "properties": {
+                  "collegeName": {
+                    "type": "string",
+                    "description": "New college name"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "College name updated successfully"
+          },
+          "400": {
+            "description": "Error occurred"
+          }
+        }
+      }
+    },
+    "/api/v1/post/getUpvotes/{id}": {
+      "get": {
+        "summary": "Get post upvotes",
+        "description": "Get the number of upvotes for a specific post",
+        "tags": ["Posts"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Post ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upvotes retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found"
+          }
+        }
+      }
+    },
+    "/api/v1/post/getDownvotes/{id}": {
+      "get": {
+        "summary": "Get post downvotes",
+        "description": "Get the number of downvotes for a specific post",
+        "tags": ["Posts"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Post ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Downvotes retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Post not found"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health check",

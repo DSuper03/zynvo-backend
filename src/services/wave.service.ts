@@ -1,6 +1,7 @@
 import { prisma } from '../db/db';
 import { logger } from '../utils/logger';
 import { sendToDeviceTokens } from '../utils/fcm';
+import { createNotification } from './notification.service';
 
 // Minimum delay between two waves from the same sender to the same recipient.
 const WAVE_RATE_LIMIT_MS = 30 * 60 * 1000;
@@ -94,6 +95,26 @@ export const sendWave = async (
     update: { createdAt: new Date() },
   });
 
+  // Persist an in-app notification so the wave shows up in the recipient's
+  // inbox even if they have no registered device or the push fails.
+  const senderName = sender.name?.trim() || 'Someone';
+  void createNotification({
+    userId: receiverId,
+    type: 'wave',
+    title: '👋 Someone waved at you!',
+    body: `${senderName} waved at you.`,
+    data: {
+      senderId,
+      receiverId,
+      route: `/profile/${senderId}`,
+    },
+  }).catch((error: any) => {
+    logger.error('Failed to persist wave notification', {
+      error: error.message,
+      receiverId,
+    });
+  });
+
   const tokens = recipient.deviceTokens.map((dt) => dt.token);
 
   if (tokens.length === 0) {
@@ -106,8 +127,6 @@ export const sendWave = async (
       hasRegisteredDevices: false,
     };
   }
-
-  const senderName = sender.name?.trim() || 'Someone';
 
   const pushResult = await sendToDeviceTokens(
     tokens,

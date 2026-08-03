@@ -134,3 +134,101 @@ export const testPushNotification = async (req: Request, res: Response): Promise
     sendErrorResponse(res, requestId, 'error sending test notification', 500, error);
   }
 };
+
+export const getNotifications = async (req: Request, res: Response): Promise<void> => {
+  const requestId = generateRequestId();
+  const userId = req.id;
+
+  const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
+  const skip = (page - 1) * limit;
+
+  logger.info(`[${requestId}] GET /notifications - fetching inbox`, {
+    userId,
+    page,
+    limit,
+  });
+
+  try {
+    const [notifications, total, unreadCount] = await Promise.all([
+      prisma.notification.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.notification.count({ where: { userId } }),
+      prisma.notification.count({ where: { userId, read: false } }),
+    ]);
+
+    res.status(200).json({
+      msg: 'notifications fetched',
+      notifications,
+      unreadCount,
+      total,
+      totalPages: Math.ceil(total / limit),
+      page,
+      limit,
+    });
+  } catch (error: any) {
+    logger.error(`[${requestId}] Error fetching notifications`, {
+      error: error.message,
+      userId,
+    });
+    sendErrorResponse(res, requestId, 'error fetching notifications', 500, error);
+  }
+};
+
+export const markNotificationRead = async (req: Request, res: Response): Promise<void> => {
+  const requestId = generateRequestId();
+  const userId = req.id;
+  const { id } = req.body as { id?: string };
+
+  if (!id || typeof id !== 'string') {
+    sendErrorResponse(res, requestId, 'notification id is required', 400);
+    return;
+  }
+
+  try {
+    const result = await prisma.notification.updateMany({
+      where: { id, userId },
+      data: { read: true },
+    });
+
+    if (result.count === 0) {
+      sendErrorResponse(res, requestId, 'notification not found', 404);
+      return;
+    }
+
+    res.status(200).json({ msg: 'notification marked as read' });
+  } catch (error: any) {
+    logger.error(`[${requestId}] Error marking notification as read`, {
+      error: error.message,
+      userId,
+    });
+    sendErrorResponse(res, requestId, 'error marking notification as read', 500, error);
+  }
+};
+
+export const markAllNotificationsRead = async (req: Request, res: Response): Promise<void> => {
+  const requestId = generateRequestId();
+  const userId = req.id;
+
+  try {
+    const result = await prisma.notification.updateMany({
+      where: { userId, read: false },
+      data: { read: true },
+    });
+
+    res.status(200).json({
+      msg: 'all notifications marked as read',
+      updated: result.count,
+    });
+  } catch (error: any) {
+    logger.error(`[${requestId}] Error marking all notifications as read`, {
+      error: error.message,
+      userId,
+    });
+    sendErrorResponse(res, requestId, 'error marking notifications as read', 500, error);
+  }
+};

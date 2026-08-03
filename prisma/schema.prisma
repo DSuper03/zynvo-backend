@@ -41,6 +41,7 @@ model User {
   eventQueue eventQueue[]
   
   deviceTokens DeviceToken[]
+  notifications Notification[]
 
   wavesSent     Wave[] @relation("WaveSender")
   wavesReceived Wave[] @relation("WaveReceiver")
@@ -76,6 +77,24 @@ model DeviceToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// Persisted in-app notification shown in the notification list. FCM pushes are
+// transient — this row is what powers the in-app notification inbox.
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  data      Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }
 model clubs {
   id            String             @id @default(uuid())
