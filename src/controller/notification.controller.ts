@@ -2,12 +2,21 @@ import { Request, Response } from 'express';
 import { prisma } from '../db/db';
 import { logger } from '../utils/logger';
 import { generateRequestId, sendErrorResponse } from '../utils/helper';
+import { z } from 'zod';
 import {
   isFcmConfigured,
   subscribeToAllUsers,
   unsubscribeFromAllUsers,
   notifyAllUsersNewPost,
 } from '../utils/fcm';
+import { broadcast } from '../services/notification.service';
+
+const broadcastSchema = z.object({
+  title: z.string().trim().min(1, 'title is required').max(100, 'title must be at most 100 characters'),
+  body: z.string().trim().min(1, 'body is required').max(500, 'body must be at most 500 characters'),
+  imageUrl: z.string().nullable().optional(),
+  data: z.record(z.string(), z.unknown()).nullable().optional(),
+});
 
 export const registerDeviceToken = async (req: Request, res: Response): Promise<void> => {
   const requestId = generateRequestId();
@@ -230,5 +239,41 @@ export const markAllNotificationsRead = async (req: Request, res: Response): Pro
       userId,
     });
     sendErrorResponse(res, requestId, 'error marking notifications as read', 500, error);
+  }
+};
+
+export const broadcastNotification = async (req: Request, res: Response): Promise<void> => {
+  const requestId = generateRequestId();
+
+  const parsed = broadcastSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logger.warn(`[${requestId}] Invalid broadcast payload`, {
+      userId: req.id,
+      errors: parsed.error.errors,
+    });
+    sendErrorResponse(res, requestId, 'invalid broadcast payload', 400, parsed.error);
+    return;
+  }
+
+  logger.info(`[${requestId}] Broadcast requested`, {
+    userId: req.id,
+    title: parsed.data.title,
+  });
+
+  try {
+    const result = await broadcast({
+      title: parsed.data.title,
+      body: parsed.data.body,
+      imageUrl: parsed.data.imageUrl ?? null,
+      data: parsed.data.data ?? null,
+    });
+
+    res.status(200).json(result);
+  } catch (error: any) {
+    logger.error(`[${requestId}] Broadcast failed`, {
+      error: error.message,
+      stack: error.stack,
+    });
+    sendErrorResponse(res, requestId, 'error sending broadcast notification', 500, error);
   }
 };

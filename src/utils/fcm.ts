@@ -159,7 +159,8 @@ const isInvalidTokenError = (error?: { code?: string }): boolean =>
 export const sendToDeviceTokens = async (
   tokens: string[],
   notification: { title: string; body: string },
-  data?: Record<string, string>
+  data?: Record<string, string>,
+  options?: { channelId?: string }
 ): Promise<DeviceTokenPushResult> => {
   const empty: DeviceTokenPushResult = {
     successCount: 0,
@@ -183,7 +184,7 @@ export const sendToDeviceTokens = async (
     android: {
       priority: 'high',
       notification: {
-        channelId: 'waves',
+        channelId: options?.channelId ?? 'waves',
         sound: 'default',
       },
     },
@@ -199,6 +200,7 @@ export const sendToDeviceTokens = async (
 
   for (let i = 0; i < tokens.length; i += CHUNK_SIZE) {
     const chunk = tokens.slice(i, i + CHUNK_SIZE);
+    const batchNumber = i / CHUNK_SIZE + 1;
 
     try {
       const response = await getMessaging().sendEachForMulticast({
@@ -208,6 +210,13 @@ export const sendToDeviceTokens = async (
 
       result.successCount += response.successCount;
       result.failureCount += response.failureCount;
+
+      logger.info('FCM multicast batch sent', {
+        batch: batchNumber,
+        batchSize: chunk.length,
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+      });
 
       response.responses.forEach((r, index) => {
         const token = chunk[index];
