@@ -8,6 +8,7 @@ import {
   subscribeToAllUsers,
   unsubscribeFromAllUsers,
   notifyAllUsersNewPost,
+  sendToDeviceTokens,
   FcmNotConfiguredError,
 } from '../utils/fcm';
 import { broadcast } from '../services/notification.service';
@@ -131,14 +132,43 @@ export const testPushNotification = async (req: Request, res: Response): Promise
   }
 
   try {
+    const title = req.body?.title || 'Test notification';
+    const body = req.body?.description || 'If you see this, FCM is working.';
+
+    // Topic broadcast — reaches every device subscribed to `all_users`.
     await notifyAllUsersNewPost({
       postId: 'test',
-      title: req.body?.title || 'Test notification',
-      description: req.body?.description || 'If you see this, FCM is working.',
+      title,
+      description: body,
       authorName: 'Zynvo',
     });
 
-    res.status(200).json({ msg: 'test notification sent to all_users topic' });
+    // Direct-to-device send for the caller, so a single-phone test works even
+    // without a topic subscription. Uses the `new_posts` channel the client
+    // definitely creates.
+    const devices = await prisma.deviceToken.findMany({
+      where: { userId: req.id },
+      select: { token: true },
+    });
+    const tokens = devices.map((d) => d.token);
+
+    let direct = null;
+    if (tokens.length > 0) {
+      direct = await sendToDeviceTokens(
+        tokens,
+        { title, body },
+        { type: 'test', route: '/notifications' },
+        { channelId: 'new_posts' }
+      );
+    }
+
+    res.status(200).json({
+      msg: 'test notification sent',
+      topicSent: true,
+      deviceTokensRegistered: tokens.length,
+      directDelivered: direct?.successCount ?? 0,
+      directFailed: direct?.failureCount ?? 0,
+    });
   } catch (error: any) {
     if (error instanceof FcmNotConfiguredError) {
       logger.error(`[${requestId}] Test push rejected — FCM not configured`, {
