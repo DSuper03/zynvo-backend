@@ -2,12 +2,23 @@ import { Request, Response } from 'express';
 import { prisma } from '../db/db';
 import { logger } from '../utils/logger';
 import { generateRequestId, sendErrorResponse } from '../utils/helper';
+import { z } from 'zod';
 import {
   isFcmConfigured,
   subscribeToAllUsers,
   unsubscribeFromAllUsers,
   notifyAllUsersNewPost,
+  sendToDeviceTokens,
+  FcmNotConfiguredError,
 } from '../utils/fcm';
+import { broadcast } from '../services/notification.service';
+
+const broadcastSchema = z.object({
+  title: z.string().trim().min(1, 'title is required').max(100, 'title must be at most 100 characters'),
+  body: z.string().trim().min(1, 'body is required').max(500, 'body must be at most 500 characters'),
+  imageUrl: z.string().nullable().optional(),
+  data: z.record(z.string(), z.unknown()).nullable().optional(),
+});
 
 export const registerDeviceToken = async (req: Request, res: Response): Promise<void> => {
   const requestId = generateRequestId();
@@ -45,7 +56,7 @@ export const registerDeviceToken = async (req: Request, res: Response): Promise<
     try {
       await subscribeToAllUsers(token);
     } catch (error: any) {
-      logger.warn(`[${requestId}] Failed to subscribe token to all_users topic`, {
+      logger.error(`[${requestId}] Failed to subscribe token to all_users topic`, {
         error: error.message,
         userId,
       });
@@ -121,16 +132,255 @@ export const testPushNotification = async (req: Request, res: Response): Promise
   }
 
   try {
+    const title = req.body?.title || 'Test notification';
+    const body = req.body?.description || 'If you see this, FCM is working.';
+
+    // Topic broadcast — reaches every device subscribed to `all_users`.
     await notifyAllUsersNewPost({
       postId: 'test',
-      title: req.body?.title || 'Test notification',
-      description: req.body?.description || 'If you see this, FCM is working.',
+      title,
+      description: body,
       authorName: 'Zynvo',
     });
 
-    res.status(200).json({ msg: 'test notification sent to all_users topic' });
+    // Direct-to-device send for the caller, so a single-phone test works even
+    // without a topic subscription. Uses the `new_posts` channel the client
+    // definitely creates.
+    const devices = await prisma.deviceToken.findMany({
+      where: { userId: req.id },
+      select: { token: true },
+    });
+    const tokens = devices.map((d) => d.token);
+
+    let direct = null;
+    if (tokens.length > 0) {
+      direct = await sendToDeviceTokens(
+        tokens,
+        { title, body },
+        { type: 'test', route: '/notifications' },
+        { channelId: 'new_posts' }
+      );
+    }
+
+    res.status(200).json({
+      msg: 'test notification sent',
+      topicSent: true,
+      deviceTokensRegistered: tokens.length,
+      directDelivered: direct?.successCount ?? 0,
+      directFailed: direct?.failureCount ?? 0,
+    });
   } catch (error: any) {
+    if (error instanceof FcmNotConfiguredError) {
+      logger.error(`[${requestId}] Test push rejected — FCM not configured`, {
+        error: error.message,
+      });
+      sendErrorResponse(res, requestId, error.message, error.status);
+      return;
+    }
     logger.error(`[${requestId}] Error sending test push`, { error: error.message });
     sendErrorResponse(res, requestId, 'error sending test notification', 500, error);
+  }
+};
+
+export const testAllUsersPushNotification = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const requestId = generateRequestId();
+
+  if (!isFcmConfigured()) {
+    sendErrorResponse(
+      res,
+      requestId,
+      'FCM not configured. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY',
+      503
+    );
+    return;
+  }
+
+  try {
+    const title = req.body?.title || 'Test notification to all users';
+    const body = req.body?.description || 'If you see this, FCM is working for everyone.';
+
+    // Topic broadcast — reaches every device subscribed to `all_users`.
+    await notifyAllUsersNewPost({
+      postId: 'test-all',
+      title,
+      description: body,
+      authorName: 'Zynvo',
+    });
+
+    // Direct-to-device send to EVERY registered token, so an all-user test
+    // works regardless of topic subscription. `new_posts` channel is one the
+    // client definitely creates.
+    const devices = await prisma.deviceToken.findMany({ select: { token: true } });
+    const tokens = [...new Set(devices.map((d) => d.token))];
+
+    const direct = await sendToDeviceTokens(
+      tokens,
+      { title, body },
+      { type: 'test', route: '/notifications' },
+      { channelId: 'new_posts' }
+    );
+
+    res.status(200).json({
+      msg: 'test notification sent to all users',
+      topicSent: true,
+      deviceTokensRegistered: tokens.length,
+      directDelivered: direct.successCount,
+      directFailed: direct.failureCount,
+    });
+  } catch (error: any) {
+    if (error instanceof FcmNotConfiguredError) {
+      logger.error(`[${requestId}] Test-all push rejected — FCM not configured`, {
+        error: error.message,
+      });
+      sendErrorResponse(res, requestId, error.message, error.status);
+      return;
+    }
+    logger.error(`[${requestId}] Error sending test-all push`, {
+      error: error.message,
+    });
+    sendErrorResponse(
+      res,
+      requestId,
+      'error sending test notification to all users',
+      500,
+      error
+    );
+  }
+};
+
+export const getNotifications = async (req: Request, res: Response): Promise<void> => {
+  const requestId = generateRequestId();
+  const userId = req.id;
+
+  const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
+  const skip = (page - 1) * limit;
+
+  logger.info(`[${requestId}] GET /notifications - fetching inbox`, {
+    userId,
+    page,
+    limit,
+  });
+
+  try {
+    const [notifications, total, unreadCount] = await Promise.all([
+      prisma.notification.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.notification.count({ where: { userId } }),
+      prisma.notification.count({ where: { userId, read: false } }),
+    ]);
+
+    res.status(200).json({
+      msg: 'notifications fetched',
+      notifications,
+      unreadCount,
+      total,
+      totalPages: Math.ceil(total / limit),
+      page,
+      limit,
+    });
+  } catch (error: any) {
+    logger.error(`[${requestId}] Error fetching notifications`, {
+      error: error.message,
+      userId,
+    });
+    sendErrorResponse(res, requestId, 'error fetching notifications', 500, error);
+  }
+};
+
+export const markNotificationRead = async (req: Request, res: Response): Promise<void> => {
+  const requestId = generateRequestId();
+  const userId = req.id;
+  const { id } = req.body as { id?: string };
+
+  if (!id || typeof id !== 'string') {
+    sendErrorResponse(res, requestId, 'notification id is required', 400);
+    return;
+  }
+
+  try {
+    const result = await prisma.notification.updateMany({
+      where: { id, userId },
+      data: { read: true },
+    });
+
+    if (result.count === 0) {
+      sendErrorResponse(res, requestId, 'notification not found', 404);
+      return;
+    }
+
+    res.status(200).json({ msg: 'notification marked as read' });
+  } catch (error: any) {
+    logger.error(`[${requestId}] Error marking notification as read`, {
+      error: error.message,
+      userId,
+    });
+    sendErrorResponse(res, requestId, 'error marking notification as read', 500, error);
+  }
+};
+
+export const markAllNotificationsRead = async (req: Request, res: Response): Promise<void> => {
+  const requestId = generateRequestId();
+  const userId = req.id;
+
+  try {
+    const result = await prisma.notification.updateMany({
+      where: { userId, read: false },
+      data: { read: true },
+    });
+
+    res.status(200).json({
+      msg: 'all notifications marked as read',
+      updated: result.count,
+    });
+  } catch (error: any) {
+    logger.error(`[${requestId}] Error marking all notifications as read`, {
+      error: error.message,
+      userId,
+    });
+    sendErrorResponse(res, requestId, 'error marking notifications as read', 500, error);
+  }
+};
+
+export const broadcastNotification = async (req: Request, res: Response): Promise<void> => {
+  const requestId = generateRequestId();
+
+  const parsed = broadcastSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logger.warn(`[${requestId}] Invalid broadcast payload`, {
+      userId: req.id,
+      errors: parsed.error.errors,
+    });
+    sendErrorResponse(res, requestId, 'invalid broadcast payload', 400, parsed.error);
+    return;
+  }
+
+  logger.info(`[${requestId}] Broadcast requested`, {
+    userId: req.id,
+    title: parsed.data.title,
+  });
+
+  try {
+    const result = await broadcast({
+      title: parsed.data.title,
+      body: parsed.data.body,
+      imageUrl: parsed.data.imageUrl ?? null,
+      data: parsed.data.data ?? null,
+    });
+
+    res.status(200).json(result);
+  } catch (error: any) {
+    logger.error(`[${requestId}] Broadcast failed`, {
+      error: error.message,
+      stack: error.stack,
+    });
+    sendErrorResponse(res, requestId, 'error sending broadcast notification', 500, error);
   }
 };

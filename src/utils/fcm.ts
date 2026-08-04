@@ -25,6 +25,22 @@ export const isFcmConfigured = (): boolean => {
   );
 };
 
+/**
+ * Thrown by every FCM operation when the deployment is missing the Firebase
+ * service-account env vars. Surfaces the misconfiguration to callers instead
+ * of silently skipping pushes.
+ */
+export class FcmNotConfiguredError extends Error {
+  readonly status = 503;
+
+  constructor() {
+    super(
+      'FCM is not configured on this server. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.'
+    );
+    this.name = 'FcmNotConfiguredError';
+  }
+}
+
 export const initFcm = (): boolean => {
   if (initialized) return true;
 
@@ -52,13 +68,24 @@ export const initFcm = (): boolean => {
   }
 };
 
+/**
+ * Throw `FcmNotConfiguredError` unless Firebase Admin is initialized. Every
+ * push/topic operation calls this first so a missing credential fails loudly
+ * instead of being logged as a skip.
+ */
+export const requireFcm = (): void => {
+  if (!initFcm()) {
+    throw new FcmNotConfiguredError();
+  }
+};
+
 export const subscribeToAllUsers = async (token: string): Promise<void> => {
-  if (!initFcm()) return;
+  requireFcm();
   await getMessaging().subscribeToTopic(token, ALL_USERS_TOPIC);
 };
 
 export const unsubscribeFromAllUsers = async (token: string): Promise<void> => {
-  if (!initFcm()) return;
+  requireFcm();
   await getMessaging().unsubscribeFromTopic(token, ALL_USERS_TOPIC);
 };
 
@@ -70,12 +97,11 @@ type NewPostNotificationInput = {
   image?: string | null;
 };
 
-export const notifyAllUsersNewPost = async (input: NewPostNotificationInput): Promise<void> => {
-  if (!initFcm()) {
-    logger.warn('Skipping new-post push — FCM not configured');
-    return;
-  }
-
+// Single source of truth for the new-post notification copy, shared by the
+// FCM push and the in-app notification that gets persisted to the DB.
+export const buildNewPostNotification = (
+  input: NewPostNotificationInput
+): { title: string; body: string } => {
   const bodyPreview =
     input.description.length > 100
       ? `${input.description.slice(0, 97)}...`
@@ -83,17 +109,28 @@ export const notifyAllUsersNewPost = async (input: NewPostNotificationInput): Pr
 
   const authorLabel = input.authorName?.trim() || 'Someone';
 
+  return {
+    title: `${authorLabel} posted something new`,
+    body: input.title || bodyPreview,
+  };
+};
+
+export const notifyAllUsersNewPost = async (input: NewPostNotificationInput): Promise<void> => {
+  requireFcm();
+
+  const { title, body } = buildNewPostNotification(input);
+
   const message: Message = {
     topic: ALL_USERS_TOPIC,
     notification: {
-      title: `${authorLabel} posted something new`,
-      body: input.title || bodyPreview,
+      title,
+      body,
     },
     data: {
       type: 'new_post',
       postId: input.postId,
       title: input.title,
-      description: bodyPreview,
+      description: body,
       ...(input.image ? { image: input.image } : {}),
     },
     android: {
@@ -146,7 +183,8 @@ const isInvalidTokenError = (error?: { code?: string }): boolean =>
 export const sendToDeviceTokens = async (
   tokens: string[],
   notification: { title: string; body: string },
-  data?: Record<string, string>
+  data?: Record<string, string>,
+  options?: { channelId?: string }
 ): Promise<DeviceTokenPushResult> => {
   const empty: DeviceTokenPushResult = {
     successCount: 0,
@@ -156,10 +194,7 @@ export const sendToDeviceTokens = async (
 
   if (tokens.length === 0) return empty;
 
-  if (!initFcm()) {
-    logger.warn('Skipping device-token push — FCM not configured');
-    return { ...empty, failureCount: tokens.length };
-  }
+  requireFcm();
 
   const result: DeviceTokenPushResult = { ...empty };
   const CHUNK_SIZE = 500;
@@ -170,7 +205,7 @@ export const sendToDeviceTokens = async (
     android: {
       priority: 'high',
       notification: {
-        channelId: 'waves',
+        channelId: options?.channelId ?? 'waves',
         sound: 'default',
       },
     },
@@ -186,6 +221,7 @@ export const sendToDeviceTokens = async (
 
   for (let i = 0; i < tokens.length; i += CHUNK_SIZE) {
     const chunk = tokens.slice(i, i + CHUNK_SIZE);
+    const batchNumber = i / CHUNK_SIZE + 1;
 
     try {
       const response = await getMessaging().sendEachForMulticast({
@@ -196,10 +232,26 @@ export const sendToDeviceTokens = async (
       result.successCount += response.successCount;
       result.failureCount += response.failureCount;
 
+      logger.info('FCM multicast batch sent', {
+        batch: batchNumber,
+        batchSize: chunk.length,
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+      });
+
       response.responses.forEach((r, index) => {
         const token = chunk[index];
-        if (!r.success && token && isInvalidTokenError(r.error)) {
-          result.invalidTokens.push(token);
+        if (!r.success) {
+          if (token) {
+            logger.warn('FCM token failed in batch', {
+              code: r.error?.code ?? 'unknown',
+              message: r.error?.message ?? 'unknown error',
+              token: `${token.slice(0, 12)}...${token.slice(-6)}`,
+            });
+          }
+          if (token && isInvalidTokenError(r.error)) {
+            result.invalidTokens.push(token);
+          }
         }
       });
     } catch (error: any) {
