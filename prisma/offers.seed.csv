@@ -1,0 +1,4 @@
+title,description,offerType,couponCode,discountValue,eligibility,redemptionLink,termsAndConditions,endDate,brandId
+50% Off Pro Plan,Get 50% off SkillForge Pro for 6 months,DISCOUNT,SKILL50,50%,ALL_STUDENTS,https://skillforge.ai/student-offer,Valid for new users only. One per student.,2026-12-31T23:59:59Z,BRAND_ID_1
+Free Campus Delivery,Free delivery on your first 5 orders,FREE_TRIAL,,Free delivery,ALL_STUDENTS,https://campusbite.in/student,Available in select cities.,2026-09-30T23:59:59Z,BRAND_ID_2
+CodeNest Pro Free Trial,3-month free access to CodeNest Pro IDE,CREDITS,CODENEST3M,3 months free,ALL_STUDENTS,https://codenest.dev/students,Must use college email to verify.,2026-12-31T23:59:59Z,BRAND_ID_3
