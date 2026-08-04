@@ -241,8 +241,17 @@ export const sendToDeviceTokens = async (
 
       response.responses.forEach((r, index) => {
         const token = chunk[index];
-        if (!r.success && token && isInvalidTokenError(r.error)) {
-          result.invalidTokens.push(token);
+        if (!r.success) {
+          if (token) {
+            logger.warn('FCM token failed in batch', {
+              code: r.error?.code ?? 'unknown',
+              message: r.error?.message ?? 'unknown error',
+              token: `${token.slice(0, 12)}...${token.slice(-6)}`,
+            });
+          }
+          if (token && isInvalidTokenError(r.error)) {
+            result.invalidTokens.push(token);
+          }
         }
       });
     } catch (error: any) {
