@@ -46,7 +46,6 @@ model User {
   wavesSent     Wave[] @relation("WaveSender")
   wavesReceived Wave[] @relation("WaveReceiver")
 
-  offerClaims    OfferClaim[]  @relation("OfferClaims")
   offerSaves     OfferSave[]   @relation("OfferSaves")
 
   @@index([name])
@@ -440,7 +439,6 @@ model Offer {
   title              String
   description        String
   offerType          OfferType        @default(COUPON)
-  couponCode         String?
   discountValue      String?
   eligibility        OfferEligibility @default(ALL_STUDENTS)
   eligibleColleges   String[]         @default([])
@@ -453,8 +451,6 @@ model Offer {
 
   viewCount          Int              @default(0)
   clickCount         Int              @default(0)
-  claimCount         Int              @default(0)
-  redeemCount        Int              @default(0)
 
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
@@ -462,7 +458,6 @@ model Offer {
   brandId            String
   brand              Brand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
-  claims             OfferClaim[]
   saves              OfferSave[]
 
   @@index([brandId])
@@ -470,20 +465,6 @@ model Offer {
   @@index([isActive])
   @@index([endDate])
   @@index([createdAt])
-}
-
-model OfferClaim {
-  id          String    @id @default(uuid())
-  offerId     String
-  userId      String
-  claimedAt   DateTime  @default(now())
-  redeemed    Boolean   @default(false)
-  redeemedAt  DateTime?
-
-  offer       Offer     @relation(fields: [offerId], references: [id], onDelete: Cascade)
-  user        User      @relation("OfferClaims", fields: [userId], references: [id])
-
-  @@unique([offerId, userId])
 }
 
 model OfferSave {

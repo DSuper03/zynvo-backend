@@ -4849,6 +4849,387 @@
         }
       }
     },
+    "/api/v1/offers/all": {
+      "get": {
+        "summary": "Get all active offers",
+        "description": "Retrieve a paginated and filterable list of active student offers.",
+        "tags": ["Student Offers"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 10
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offerType",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["COUPON", "CREDITS", "FREE_TRIAL", "DISCOUNT", "INTERNSHIP", "CERTIFICATION"]
+            }
+          },
+          {
+            "name": "eligibility",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["ALL_STUDENTS", "SPECIFIC_COLLEGES", "SPECIFIC_BRANCHES"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Offers retrieved successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/offers/search": {
+      "get": {
+        "summary": "Search student offers",
+        "description": "Search active offers by title, description, or brand name.",
+        "tags": ["Student Offers"],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results retrieved"
+          }
+        }
+      }
+    },
+    "/api/v1/offers/brand/{brandId}": {
+      "get": {
+        "summary": "Get offers by brand ID",
+        "description": "Retrieve all active offers belonging to a specific brand.",
+        "tags": ["Student Offers"],
+        "parameters": [
+          {
+            "name": "brandId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Brand offers retrieved"
+          }
+        }
+      }
+    },
+    "/api/v1/offers/saved/me": {
+      "get": {
+        "summary": "Get saved offers",
+        "description": "Retrieve all favorited offers for the authenticated user.",
+        "tags": ["Student Offers"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Saved offers retrieved"
+          }
+        }
+      }
+    },
+    "/api/v1/offers/{offerId}/save": {
+      "post": {
+        "summary": "Toggle save offer",
+        "description": "Save or unsave (favorite/unfavorite) a specific offer.",
+        "tags": ["Student Offers"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "offerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Save status toggled successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/offers/{offerId}/view": {
+      "post": {
+        "summary": "Track offer view",
+        "description": "Increment view counter for analytics.",
+        "tags": ["Student Offers"],
+        "parameters": [
+          {
+            "name": "offerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "View tracked"
+          }
+        }
+      }
+    },
+    "/api/v1/offers/{offerId}/click": {
+      "post": {
+        "summary": "Track offer click / redirect",
+        "description": "Increment click counter for analytics.",
+        "tags": ["Student Offers"],
+        "parameters": [
+          {
+            "name": "offerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Click tracked"
+          }
+        }
+      }
+    },
+    "/api/v1/offers/{offerId}": {
+      "get": {
+        "summary": "Get offer details by ID",
+        "description": "Retrieve single offer details by ID (coupon code is omitted/hidden).",
+        "tags": ["Student Offers"],
+        "parameters": [
+          {
+            "name": "offerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Offer details retrieved successfully"
+          }
+        }
+      }
+    },
+    "/api/v1/offers/admin/brand": {
+      "post": {
+        "summary": "Create brand profile",
+        "description": "Create a new brand profile (Site admin only).",
+        "tags": ["Student Offers (Admin)"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "description"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "SkillForge"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "AI-powered skill assessment platform."
+                  },
+                  "logo": {
+                    "type": "string",
+                    "example": "https://example.com/logo.png"
+                  },
+                  "website": {
+                    "type": "string",
+                    "example": "https://example.com"
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "AI"
+                  },
+                  "isVerified": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Brand created successfully"
+          },
+          "403": {
+            "description": "Forbidden - Administrator privileges required"
+          }
+        }
+      }
+    },
+    "/api/v1/offers/admin/offer": {
+      "post": {
+        "summary": "Create offer",
+        "description": "Create a single student offer under an existing brand (Site admin only).",
+        "tags": ["Student Offers (Admin)"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "description", "brandId"],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "50% Off Pro Plan"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Get 50% off for 6 months."
+                  },
+                  "offerType": {
+                    "type": "string",
+                    "enum": ["COUPON", "CREDITS", "FREE_TRIAL", "DISCOUNT", "INTERNSHIP", "CERTIFICATION"]
+                  },
+                  "discountValue": {
+                    "type": "string",
+                    "example": "50% OFF"
+                  },
+                  "eligibility": {
+                    "type": "string",
+                    "enum": ["ALL_STUDENTS", "SPECIFIC_COLLEGES", "SPECIFIC_BRANCHES"]
+                  },
+                  "redemptionLink": {
+                    "type": "string",
+                    "example": "https://example.com/redeem"
+                  },
+                  "brandId": {
+                    "type": "string",
+                    "example": "brand-uuid-here"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Offer created successfully"
+          },
+          "403": {
+            "description": "Forbidden - Administrator privileges required"
+          }
+        }
+      }
+    },
+    "/api/v1/offers/admin/bulk": {
+      "post": {
+        "summary": "Bulk upload offers and brands",
+        "description": "Create/upsert multiple brands and offers simultaneously (Site admin only). Useful for Google Forms CSV imports.",
+        "tags": ["Student Offers (Admin)"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["items"],
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["brand", "offer"],
+                      "properties": {
+                        "brand": {
+                          "type": "object",
+                          "required": ["name"],
+                          "properties": {
+                            "name": {"type": "string", "example": "CampusBite"},
+                            "description": {"type": "string"},
+                            "website": {"type": "string"}
+                          }
+                        },
+                        "offer": {
+                          "type": "object",
+                          "required": ["title"],
+                          "properties": {
+                            "title": {"type": "string", "example": "Free Delivery"},
+                            "description": {"type": "string"},
+                            "redemptionLink": {"type": "string"}
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Bulk import completed successfully"
+          },
+          "403": {
+            "description": "Forbidden - Administrator privileges required"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health check",

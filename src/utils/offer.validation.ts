@@ -25,7 +25,6 @@ export const createOfferSchema = z.object({
   title: z.string().min(1, 'Offer title is required'),
   description: z.string().min(1, 'Description is required'),
   offerType: z.enum(['COUPON', 'CREDITS', 'FREE_TRIAL', 'DISCOUNT', 'INTERNSHIP', 'CERTIFICATION']).default('COUPON'),
-  couponCode: z.string().optional().nullable(),
   discountValue: z.string().optional().nullable(),
   eligibility: z.enum(['ALL_STUDENTS', 'SPECIFIC_COLLEGES', 'SPECIFIC_BRANCHES']).default('ALL_STUDENTS'),
   eligibleColleges: z.array(z.string()).default([]),

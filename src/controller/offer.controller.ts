@@ -249,117 +249,6 @@ export const getBrandOffers = async (req: Request, res: Response) => {
   }
 };
 
-// ── AUTH: Claim an offer ────────────────────────────────────
-
-export const claimOffer = async (req: Request, res: Response) => {
-  try {
-    const offerId = req.params.offerId as string;
-    const userId = req.id as string;
-
-    const offer = await prisma.offer.findUnique({
-      where: { id: offerId },
-      select: {
-        id: true,
-        isActive: true,
-        endDate: true,
-        couponCode: true,
-        redemptionLink: true,
-        title: true,
-      },
-    });
-
-    if (!offer) {
-      res.status(404).json({ msg: 'Offer not found' });
-      return;
-    }
-
-    if (!offer.isActive) {
-      res.status(400).json({ msg: 'This offer is no longer active' });
-      return;
-    }
-
-    if (offer.endDate && new Date() > offer.endDate) {
-      res.status(400).json({ msg: 'This offer has expired' });
-      return;
-    }
-
-    // Check if already claimed
-    const existingClaim = await prisma.offerClaim.findUnique({
-      where: { offerId_userId: { offerId, userId } },
-    });
-
-    if (existingClaim) {
-      res.status(200).json({
-        msg: 'Already claimed',
-        claim: existingClaim,
-        couponCode: offer.couponCode,
-        redemptionLink: offer.redemptionLink,
-      });
-      return;
-    }
-
-    // Create claim and increment counter atomically
-    const [claim] = await prisma.$transaction([
-      prisma.offerClaim.create({
-        data: { offerId, userId },
-      }),
-      prisma.offer.update({
-        where: { id: offerId },
-        data: { claimCount: { increment: 1 } },
-      }),
-    ]);
-
-    res.status(201).json({
-      msg: 'Offer claimed successfully',
-      claim,
-      couponCode: offer.couponCode,
-      redemptionLink: offer.redemptionLink,
-    });
-  } catch (error) {
-    console.error('claimOffer error:', error);
-    res.status(500).json({ msg: 'Internal server error' });
-  }
-};
-
-// ── AUTH: Mark offer as redeemed ─────────────────────────────
-
-export const redeemOffer = async (req: Request, res: Response) => {
-  try {
-    const offerId = req.params.offerId as string;
-    const userId = req.id as string;
-
-    const claim = await prisma.offerClaim.findUnique({
-      where: { offerId_userId: { offerId, userId } },
-    });
-
-    if (!claim) {
-      res.status(400).json({ msg: 'You must claim this offer before redeeming' });
-      return;
-    }
-
-    if (claim.redeemed) {
-      res.status(400).json({ msg: 'Already redeemed' });
-      return;
-    }
-
-    const [updatedClaim] = await prisma.$transaction([
-      prisma.offerClaim.update({
-        where: { id: claim.id },
-        data: { redeemed: true, redeemedAt: new Date() },
-      }),
-      prisma.offer.update({
-        where: { id: offerId },
-        data: { redeemCount: { increment: 1 } },
-      }),
-    ]);
-
-    res.status(200).json({ msg: 'Offer redeemed successfully', claim: updatedClaim });
-  } catch (error) {
-    console.error('redeemOffer error:', error);
-    res.status(500).json({ msg: 'Internal server error' });
-  }
-};
-
 // ── AUTH: Save/unsave an offer (toggle) ─────────────────────
 
 export const saveOffer = async (req: Request, res: Response) => {
@@ -531,8 +420,6 @@ export const getOfferAnalytics = async (req: Request, res: Response) => {
         isActive: true,
         viewCount: true,
         clickCount: true,
-        claimCount: true,
-        redeemCount: true,
         createdAt: true,
         endDate: true,
         brand: {
@@ -557,8 +444,6 @@ export const getOfferAnalytics = async (req: Request, res: Response) => {
       isActive: offer.isActive,
       views: offer.viewCount,
       clicks: offer.clickCount,
-      claims: offer.claimCount,
-      redemptions: offer.redeemCount,
       saves: offer._count.saves,
       endDate: offer.endDate,
       createdAt: offer.createdAt,
@@ -567,6 +452,120 @@ export const getOfferAnalytics = async (req: Request, res: Response) => {
     res.status(200).json({ analytics });
   } catch (error) {
     console.error('getOfferAnalytics error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
+  }
+};
+
+// ── ADMIN: Create brand profile ─────────────────────────────
+
+export const adminCreateBrand = async (req: Request, res: Response) => {
+  try {
+    const parsed = require('../utils/offer.validation').createBrandSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ msg: 'Invalid brand data', errors: parsed.error.flatten() });
+      return;
+    }
+
+    const existing = await prisma.brand.findUnique({ where: { name: parsed.data.name } });
+    if (existing) {
+      res.status(409).json({ msg: 'Brand name already exists' });
+      return;
+    }
+
+    const brand = await prisma.brand.create({ data: parsed.data });
+    res.status(201).json({ msg: 'Brand created successfully', brand });
+  } catch (error) {
+    console.error('adminCreateBrand error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
+  }
+};
+
+// ── ADMIN: Create a single offer ────────────────────────────
+
+export const adminCreateOffer = async (req: Request, res: Response) => {
+  try {
+    const parsed = require('../utils/offer.validation').createOfferSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ msg: 'Invalid offer data', errors: parsed.error.flatten() });
+      return;
+    }
+
+    const brand = await prisma.brand.findUnique({ where: { id: parsed.data.brandId } });
+    if (!brand) {
+      res.status(404).json({ msg: 'Brand ID not found' });
+      return;
+    }
+
+    const offer = await prisma.offer.create({ data: parsed.data });
+    res.status(201).json({ msg: 'Offer created successfully', offer });
+  } catch (error) {
+    console.error('adminCreateOffer error:', error);
+    res.status(500).json({ msg: 'Internal server error' });
+  }
+};
+
+// ── ADMIN: Bulk upload/seed offers & brands ─────────────────
+
+export const adminBulkUploadOffers = async (req: Request, res: Response) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      res.status(400).json({ msg: 'Items array is required' });
+      return;
+    }
+
+    const results = [];
+
+    for (const item of items) {
+      const { brand, offer } = item;
+
+      if (!brand || !brand.name || !offer || !offer.title) {
+        continue;
+      }
+
+      // Upsert brand
+      const dbBrand = await prisma.brand.upsert({
+        where: { name: brand.name },
+        update: {
+          description: brand.description || 'No description provided.',
+          website: brand.website,
+          logo: brand.logo,
+          category: brand.category || 'General',
+          isVerified: brand.isVerified ?? false,
+        },
+        create: {
+          name: brand.name,
+          description: brand.description || 'No description provided.',
+          website: brand.website,
+          logo: brand.logo,
+          category: brand.category || 'General',
+          isVerified: brand.isVerified ?? false,
+        },
+      });
+
+      // Create offer
+      const dbOffer = await prisma.offer.create({
+        data: {
+          title: offer.title,
+          description: offer.description || 'No description provided.',
+          offerType: offer.offerType || 'COUPON',
+          discountValue: offer.discountValue,
+          eligibility: offer.eligibility || 'ALL_STUDENTS',
+          eligibleColleges: offer.eligibleColleges || [],
+          eligibleBranches: offer.eligibleBranches || [],
+          redemptionLink: offer.redemptionLink,
+          termsAndConditions: offer.termsAndConditions,
+          endDate: offer.endDate ? new Date(offer.endDate) : null,
+          brandId: dbBrand.id,
+        },
+      });
+
+      results.push({ brandId: dbBrand.id, offerId: dbOffer.id, title: dbOffer.title });
+    }
+
+    res.status(201).json({ msg: `Bulk uploaded ${results.length} offers successfully`, results });
+  } catch (error) {
+    console.error('adminBulkUploadOffers error:', error);
     res.status(500).json({ msg: 'Internal server error' });
   }
 };
