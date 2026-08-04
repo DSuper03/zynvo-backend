@@ -8,6 +8,7 @@ import {
   subscribeToAllUsers,
   unsubscribeFromAllUsers,
   notifyAllUsersNewPost,
+  FcmNotConfiguredError,
 } from '../utils/fcm';
 import { broadcast } from '../services/notification.service';
 
@@ -54,7 +55,7 @@ export const registerDeviceToken = async (req: Request, res: Response): Promise<
     try {
       await subscribeToAllUsers(token);
     } catch (error: any) {
-      logger.warn(`[${requestId}] Failed to subscribe token to all_users topic`, {
+      logger.error(`[${requestId}] Failed to subscribe token to all_users topic`, {
         error: error.message,
         userId,
       });
@@ -139,6 +140,13 @@ export const testPushNotification = async (req: Request, res: Response): Promise
 
     res.status(200).json({ msg: 'test notification sent to all_users topic' });
   } catch (error: any) {
+    if (error instanceof FcmNotConfiguredError) {
+      logger.error(`[${requestId}] Test push rejected — FCM not configured`, {
+        error: error.message,
+      });
+      sendErrorResponse(res, requestId, error.message, error.status);
+      return;
+    }
     logger.error(`[${requestId}] Error sending test push`, { error: error.message });
     sendErrorResponse(res, requestId, 'error sending test notification', 500, error);
   }

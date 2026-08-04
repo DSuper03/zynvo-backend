@@ -25,6 +25,22 @@ export const isFcmConfigured = (): boolean => {
   );
 };
 
+/**
+ * Thrown by every FCM operation when the deployment is missing the Firebase
+ * service-account env vars. Surfaces the misconfiguration to callers instead
+ * of silently skipping pushes.
+ */
+export class FcmNotConfiguredError extends Error {
+  readonly status = 503;
+
+  constructor() {
+    super(
+      'FCM is not configured on this server. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.'
+    );
+    this.name = 'FcmNotConfiguredError';
+  }
+}
+
 export const initFcm = (): boolean => {
   if (initialized) return true;
 
@@ -52,13 +68,24 @@ export const initFcm = (): boolean => {
   }
 };
 
+/**
+ * Throw `FcmNotConfiguredError` unless Firebase Admin is initialized. Every
+ * push/topic operation calls this first so a missing credential fails loudly
+ * instead of being logged as a skip.
+ */
+export const requireFcm = (): void => {
+  if (!initFcm()) {
+    throw new FcmNotConfiguredError();
+  }
+};
+
 export const subscribeToAllUsers = async (token: string): Promise<void> => {
-  if (!initFcm()) return;
+  requireFcm();
   await getMessaging().subscribeToTopic(token, ALL_USERS_TOPIC);
 };
 
 export const unsubscribeFromAllUsers = async (token: string): Promise<void> => {
-  if (!initFcm()) return;
+  requireFcm();
   await getMessaging().unsubscribeFromTopic(token, ALL_USERS_TOPIC);
 };
 
@@ -89,10 +116,7 @@ export const buildNewPostNotification = (
 };
 
 export const notifyAllUsersNewPost = async (input: NewPostNotificationInput): Promise<void> => {
-  if (!initFcm()) {
-    logger.warn('Skipping new-post push — FCM not configured');
-    return;
-  }
+  requireFcm();
 
   const { title, body } = buildNewPostNotification(input);
 
@@ -170,10 +194,7 @@ export const sendToDeviceTokens = async (
 
   if (tokens.length === 0) return empty;
 
-  if (!initFcm()) {
-    logger.warn('Skipping device-token push — FCM not configured');
-    return { ...empty, failureCount: tokens.length };
-  }
+  requireFcm();
 
   const result: DeviceTokenPushResult = { ...empty };
   const CHUNK_SIZE = 500;

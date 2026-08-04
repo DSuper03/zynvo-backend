@@ -49,7 +49,7 @@ import { createHonoExpressMiddleware } from './hono/expressAdapter';
 import { honoApp } from './hono/app';
 import { createApolloServer, createGraphQLMiddleware } from './graphql/apollo-server';
 import { getRequestListener } from '@hono/node-server';
-import { initFcm } from './utils/fcm';
+import { initFcm, isFcmConfigured } from './utils/fcm';
 
 const app = express()
 const PORT = Number(process.env.PORT || 8000);
@@ -174,7 +174,21 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 });
 
 console.log('✅ Middleware and routes configured successfully');
-initFcm();
+
+// Fail loudly at startup if push credentials are missing — the register/test
+// endpoints will also surface this, but an early red flag in the logs is the
+// cheapest way to catch a misconfigured deployment.
+if (!isFcmConfigured()) {
+  console.error(
+    '❌❌ FCM IS NOT CONFIGURED — push notifications will NOT be delivered. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY (or add them to the deployment env).'
+  );
+} else if (!initFcm()) {
+  console.error(
+    '❌ FCM initialization FAILED — check that FIREBASE_PRIVATE_KEY is the full service-account key.'
+  );
+} else {
+  console.log('✅ FCM initialized — push notifications are ready.');
+}
 
 } catch (error) {
   console.error('❌ Failed to configure middleware/routes:', error);

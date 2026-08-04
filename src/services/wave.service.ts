@@ -1,6 +1,6 @@
 import { prisma } from '../db/db';
 import { logger } from '../utils/logger';
-import { sendToDeviceTokens } from '../utils/fcm';
+import { sendToDeviceTokens, FcmNotConfiguredError } from '../utils/fcm';
 import { createNotification } from './notification.service';
 
 // Minimum delay between two waves from the same sender to the same recipient.
@@ -128,19 +128,27 @@ export const sendWave = async (
     };
   }
 
-  const pushResult = await sendToDeviceTokens(
-    tokens,
-    {
-      title: '👋 Someone waved at you!',
-      body: `${senderName} waved at you.`,
-    },
-    {
-      type: 'wave',
-      senderId,
-      receiverId,
-      route: `/profile/${senderId}`,
+  let pushResult;
+  try {
+    pushResult = await sendToDeviceTokens(
+      tokens,
+      {
+        title: '👋 Someone waved at you!',
+        body: `${senderName} waved at you.`,
+      },
+      {
+        type: 'wave',
+        senderId,
+        receiverId,
+        route: `/profile/${senderId}`,
+      }
+    );
+  } catch (error) {
+    if (error instanceof FcmNotConfiguredError) {
+      throw new WaveError(503, error.message);
     }
-  );
+    throw error;
+  }
 
   // Prune tokens FCM flagged as unregistered so future waves don't retry them.
   if (pushResult.invalidTokens.length > 0) {
