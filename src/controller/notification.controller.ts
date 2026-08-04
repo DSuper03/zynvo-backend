@@ -182,6 +182,75 @@ export const testPushNotification = async (req: Request, res: Response): Promise
   }
 };
 
+export const testAllUsersPushNotification = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const requestId = generateRequestId();
+
+  if (!isFcmConfigured()) {
+    sendErrorResponse(
+      res,
+      requestId,
+      'FCM not configured. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY',
+      503
+    );
+    return;
+  }
+
+  try {
+    const title = req.body?.title || 'Test notification to all users';
+    const body = req.body?.description || 'If you see this, FCM is working for everyone.';
+
+    // Topic broadcast — reaches every device subscribed to `all_users`.
+    await notifyAllUsersNewPost({
+      postId: 'test-all',
+      title,
+      description: body,
+      authorName: 'Zynvo',
+    });
+
+    // Direct-to-device send to EVERY registered token, so an all-user test
+    // works regardless of topic subscription. `new_posts` channel is one the
+    // client definitely creates.
+    const devices = await prisma.deviceToken.findMany({ select: { token: true } });
+    const tokens = [...new Set(devices.map((d) => d.token))];
+
+    const direct = await sendToDeviceTokens(
+      tokens,
+      { title, body },
+      { type: 'test', route: '/notifications' },
+      { channelId: 'new_posts' }
+    );
+
+    res.status(200).json({
+      msg: 'test notification sent to all users',
+      topicSent: true,
+      deviceTokensRegistered: tokens.length,
+      directDelivered: direct.successCount,
+      directFailed: direct.failureCount,
+    });
+  } catch (error: any) {
+    if (error instanceof FcmNotConfiguredError) {
+      logger.error(`[${requestId}] Test-all push rejected — FCM not configured`, {
+        error: error.message,
+      });
+      sendErrorResponse(res, requestId, error.message, error.status);
+      return;
+    }
+    logger.error(`[${requestId}] Error sending test-all push`, {
+      error: error.message,
+    });
+    sendErrorResponse(
+      res,
+      requestId,
+      'error sending test notification to all users',
+      500,
+      error
+    );
+  }
+};
+
 export const getNotifications = async (req: Request, res: Response): Promise<void> => {
   const requestId = generateRequestId();
   const userId = req.id;
