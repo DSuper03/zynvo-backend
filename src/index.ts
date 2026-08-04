@@ -44,6 +44,7 @@ import { adminControlRouter } from './routes/adminRouter';
 import { teamRouter } from './routes/teamRouter';
 import { notificationRouter } from './routes/notificationRouter';
 import { waveRouter } from './routes/wave.routes';
+import { logger } from './utils/logger';
 // ort atomicdocs from 'atomicdocs';
 import { createHonoExpressMiddleware } from './hono/expressAdapter';
 import { honoApp } from './hono/app';
@@ -64,6 +65,18 @@ const swaggerSpecPath = path.join(__dirname, '..', 'openapispecfile.json');
 app.set('trust proxy', 1);
 
 app.use(express.json());
+
+// Log every request (method, path, status, duration) so traffic visibility
+// does not depend on per-handler logging.
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    logger.info(
+      `[req] ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`
+    );
+  });
+  next();
+});
 
 const FE_URL = process.env.FE_URL;
 
