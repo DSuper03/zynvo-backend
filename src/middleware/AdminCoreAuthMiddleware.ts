@@ -21,6 +21,22 @@ export const AdminCoreAuthMiddleware = async (
       return;
     }
 
+    // Site-level admins via env var (comma-separated emails)
+    const adminEmailsEnv = process.env.ADMIN_EMAILS || '';
+    const adminEmails = [
+      'zynvosocial@gmail.com',
+      'rishirajnatj@gmail.com',
+      ...adminEmailsEnv.split(',').map(e => e.trim()).filter(Boolean)
+    ];
+
+    const userEmail = user.email.toLowerCase();
+    const isSiteAdmin = adminEmails.map(e => e.toLowerCase()).includes(userEmail);
+
+    if (isSiteAdmin) {
+      next();
+      return;
+    }
+
     const eventId = (req.params.id || req.params.eventId) as string;
     if (!eventId) {
       res.status(400).json({ message: 'Event id required' });
@@ -43,21 +59,12 @@ export const AdminCoreAuthMiddleware = async (
       return;
     }
 
-    // Site-level admins via env var (comma-separated emails)
-    const adminEmailsEnv = process.env.ADMIN_EMAILS || '';
-    const adminEmails = [
-      'zynvosocial@gmail.com',
-      ...adminEmailsEnv.split(',').map(e => e.trim()).filter(Boolean)
-    ];
-
-    const userEmail = user.email.toLowerCase();
     const isFounder = club.founderEmail && club.founderEmail.toLowerCase() === userEmail;
     const isCore = [club.coremember1, club.coremember2, club.coremember3].some(
       (c) => c && c.toLowerCase() === userEmail
     );
-    const isSiteAdmin = adminEmails.map(e => e.toLowerCase()).includes(userEmail);
 
-    if (isFounder || isCore || isSiteAdmin) {
+    if (isFounder || isCore) {
       next();
       return;
     }

@@ -122,6 +122,11 @@ export const getOfferById = async (req: Request, res: Response) => {
       return;
     }
 
+    if (!offer.isActive || (offer.endDate && offer.endDate < new Date())) {
+      res.status(404).json({ msg: 'Offer not found' });
+      return;
+    }
+
     res.status(200).json({ offer });
   } catch (error) {
     console.error('getOfferById error:', error);
@@ -150,10 +155,20 @@ export const searchOffers = async (req: Request, res: Response) => {
 
     const where: any = {
       isActive: true,
-      OR: [
-        { title: { contains: searchTerm, mode: 'insensitive' } },
-        { description: { contains: searchTerm, mode: 'insensitive' } },
-        { brand: { name: { contains: searchTerm, mode: 'insensitive' } } },
+      AND: [
+        {
+          OR: [
+            { endDate: null },
+            { endDate: { gte: new Date() } },
+          ],
+        },
+        {
+          OR: [
+            { title: { contains: searchTerm, mode: 'insensitive' } },
+            { description: { contains: searchTerm, mode: 'insensitive' } },
+            { brand: { name: { contains: searchTerm, mode: 'insensitive' } } },
+          ],
+        },
       ],
     };
 
