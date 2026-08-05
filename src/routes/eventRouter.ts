@@ -75,15 +75,15 @@ router.delete('/:eventId/judges/:judgeId', AuthMiddleware, SpecificClubHeadAuthM
 
 // Schedule Routes
 router.get('/schedule/:eventId', getEventSchedule);
-router.post('/schedule/:eventId/session', AuthMiddleware, SpecificClubHeadAuthMiddleware, addEventSession);
-router.delete('/schedule/:eventId/session/:sessionId', AuthMiddleware, SpecificClubHeadAuthMiddleware, deleteEventSession);
+router.post('/schedule/:eventId/session', AuthMiddleware, addEventSession);
+router.delete('/schedule/:eventId/session/:sessionId', AuthMiddleware, deleteEventSession);
 
 // Edit & Delete Event
 router.put('/event/:id', AuthMiddleware, SpecificClubHeadAuthMiddleware, updateEvent);
 router.delete('/event/:id', AuthMiddleware, SpecificClubHeadAuthMiddleware, deleteEvent);
 
 // event Queue routes
-router.get('/eventQueue/:eventId', AuthMiddleware, SpecificClubHeadAuthMiddleware, getEventQueue);
-router.put('/eventQueue/:eventId/approve', AuthMiddleware, SpecificClubHeadAuthMiddleware, acceptUserfromEventQueue);
+router.get('/eventQueue/:eventId', AuthMiddleware, AuthMiddleware, getEventQueue);
+router.put('/eventQueue/:eventId/approve', AuthMiddleware, acceptUserfromEventQueue);
 
 export const EventRouter = router;

@@ -159,7 +159,7 @@ model speakers {
 
 model event {
   id                   String              @id @default(uuid())
-  EventName            String
+  EventName            String              @unique
   clubId               String
   clubName             String
   description          String

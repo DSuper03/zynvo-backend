@@ -240,25 +240,15 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
             return;
         }
 
-        // Guard against "none" or empty email matching default coremember values
-        if (!user.email || user.email.toLowerCase() === 'none') {
-            logger.warn(`[${requestId}] User has invalid email`, { userId, email: user.email });
-            sendErrorResponse(res, requestId, 'Invalid user email', 403);
-            return;
-        }
-
-        // Use the specific club identified by ClubHeadAuthMiddleware
-        // This prevents cross-club event creation (a core member of Club A
-        // cannot create events under Club B)
-        const middlewareClubId = req.clubId;
-        if (!middlewareClubId) {
-            logger.warn(`[${requestId}] No club context set by middleware`, { userId });
-            sendErrorResponse(res, requestId, 'Club context not found. Cannot create event.', 403);
-            return;
-        }
-
-        const club = await prisma.clubs.findUnique({
-            where: { id: middlewareClubId },
+        const club = await prisma.clubs.findFirst({
+            where: {
+                OR: [
+                    { founderEmail: { equals: user.email, mode: 'insensitive' } },
+                    { coremember1: { equals: user.email, mode: 'insensitive' } },
+                    { coremember2: { equals: user.email, mode: 'insensitive' } },
+                    { coremember3: { equals: user.email, mode: 'insensitive' } }
+                ]
+            },
             select: {
                 name: true,
                 id: true,
@@ -267,11 +257,11 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         });
 
         if (!club) {
-            logger.warn(`[${requestId}] Club from middleware not found in DB`, {
+            logger.warn(`[${requestId}] User is not a club head or core member`, {
                 userId,
-                clubId: middlewareClubId
+                userEmail: user.email
             });
-            sendErrorResponse(res, requestId, 'Club not found', 404);
+            sendErrorResponse(res, requestId, 'invalid club member identification', 403);
             return;
         }
 
@@ -2587,10 +2577,11 @@ export const addEventSession = async (req: Request, res: Response): Promise<void
             }
         });
 
-        const emailLower = user.email.toLowerCase();
-        const isClubHead = eventClub && eventClub.founderEmail && eventClub.founderEmail.toLowerCase() === emailLower;
-        const isCoreMember = eventClub && [eventClub.coremember1, eventClub.coremember2, eventClub.coremember3].some(
-            (cm) => cm && cm.toLowerCase() !== 'none' && cm.toLowerCase() === emailLower
+        const isClubHead = eventClub && eventClub.founderEmail === user.email;
+        const isCoreMember = eventClub && (
+            eventClub.coremember1 === user.email || 
+            eventClub.coremember2 === user.email || 
+            eventClub.coremember3 === user.email
         );
         const isEventCreator = event.createdById === userId;
 
@@ -2684,10 +2675,11 @@ export const deleteEventSession = async (req: Request, res: Response): Promise<v
             }
         });
 
-        const emailLower = user.email.toLowerCase();
-        const isClubHead = eventClub && eventClub.founderEmail && eventClub.founderEmail.toLowerCase() === emailLower;
-        const isCoreMember = eventClub && [eventClub.coremember1, eventClub.coremember2, eventClub.coremember3].some(
-            (cm) => cm && cm.toLowerCase() !== 'none' && cm.toLowerCase() === emailLower
+        const isClubHead = eventClub && eventClub.founderEmail === user.email;
+        const isCoreMember = eventClub && (
+            eventClub.coremember1 === user.email || 
+            eventClub.coremember2 === user.email || 
+            eventClub.coremember3 === user.email
         );
         const isEventCreator = event.createdById === userId;
 
@@ -2751,10 +2743,11 @@ export const updateEvent = async (req: Request, res: Response): Promise<void> =>
             }
         });
 
-        const emailLower = user.email.toLowerCase();
-        const isClubHead = eventClub && eventClub.founderEmail && eventClub.founderEmail.toLowerCase() === emailLower;
-        const isCoreMember = eventClub && [eventClub.coremember1, eventClub.coremember2, eventClub.coremember3].some(
-            (cm) => cm && cm.toLowerCase() !== 'none' && cm.toLowerCase() === emailLower
+        const isClubHead = eventClub && eventClub.founderEmail === user.email;
+        const isCoreMember = eventClub && (
+            eventClub.coremember1 === user.email ||
+            eventClub.coremember2 === user.email ||
+            eventClub.coremember3 === user.email
         );
         const isEventCreator = event.createdById === userId;
 
@@ -2862,10 +2855,11 @@ export const deleteEvent = async (req: Request, res: Response): Promise<void> =>
             }
         });
 
-        const emailLower = user.email.toLowerCase();
-        const isClubHead = eventClub && eventClub.founderEmail && eventClub.founderEmail.toLowerCase() === emailLower;
-        const isCoreMember = eventClub && [eventClub.coremember1, eventClub.coremember2, eventClub.coremember3].some(
-            (cm) => cm && cm.toLowerCase() !== 'none' && cm.toLowerCase() === emailLower
+        const isClubHead = eventClub && eventClub.founderEmail === user.email;
+        const isCoreMember = eventClub && (
+            eventClub.coremember1 === user.email ||
+            eventClub.coremember2 === user.email ||
+            eventClub.coremember3 === user.email
         );
         const isEventCreator = event.createdById === userId;
 
@@ -2953,14 +2947,7 @@ export const getEventQueue = async (req: Request, res: Response): Promise<void> 
             return;
         }
 
-        const emailLower = user.email.toLowerCase();
-        const isAuthorizedMember = (
-            (club.founderEmail && club.founderEmail.toLowerCase() === emailLower) ||
-            [club.coremember1, club.coremember2, club.coremember3].some(
-                (cm) => cm && cm.toLowerCase() !== 'none' && cm.toLowerCase() === emailLower
-            )
-        );
-        if (!isAuthorizedMember) {
+        if (club.founderEmail !== user.email && club.coremember1 !== user.email && club.coremember2 !== user.email && club.coremember3 !== user.email) {
             res.status(403).json({ msg: 'Access denied. Only club heads or core members can view the event queue' });
             return;
         }
@@ -3087,50 +3074,6 @@ export const acceptUserfromEventQueue = async (req: Request, res: Response): Pro
     }
 
     try {
-        // Verify the caller is a club head or core member of the event's club
-        const event = await prisma.event.findUnique({
-            where: { id: eventId },
-            select: { clubId: true }
-        });
-
-        if (!event) {
-            res.status(404).json({ msg: 'Event not found' });
-            return;
-        }
-
-        const callerUser = await prisma.user.findUnique({
-            where: { id: req.id },
-            select: { email: true }
-        });
-
-        if (!callerUser || !callerUser.email || callerUser.email.toLowerCase() === 'none') {
-            res.status(403).json({ msg: 'Access denied' });
-            return;
-        }
-
-        const club = await prisma.clubs.findUnique({
-            where: { id: event.clubId },
-            select: { founderEmail: true, coremember1: true, coremember2: true, coremember3: true }
-        });
-
-        if (!club) {
-            res.status(404).json({ msg: 'Club not found' });
-            return;
-        }
-
-        const callerEmailLower = callerUser.email.toLowerCase();
-        const isAuthorized = (
-            (club.founderEmail && club.founderEmail.toLowerCase() === callerEmailLower) ||
-            [club.coremember1, club.coremember2, club.coremember3].some(
-                (cm) => cm && cm.toLowerCase() !== 'none' && cm.toLowerCase() === callerEmailLower
-            )
-        );
-
-        if (!isAuthorized) {
-            res.status(403).json({ msg: 'Access denied. Only club heads or core members can manage event queue.' });
-            return;
-        }
-
         // Update registration status to approved
         await prisma.userEvents.updateMany({
             where: {
