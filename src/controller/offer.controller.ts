@@ -15,13 +15,14 @@ export const getAllOffers = async (req: Request, res: Response) => {
     const { page, limit, category, offerType, eligibility } = parsed.data;
     const skip = (page - 1) * limit;
 
-    const where: any = { isActive: true };
-
-    // Only show offers that haven't expired
-    where.OR = [
-      { endDate: null },
-      { endDate: { gte: new Date() } },
-    ];
+    const where: any = {
+      isActive: true,
+      startDate: { lte: new Date() },
+      OR: [
+        { endDate: null },
+        { endDate: { gte: new Date() } },
+      ],
+    };
 
     if (offerType) where.offerType = offerType;
     if (eligibility) where.eligibility = eligibility;
@@ -122,7 +123,11 @@ export const getOfferById = async (req: Request, res: Response) => {
       return;
     }
 
-    if (!offer.isActive || (offer.endDate && offer.endDate < new Date())) {
+    if (
+      !offer.isActive ||
+      (offer.startDate && offer.startDate > new Date()) ||
+      (offer.endDate && offer.endDate < new Date())
+    ) {
       res.status(404).json({ msg: 'Offer not found' });
       return;
     }
@@ -155,6 +160,7 @@ export const searchOffers = async (req: Request, res: Response) => {
 
     const where: any = {
       isActive: true,
+      startDate: { lte: new Date() },
       AND: [
         {
           OR: [
@@ -233,6 +239,7 @@ export const getBrandOffers = async (req: Request, res: Response) => {
         offers: {
           where: {
             isActive: true,
+            startDate: { lte: new Date() },
             OR: [{ endDate: null }, { endDate: { gte: new Date() } }],
           },
           orderBy: { createdAt: 'desc' },
