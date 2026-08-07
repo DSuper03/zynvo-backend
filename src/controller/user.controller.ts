@@ -3,7 +3,16 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { generateRequestId } from '../utils/helper';
 import { z } from 'zod';
+import { createClerkClient } from "@clerk/express";
+import dotenv from 'dotenv';
 
+dotenv.config();
+
+
+const secretKey = process.env.CLERK_SECRET_KEY;
+
+
+const clerkClient = createClerkClient({ secretKey: secretKey });
 // Normalize query/param values that might be arrays into a single string
 const normalizeParam = (value: string | string[] | undefined): string | undefined =>
     Array.isArray(value) ? value[0] : value;
@@ -688,3 +697,162 @@ export const isClubAdmin = async(req : Request, res: Response) : Promise<void> =
         return;
     }
 } 
+
+export const deleteUser = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = generateRequestId();
+    const userId = req.id;
+
+    if (!userId) {
+        res.status(401).json({
+            success: false,
+            msg: 'Unauthorized',
+        });
+        return;
+    }
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true },
+        });
+
+        if (user) {
+            await prisma.$transaction(async (tx) => {
+                await tx.team.deleteMany({
+                    where: { createdById: userId },
+                });
+
+                await tx.teamMember.deleteMany({
+                    where: { userId },
+                });
+
+                await tx.userEvents.deleteMany({
+                    where: { userId },
+                });
+
+                await tx.registrationAnswer.deleteMany({
+                    where: { userId },
+                });
+
+                await tx.eventQueue.deleteMany({
+                    where: { userId },
+                });
+
+                await tx.postUpvote.deleteMany({
+                    where: { userId },
+                });
+
+                await tx.postDownvote.deleteMany({
+                    where: { userId },
+                });
+
+                await tx.deviceToken.deleteMany({
+                    where: { userId },
+                });
+
+                await tx.notification.deleteMany({
+                    where: { userId },
+                });
+
+                await tx.wave.deleteMany({
+                    where: {
+                        OR: [
+                            { senderId: userId },
+                            { receiverId: userId },
+                        ],
+                    },
+                });
+
+                await tx.createPost.deleteMany({
+                    where: { authorId: userId },
+                });
+
+                await tx.user.delete({
+                    where: { id: userId },
+                });
+            });
+        }
+
+        try {
+            await clerkClient.users.deleteUser(userId);
+        } catch (clerkError: any) {
+            const status =
+                clerkError?.status ??
+                clerkError?.statusCode ??
+                clerkError?.errors?.[0]?.status;
+
+            const message =
+                clerkError?.message ??
+                clerkError?.errors?.[0]?.message ??
+                '';
+
+            const alreadyDeleted =
+                status === 404 ||
+                /not found|does not exist/i.test(message);
+
+            if (!alreadyDeleted) {
+                logger.error(
+                    `[${requestId}] Failed to delete Clerk user`,
+                    {
+                        userId,
+                        error: message,
+                        stack: clerkError?.stack,
+                    }
+                );
+
+                res.status(500).json({
+                    success: false,
+                    msg: 'Failed to delete Clerk account',
+                });
+                return;
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+        });
+        return;
+    } catch (error: any) {
+        logger.error(
+            `[${requestId}] Error deleting user`,
+            {
+                userId,
+                error: error?.message,
+                stack: error?.stack,
+            }
+        );
+
+        if (error?.code === 'P2025') {
+            try {
+                await clerkClient.users.deleteUser(userId);
+            } catch (clerkError: any) {
+                const status =
+                    clerkError?.status ??
+                    clerkError?.statusCode;
+
+                if (status !== 404) {
+                    logger.error(
+                        `[${requestId}] Clerk cleanup failed`,
+                        {
+                            userId,
+                            error: clerkError?.message,
+                        }
+                    );
+                }
+            }
+
+            res.status(200).json({
+                success: true,
+            });
+            return;
+        }
+
+        res.status(500).json({
+            success: false,
+            msg: 'Internal server error',
+        });
+    }
+};

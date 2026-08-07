@@ -34,7 +34,7 @@ model User {
   postUpvotes   PostUpvote[]
   Team          Team[]
   TeamMember    TeamMember[]
-  club          clubs?         @relation(fields: [clubId], references: [id])
+  club          clubs?         @relation(fields: [clubId], references: [id], onDelete: Cascade)
   event         event[]       @relation("EventCreator")
   eventAttended userEvents[]
   registrationAnswers RegistrationAnswer[]
@@ -141,8 +141,8 @@ model CreatePost {
   collegeId   String?
   clubName    String         @default("zync club")
   collegeName String         @default("zync college")
-  author      User           @relation(fields: [authorId], references: [id])
-  club        clubs?         @relation(fields: [collegeId], references: [collegeId])
+  author      User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  club        clubs?         @relation(fields: [collegeId], references: [collegeId], onDelete: Cascade)
   downvotes   PostDownvote[]
   upvotes     PostUpvote[]
 }
@@ -154,7 +154,7 @@ model speakers {
   eventId    String
   profilePic String?
   about      String
-  event      event   @relation(fields: [eventId], references: [id])
+  event      event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }
 
 model event {
@@ -197,8 +197,8 @@ model event {
   schedule             ScheduleDay[]
   Team                 Team[]
   TeamMember           TeamMember[]
-  club                 clubs               @relation(fields: [clubId], references: [id])
-  createdBy            User?               @relation("EventCreator", fields: [createdById], references: [id])
+  club                 clubs               @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  createdBy            User?               @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
   announcements        eventAnnouncement[]
   galleries            eventGallery[]
   judges               judges[]
@@ -224,7 +224,7 @@ model eventAnnouncement {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime?
   eventId     String
-  event       event     @relation(fields: [eventId], references: [id])
+  event       event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }
 
 model eventGallery {
@@ -234,7 +234,7 @@ model eventGallery {
   createdAt DateTime  @default(now())
   updatedAt DateTime?
   eventId   String
-  event     event     @relation(fields: [eventId], references: [id])
+  event     event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }
 
 model clubAnnouncement {
@@ -244,7 +244,7 @@ model clubAnnouncement {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime?
   clubId      String
-  club        clubs     @relation(fields: [clubId], references: [id])
+  club        clubs     @relation(fields: [clubId], references: [id], onDelete: Cascade)
 }
 
 model userEvents {
@@ -256,8 +256,8 @@ model userEvents {
   paymentStatus        String    @default("CONFIRMED")
   paymentVerifiedAt    DateTime?
   approvalStatus       String    @default("approved")
-  event                event     @relation(fields: [eventId], references: [id])
-  user                 User      @relation(fields: [userId], references: [id])
+  event                event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, eventId])
 }
@@ -267,8 +267,8 @@ model PostUpvote {
   postId    String
   userId    String
   createdAt DateTime   @default(now())
-  post      CreatePost @relation(fields: [postId], references: [id])
-  user      User       @relation(fields: [userId], references: [id])
+  post      CreatePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
 }
@@ -278,8 +278,8 @@ model PostDownvote {
   postId    String
   userId    String
   createdAt DateTime   @default(now())
-  post      CreatePost @relation(fields: [postId], references: [id])
-  user      User       @relation(fields: [userId], references: [id])
+  post      CreatePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
 }
@@ -328,7 +328,7 @@ model TeamMember {
   eventId  String
   event    event    @relation(fields: [eventId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id])
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, userId])
   @@unique([teamId, userId])
@@ -342,7 +342,7 @@ model judges {
   eventId     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  event       event    @relation(fields: [eventId], references: [id])
+  event       event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }
 
 enum clubType {
