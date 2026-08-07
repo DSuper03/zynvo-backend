@@ -89,7 +89,6 @@ export const ClubHeadAuthMiddleware = async (
       }
     } catch (error: any) {
       logger.error(error);
-      return;
       if (error instanceof jwt.TokenExpiredError) {
         res.status(401).json({ msg: 'Token expired' });
         return;

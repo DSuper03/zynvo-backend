@@ -46,6 +46,8 @@ model User {
   wavesSent     Wave[] @relation("WaveSender")
   wavesReceived Wave[] @relation("WaveReceiver")
 
+  offerSaves     OfferSave[]   @relation("OfferSaves")
+
   @@index([name])
   @@index([collegeName])
   @@index([clubId])
@@ -396,4 +398,83 @@ model eventQueue {
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@unique([userId, eventId])
+}
+
+// ── Student Offers (B2C) ─────────────────────────────────────
+
+enum OfferType {
+  COUPON
+  CREDITS
+  FREE_TRIAL
+  DISCOUNT
+  INTERNSHIP
+  CERTIFICATION
+}
+
+enum OfferEligibility {
+  ALL_STUDENTS
+  SPECIFIC_COLLEGES
+  SPECIFIC_BRANCHES
+}
+
+model Brand {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  logo            String?
+  description     String
+  website         String?
+  category        String   @default("General")
+  isVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  offers          Offer[]
+
+  @@index([category])
+  @@index([name])
+}
+
+model Offer {
+  id                 String           @id @default(uuid())
+  title              String
+  description        String
+  offerType          OfferType        @default(COUPON)
+  discountValue      String?
+  eligibility        OfferEligibility @default(ALL_STUDENTS)
+  eligibleColleges   String[]         @default([])
+  eligibleBranches   String[]         @default([])
+  redemptionLink     String?
+  termsAndConditions String?
+  isActive           Boolean          @default(true)
+  startDate          DateTime         @default(now())
+  endDate            DateTime?
+
+  viewCount          Int              @default(0)
+  clickCount         Int              @default(0)
+
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  brandId            String
+  brand              Brand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  saves              OfferSave[]
+
+  @@index([brandId])
+  @@index([offerType])
+  @@index([isActive])
+  @@index([endDate])
+  @@index([createdAt])
+}
+
+model OfferSave {
+  id        String   @id @default(uuid())
+  offerId   String
+  userId    String
+  savedAt   DateTime @default(now())
+
+  offer     Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  user      User     @relation("OfferSaves", fields: [userId], references: [id])
+
+  @@unique([offerId, userId])
 }

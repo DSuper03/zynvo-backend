@@ -1,4 +1,4 @@
-﻿import dotenv from 'dotenv';
+import dotenv from 'dotenv';
 import path from 'path';
 
 // Load .env file from project root with explicit path
@@ -44,6 +44,7 @@ import { adminControlRouter } from './routes/adminRouter';
 import { teamRouter } from './routes/teamRouter';
 import { notificationRouter } from './routes/notificationRouter';
 import { waveRouter } from './routes/wave.routes';
+import { offerRouter } from './routes/offerRouter';
 import { logger } from './utils/logger';
 // ort atomicdocs from 'atomicdocs';
 import { createHonoExpressMiddleware } from './hono/expressAdapter';
@@ -152,6 +153,7 @@ app.use('/api/v1/contact', contactRouter);
 app.use('/api/v1/teams', teamRouter);
 app.use('/api/v1/notifications', notificationRouter);
 app.use('/api/v1/users', waveRouter);
+app.use('/api/v1/offers', offerRouter);
 
 //------------------- V2 routes --------------------
 
