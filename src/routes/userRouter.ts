@@ -21,7 +21,8 @@ import {
   getPublicUser, 
   getAllUsers, 
   leaveClub,
-  isClubAdmin
+  isClubAdmin,
+  deleteUser
 } from '../controller/user.controller';
 import { clerkLogin, syncWithClerk, checkUserExists } from '../controller/auth.controller.new';
 
@@ -54,5 +55,6 @@ router.get('/getPublicUser', AuthMiddleware, getPublicUser);
 router.get('/getAllUsers', getAllUsers);
 router.put('/leaveClub', AuthMiddleware, leaveClub);
 router.get('/isClubAdmin',AuthMiddleware, isClubAdmin);
+router.post('/deleteAccount', AuthMiddleware, deleteUser);
 
 export const userRouter = router;
