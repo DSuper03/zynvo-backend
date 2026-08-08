@@ -716,7 +716,6 @@ export const deleteUser = async (
     try {
         const user = await prisma.user.findUnique({
             where: { id: userId },
-            select: { id: true },
         });
 
         if (user) {
@@ -777,7 +776,9 @@ export const deleteUser = async (
         }
 
         try {
-            await clerkClient.users.deleteUser(userId);
+            if (user?.clerkId) {
+                await clerkClient.users.deleteUser(user?.clerkId);
+            }
         } catch (clerkError: any) {
             const status =
                 clerkError?.status ??
