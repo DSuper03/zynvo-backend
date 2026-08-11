@@ -207,6 +207,7 @@ model event {
   customQuestions      EventCustomQuestion[]
   registrationAnswers  RegistrationAnswer[]
   eventQueue           eventQueue[]
+  desiredSponsors      String?
 
   @@index([clubId])
   @@index([EventType])
@@ -443,7 +444,7 @@ model Offer {
   eligibility        OfferEligibility @default(ALL_STUDENTS)
   eligibleColleges   String[]         @default([])
   eligibleBranches   String[]         @default([])
-  redemptionLink     String?
+  redemptionLink     String
   termsAndConditions String?
   isActive           Boolean          @default(true)
   startDate          DateTime         @default(now())
