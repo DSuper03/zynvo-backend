@@ -418,9 +418,15 @@ export const updateOffer = async (req: Request, res: Response) => {
       return;
     }
 
+    // Prisma's update doesn't accept `null` for non-nullable string fields like
+    // `redemptionLink` — convert null → undefined so Prisma leaves them unchanged.
+    const updateData = Object.fromEntries(
+      Object.entries(parsed.data).map(([k, v]) => [k, v === null ? undefined : v]),
+    );
+
     const updated = await prisma.offer.update({
       where: { id: offerId },
-      data: parsed.data,
+      data: updateData,
     });
 
     res.status(200).json({ msg: 'Offer updated', offer: updated });

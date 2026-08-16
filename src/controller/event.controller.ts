@@ -41,6 +41,7 @@ const eventSelectBase = {
     Fees: true,
     qrCodeUrl: true,
     maxParticipants: true,
+    desiredSponsors: true,
     _count: {
         select: { attendees: true }
     },
@@ -110,6 +111,7 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
         coreTeamOnly,
         customQuestions,
         acceptanceBased,
+        desiredSponsors,
     } = req.body;
 
     const userId = req.id;
@@ -315,6 +317,7 @@ export const createEvent = async (req: Request, res: Response): Promise<void> =>
             maxParticipants: maxParticipants,
             createdById: userId,
             acceptanceBased: acceptanceBased ?? false,
+            desiredSponsors: desiredSponsors || null,
         };
 
         if (customQuestions && Array.isArray(customQuestions) && customQuestions.length > 0) {
@@ -2763,7 +2766,7 @@ export const updateEvent = async (req: Request, res: Response): Promise<void> =>
             'applicationStartDate', 'applicationEndDate', 'collegeStudentsOnly',
             'contactEmail', 'contactPhone', 'participationFee', 'posterUrl',
             'link1', 'link2', 'link3', 'whatsappLink', 'qrCodeUrl', 'maxParticipants',
-            'eventHeaderImage', 'Form', 'Fees'
+            'eventHeaderImage', 'Form', 'Fees', 'desiredSponsors'
         ];
 
         // Extract only allowed fields from request body
