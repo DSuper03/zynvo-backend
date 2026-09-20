@@ -34,15 +34,75 @@ model User {
   postUpvotes   PostUpvote[]
   Team          Team[]
   TeamMember    TeamMember[]
-  club          clubs?         @relation(fields: [clubId], references: [id])
+  club          clubs?         @relation(fields: [clubId], references: [id], onDelete: Cascade)
   event         event[]       @relation("EventCreator")
   eventAttended userEvents[]
+  registrationAnswers RegistrationAnswer[]
+  eventQueue eventQueue[]
+  
+  deviceTokens DeviceToken[]
+  notifications Notification[]
+
+  wavesSent     Wave[] @relation("WaveSender")
+  wavesReceived Wave[] @relation("WaveReceiver")
+
+  offerSaves     OfferSave[]   @relation("OfferSaves")
+
   comments      PostComment[]  @relation("CommentAuthor")
   commentReports CommentReport[] @relation("CommentReporter")
   following     Follow[]       @relation("UserFollowing")
   followers     Follow[]       @relation("UserFollowers")
+
+  @@index([name])
+  @@index([collegeName])
+  @@index([clubId])
 }
 
+// One "wave" push per sender -> receiver pair. `createdAt` is refreshed on
+// repeat waves so it doubles as the rate-limit timestamp (30 min window).
+model Wave {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  createdAt  DateTime @default(now())
+
+  sender   User @relation("WaveSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("WaveReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@unique([senderId, receiverId])
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  platform  String?
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Persisted in-app notification shown in the notification list. FCM pushes are
+// transient — this row is what powers the in-app notification inbox.
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  data      Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
 model clubs {
   id            String             @id @default(uuid())
   name          String
@@ -68,6 +128,10 @@ model clubs {
   members       User[]
   announcements clubAnnouncement[]
   events        event[]
+
+  @@index([name])
+  @@index([collegeName])
+  @@index([name, collegeName])
 }
 
 model CreatePost {
@@ -83,8 +147,8 @@ model CreatePost {
   clubName         String         @default("zync club")
   collegeName      String         @default("zync college")
   mentionedUserIds String[]       @default([])
-  author           User           @relation(fields: [authorId], references: [id])
-  club             clubs?         @relation(fields: [collegeId], references: [collegeId])
+  author           User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  club             clubs?         @relation(fields: [collegeId], references: [collegeId], onDelete: Cascade)
   downvotes        PostDownvote[]
   upvotes          PostUpvote[]
   comments         PostComment[]
@@ -97,7 +161,7 @@ model speakers {
   eventId    String
   profilePic String?
   about      String
-  event      event   @relation(fields: [eventId], references: [id])
+  event      event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }
 
 model event {
@@ -110,6 +174,7 @@ model event {
   endDate              String?
   eventHeaderImage     String?             @default("none")
   prizes               String              @default("no prizes given")
+  acceptanceBased      Boolean?             @default(false)
   EventMode            String              @default("Hybrid")
   EventType            String              @default("general")
   EventUrl             String?             @default("")
@@ -139,13 +204,25 @@ model event {
   schedule             ScheduleDay[]
   Team                 Team[]
   TeamMember           TeamMember[]
-  club                 clubs               @relation(fields: [clubId], references: [id])
-  createdBy            User?               @relation("EventCreator", fields: [createdById], references: [id])
+  club                 clubs               @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  createdBy            User?               @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
   announcements        eventAnnouncement[]
   galleries            eventGallery[]
   judges               judges[]
   speakers             speakers[]
   attendees            userEvents[]
+  customQuestions      EventCustomQuestion[]
+  registrationAnswers  RegistrationAnswer[]
+  eventQueue           eventQueue[]
+  desiredSponsors      String?
+
+  @@index([clubId])
+  @@index([EventType])
+  @@index([EventMode])
+  @@index([university])
+  @@index([isPaid])
+  @@index([startDate])
+  @@index([createdAt])
 }
 
 model eventAnnouncement {
@@ -155,7 +232,7 @@ model eventAnnouncement {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime?
   eventId     String
-  event       event     @relation(fields: [eventId], references: [id])
+  event       event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }
 
 model eventGallery {
@@ -165,7 +242,7 @@ model eventGallery {
   createdAt DateTime  @default(now())
   updatedAt DateTime?
   eventId   String
-  event     event     @relation(fields: [eventId], references: [id])
+  event     event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }
 
 model clubAnnouncement {
@@ -175,7 +252,7 @@ model clubAnnouncement {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime?
   clubId      String
-  club        clubs     @relation(fields: [clubId], references: [id])
+  club        clubs     @relation(fields: [clubId], references: [id], onDelete: Cascade)
 }
 
 model userEvents {
@@ -186,8 +263,9 @@ model userEvents {
   paymentScreenshotUrl String?   @default("")
   paymentStatus        String    @default("CONFIRMED")
   paymentVerifiedAt    DateTime?
-  event                event     @relation(fields: [eventId], references: [id])
-  user                 User      @relation(fields: [userId], references: [id])
+  approvalStatus       String    @default("approved")
+  event                event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, eventId])
 }
@@ -197,8 +275,8 @@ model PostUpvote {
   postId    String
   userId    String
   createdAt DateTime   @default(now())
-  post      CreatePost @relation(fields: [postId], references: [id])
-  user      User       @relation(fields: [userId], references: [id])
+  post      CreatePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
 }
@@ -208,8 +286,8 @@ model PostDownvote {
   postId    String
   userId    String
   createdAt DateTime   @default(now())
-  post      CreatePost @relation(fields: [postId], references: [id])
-  user      User       @relation(fields: [userId], references: [id])
+  post      CreatePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
 }
@@ -258,7 +336,7 @@ model TeamMember {
   eventId  String
   event    event    @relation(fields: [eventId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id])
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, userId])
   @@unique([teamId, userId])
@@ -272,7 +350,7 @@ model judges {
   eventId     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  event       event    @relation(fields: [eventId], references: [id])
+  event       event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }
 
 enum clubType {
@@ -283,6 +361,130 @@ enum clubType {
   Literature
   Design
   General
+}
+
+model EventCustomQuestion {
+  id        String   @id @default(uuid())
+  eventId   String
+  label     String
+  type      String   @default("text")
+  options   String[] @default([])
+  required  Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  event   event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  answers RegistrationAnswer[]
+}
+
+model RegistrationAnswer {
+  id         String   @id @default(uuid())
+  questionId String
+  userId     String
+  eventId    String
+  answer     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  question EventCustomQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event    event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, eventId, questionId])
+}
+
+model eventQueue {
+  id       String   @id @default(uuid())
+  eventId   String
+  userId    String
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  event event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, eventId])
+}
+
+// ── Student Offers (B2C) ─────────────────────────────────────
+
+enum OfferType {
+  COUPON
+  CREDITS
+  FREE_TRIAL
+  DISCOUNT
+  INTERNSHIP
+  CERTIFICATION
+}
+
+enum OfferEligibility {
+  ALL_STUDENTS
+  SPECIFIC_COLLEGES
+  SPECIFIC_BRANCHES
+}
+
+model Brand {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  logo            String?
+  description     String
+  website         String?
+  category        String   @default("General")
+  isVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  offers          Offer[]
+
+  @@index([category])
+  @@index([name])
+}
+
+model Offer {
+  id                 String           @id @default(uuid())
+  title              String
+  description        String
+  offerType          OfferType        @default(COUPON)
+  discountValue      String?
+  eligibility        OfferEligibility @default(ALL_STUDENTS)
+  eligibleColleges   String[]         @default([])
+  eligibleBranches   String[]         @default([])
+  redemptionLink     String
+  termsAndConditions String?
+  isActive           Boolean          @default(true)
+  startDate          DateTime         @default(now())
+  endDate            DateTime?
+
+  viewCount          Int              @default(0)
+  clickCount         Int              @default(0)
+
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  brandId            String
+  brand              Brand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  saves              OfferSave[]
+
+  @@index([brandId])
+  @@index([offerType])
+  @@index([isActive])
+  @@index([endDate])
+  @@index([createdAt])
+}
+
+model OfferSave {
+  id        String   @id @default(uuid())
+  offerId   String
+  userId    String
+  savedAt   DateTime @default(now())
+
+  offer     Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  user      User     @relation("OfferSaves", fields: [userId], references: [id])
+
+  @@unique([offerId, userId])
 }
 
 // ── Post Comments ─────────────────────────────────────────────
@@ -297,8 +499,8 @@ model PostComment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  post    CreatePost    @relation(fields: [postId], references: [id])
-  author  User          @relation("CommentAuthor", fields: [authorId], references: [id])
+  post    CreatePost    @relation(fields: [postId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  author  User          @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   parent  PostComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   replies PostComment[] @relation("CommentReplies")
 
@@ -316,7 +518,7 @@ model CommentReport {
   reason     String
   createdAt  DateTime @default(now())
 
-  reporter User @relation("CommentReporter", fields: [reporterId], references: [id])
+  reporter User @relation("CommentReporter", fields: [reporterId], references: [id], onDelete: Cascade)
 
   @@unique([commentId, reporterId])
   @@index([commentId])
@@ -329,12 +531,10 @@ model Follow {
   followingId String
   createdAt   DateTime @default(now())
 
-  follower  User @relation("UserFollowing", fields: [followerId], references: [id])
-  following User @relation("UserFollowers", fields: [followingId], references: [id])
+  follower  User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@id([followerId, followingId])
   @@index([followerId])
   @@index([followingId])
 }
-
-

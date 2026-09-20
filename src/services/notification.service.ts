@@ -74,3 +74,38 @@ export const sendToMany = async (input: {
     });
   }
 };
+
+// ── broadcast ────────────────────────────────────────────────────
+// Send a broadcast notification to all users (admin feature)
+
+export const broadcast = async (input: {
+  title: string;
+  body: string;
+  imageUrl?: string | null;
+  data?: Record<string, unknown> | null;
+}): Promise<{ success: boolean; message: string }> => {
+  try {
+    // Get all users
+    const users = await prisma.user.findMany({
+      select: { id: true },
+    });
+
+    // Create notifications for all users
+    await (prisma as any).notification.createMany({
+      data: users.map((user: { id: string }) => ({
+        userId: user.id,
+        type: 'broadcast',
+        title: input.title,
+        body: input.body,
+        data: input.data ?? undefined,
+      })),
+    });
+
+    return { success: true, message: 'Broadcast sent successfully' };
+  } catch (error: any) {
+    logger.error('Failed to send broadcast notification', {
+      error: error.message,
+    });
+    throw error;
+  }
+};
