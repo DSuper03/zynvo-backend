@@ -3,8 +3,7 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { postSchema } from '../types/formtypes';
 import { generateRequestId, sendErrorResponse } from '../utils/helper';
-import { notifyAllUsersNewPost, buildNewPostNotification } from '../utils/fcm';
-import { createBroadcastNotification } from '../services/notification.service';
+import { sendToMany } from '../services/notification.service';
 
 // Normalize query/param values that might be arrays into a single string
 const normalizeParam = (value: string | string[] | undefined): string | undefined =>
@@ -20,6 +19,7 @@ const postSelectBase = {
     authorId: true,
     image: true,
     published: true,
+    mentionedUserIds: true,
     createdAt: true,
     updatedAt: true,
 } as const;
@@ -28,7 +28,7 @@ const postSelectBase = {
 export const createPost = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
 
-    const { title, description, collegeName, clubName, image } = req.body;
+    const { title, description, collegeName, clubName, image, mentionedUserIds } = req.body;
     const userId = req.id;
 
     logger.info(`[${requestId}] POST /create - Starting post creation`, {
@@ -92,7 +92,7 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
             collegeId: club?.collegeId ?? null
         });
 
-        const post = await prisma.createPost.create({
+        const post = await (prisma as any).createPost.create({
             data: {
                 title: parsedData.data.title,
                 description: parsedData.data.description,
@@ -102,41 +102,34 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
                 authorId: userId,
                 image: image,
                 published: true,
+                mentionedUserIds: Array.isArray(mentionedUserIds) ? mentionedUserIds : [],
             },
             select: { id: true }
         });
 
-        // Fire-and-forget: don't block the create response on FCM or inbox writes
-        const pushInput = {
-            postId: post.id,
-            title: parsedData.data.title,
-            description: parsedData.data.description,
-            authorName: user.name,
-            image: image ?? null,
-        };
+        // Fire mention notifications (fire-and-forget)
+        const validMentions: string[] = Array.isArray(mentionedUserIds)
+            ? mentionedUserIds.filter((id: any) => typeof id === 'string' && id !== userId)
+            : [];
 
-        void notifyAllUsersNewPost(pushInput).catch((error: any) => {
-            logger.error(`[${requestId}] Failed to send new-post FCM`, {
-                error: error.message,
-                postId: post.id,
+        if (validMentions.length > 0) {
+            void sendToMany({
+                userIds: validMentions,
+                type: 'mention',
+                message: {
+                    title: 'You were mentioned in a post',
+                    body: `${user.name ?? 'Someone'} mentioned you: "${parsedData.data.title}"`,
+                    data: { postId: post.id, route: `/post/${post.id}` },
+                },
+            }).catch((err: any) => {
+                logger.error(`[${requestId}] Failed to send mention notifications`, {
+                    error: err.message,
+                    postId: post.id,
+                });
             });
-        });
+        }
 
-        const { title, body } = buildNewPostNotification(pushInput);
-        void createBroadcastNotification({
-            type: 'new_post',
-            title,
-            body,
-            data: {
-                postId: post.id,
-                route: `/post/${post.id}`,
-            },
-        }).catch((error: any) => {
-            logger.error(`[${requestId}] Failed to persist new-post notifications`, {
-                error: error.message,
-                postId: post.id,
-            });
-        });
+   
 
         logger.info(`[${requestId}] Post created successfully`, {
             postId: post.id,
@@ -169,11 +162,6 @@ export const editPost = async (req: Request, res: Response): Promise<void> => {
         userId: req.id
     });
 
-    if (!postId) {
-        sendErrorResponse(res, requestId, 'post id required', 400);
-        return;
-    }
-
     const parsedData = postSchema.safeParse(req.body);
     if (!parsedData.success) {
         logger.warn(`[${requestId}] Invalid post format`, {
@@ -192,6 +180,9 @@ export const editPost = async (req: Request, res: Response): Promise<void> => {
             data: {
                 title: parsedData.data.title,
                 description: parsedData.data.description,
+                ...(Array.isArray(req.body.mentionedUserIds) && {
+                    mentionedUserIds: req.body.mentionedUserIds,
+                }),
             },
             select: { id: true }
         });
@@ -208,10 +199,6 @@ export const editPost = async (req: Request, res: Response): Promise<void> => {
             stack: error.stack,
             postId
         });
-        if (error.code === 'P2025') {
-            sendErrorResponse(res, requestId, 'no such post found', 404);
-            return;
-        }
         sendErrorResponse(res, requestId, 'error editing post', 500);
     }
 };
@@ -224,7 +211,7 @@ export const getAllPosts = async (req: Request, res: Response): Promise<void> =>
     });
 
     try {
-        const pages = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+        const pages = parseInt(req.query.page as string) || 1;
         const limit = 30;
         const skip = (pages - 1) * limit;
 
@@ -295,32 +282,7 @@ export const getPostById = async (req: Request, res: Response): Promise<void> =>
     try {
         const post = await prisma.createPost.findUnique({
             where: { id: postId },
-            select: { ...postSelectBase,
-                author : {
-                    select : {
-                        name : true,
-                        profileAvatar : true
-                    }
-                }, 
-                upvotes : {
-                    select : {
-                        user : {
-                            select : {
-                                name : true
-                            }
-                        }
-                    }
-                },
-                downvotes : {
-                    select : {
-                        user : {
-                            select : {
-                                name : true
-                            }
-                        }
-                    }
-                }
-            },
+            select: postSelectBase,
         });
 
         if (!post) {
@@ -360,11 +322,6 @@ export const deletePost = async (req: Request, res: Response): Promise<void> => 
         postId,
         userId: req.id
     });
-
-    if (!postId) {
-        sendErrorResponse(res, requestId, 'post id required', 400);
-        return;
-    }
 
     try {
         const post = await prisma.createPost.delete({
@@ -471,17 +428,13 @@ res.status(200).json({
     downvoteCount: result.downvotesCount
 });
 return;
-    } catch (error: any) {
-        if (error?.code === 'P2002') {
-            res.status(409).json({ msg: "already upvoted" });
-            return;
-        }
+    } catch (error) {
         console.log("error" , error)
         res.status(500).json({
             msg : "internal server error"
         })
     }
-
+ 
 }
 
 export const toggleDownvotePost = async (req: Request, res: Response): Promise<void> => {
@@ -548,11 +501,7 @@ export const toggleDownvotePost = async (req: Request, res: Response): Promise<v
             downvoteCount: result.downvoteCount,
         });
         return;
-    } catch (error: any) {
-        if (error?.code === 'P2002') {
-            res.status(409).json({ msg: "already downvoted" });
-            return;
-        }
+    } catch (error) {
         console.log("error", error);
         res.status(500).json({
             msg: "internal server error"
