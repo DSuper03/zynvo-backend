@@ -37,6 +37,10 @@ model User {
   club          clubs?         @relation(fields: [clubId], references: [id])
   event         event[]       @relation("EventCreator")
   eventAttended userEvents[]
+  comments      PostComment[]  @relation("CommentAuthor")
+  commentReports CommentReport[] @relation("CommentReporter")
+  following     Follow[]       @relation("UserFollowing")
+  followers     Follow[]       @relation("UserFollowers")
 }
 
 model clubs {
@@ -67,21 +71,23 @@ model clubs {
 }
 
 model CreatePost {
-  id          String         @id @default(uuid())
-  title       String
-  description String
-  image       String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  published   Boolean        @default(false)
-  authorId    String
-  collegeId   String?
-  clubName    String         @default("zync club")
-  collegeName String         @default("zync college")
-  author      User           @relation(fields: [authorId], references: [id])
-  club        clubs?         @relation(fields: [collegeId], references: [collegeId])
-  downvotes   PostDownvote[]
-  upvotes     PostUpvote[]
+  id               String         @id @default(uuid())
+  title            String
+  description      String
+  image            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  published        Boolean        @default(false)
+  authorId         String
+  collegeId        String?
+  clubName         String         @default("zync club")
+  collegeName      String         @default("zync college")
+  mentionedUserIds String[]       @default([])
+  author           User           @relation(fields: [authorId], references: [id])
+  club             clubs?         @relation(fields: [collegeId], references: [collegeId])
+  downvotes        PostDownvote[]
+  upvotes          PostUpvote[]
+  comments         PostComment[]
 }
 
 model speakers {
@@ -277,6 +283,58 @@ enum clubType {
   Literature
   Design
   General
+}
+
+// ── Post Comments ─────────────────────────────────────────────
+
+model PostComment {
+  id        String   @id @default(uuid())
+  postId    String
+  authorId  String
+  parentId  String?
+  content   String
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post    CreatePost    @relation(fields: [postId], references: [id])
+  author  User          @relation("CommentAuthor", fields: [authorId], references: [id])
+  parent  PostComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies PostComment[] @relation("CommentReplies")
+
+  @@index([postId])
+  @@index([authorId])
+  @@index([parentId])
+}
+
+// ── Comment Reports ───────────────────────────────────────────
+
+model CommentReport {
+  id         String   @id @default(uuid())
+  commentId  String
+  reporterId String
+  reason     String
+  createdAt  DateTime @default(now())
+
+  reporter User @relation("CommentReporter", fields: [reporterId], references: [id])
+
+  @@unique([commentId, reporterId])
+  @@index([commentId])
+}
+
+// ── Follow ────────────────────────────────────────────────────
+
+model Follow {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("UserFollowing", fields: [followerId], references: [id])
+  following User @relation("UserFollowers", fields: [followingId], references: [id])
+
+  @@id([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
 }
 
 

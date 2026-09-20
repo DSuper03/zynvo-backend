@@ -24,6 +24,14 @@ import {
   isClubAdmin
 } from '../controller/user.controller';
 import { clerkLogin, syncWithClerk, checkUserExists } from '../controller/auth.controller.new';
+import {
+  followUser,
+  unfollowUser,
+  getFollowers,
+  getFollowing,
+  getFollowStatus,
+  getFollowFeed,
+} from '../controller/follow.controller';
 
 const router = Router();
 
@@ -53,6 +61,16 @@ router.get('/SearchUser', searchUser);
 router.get('/getPublicUser', AuthMiddleware, getPublicUser);
 router.get('/getAllUsers', getAllUsers);
 router.put('/leaveClub', AuthMiddleware, leaveClub);
-router.get('/isClubAdmin',AuthMiddleware, isClubAdmin);
+router.get('/isClubAdmin', AuthMiddleware, isClubAdmin);
+
+// ── Follow ────────────────────────────────────────────────────
+// NOTE: /follow/status/:targetId and /feed must come BEFORE /:userId/... routes
+// to avoid Express matching "status" or "feed" as a userId param.
+router.get('/feed', AuthMiddleware, getFollowFeed);
+router.get('/follow/status/:targetId', AuthMiddleware, getFollowStatus);
+router.post('/follow/:targetId', AuthMiddleware, followUser);
+router.delete('/follow/:targetId', AuthMiddleware, unfollowUser);
+router.get('/:userId/followers', AuthMiddleware, getFollowers);
+router.get('/:userId/following', AuthMiddleware, getFollowing);
 
 export const userRouter = router;

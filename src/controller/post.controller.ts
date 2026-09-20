@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { postSchema } from '../types/formtypes';
 import { generateRequestId, sendErrorResponse } from '../utils/helper';
+import { sendToMany } from '../services/notification.service';
 
 // Normalize query/param values that might be arrays into a single string
 const normalizeParam = (value: string | string[] | undefined): string | undefined =>
@@ -18,6 +19,7 @@ const postSelectBase = {
     authorId: true,
     image: true,
     published: true,
+    mentionedUserIds: true,
     createdAt: true,
     updatedAt: true,
 } as const;
@@ -26,7 +28,7 @@ const postSelectBase = {
 export const createPost = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
 
-    const { title, description, collegeName, clubName, image } = req.body;
+    const { title, description, collegeName, clubName, image, mentionedUserIds } = req.body;
     const userId = req.id;
 
     logger.info(`[${requestId}] POST /create - Starting post creation`, {
@@ -90,7 +92,7 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
             collegeId: club?.collegeId ?? null
         });
 
-        const post = await prisma.createPost.create({
+        const post = await (prisma as any).createPost.create({
             data: {
                 title: parsedData.data.title,
                 description: parsedData.data.description,
@@ -100,9 +102,32 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
                 authorId: userId,
                 image: image,
                 published: true,
+                mentionedUserIds: Array.isArray(mentionedUserIds) ? mentionedUserIds : [],
             },
             select: { id: true }
         });
+
+        // Fire mention notifications (fire-and-forget)
+        const validMentions: string[] = Array.isArray(mentionedUserIds)
+            ? mentionedUserIds.filter((id: any) => typeof id === 'string' && id !== userId)
+            : [];
+
+        if (validMentions.length > 0) {
+            void sendToMany({
+                userIds: validMentions,
+                type: 'mention',
+                message: {
+                    title: 'You were mentioned in a post',
+                    body: `${user.name ?? 'Someone'} mentioned you: "${parsedData.data.title}"`,
+                    data: { postId: post.id, route: `/post/${post.id}` },
+                },
+            }).catch((err: any) => {
+                logger.error(`[${requestId}] Failed to send mention notifications`, {
+                    error: err.message,
+                    postId: post.id,
+                });
+            });
+        }
 
    
 
@@ -155,6 +180,9 @@ export const editPost = async (req: Request, res: Response): Promise<void> => {
             data: {
                 title: parsedData.data.title,
                 description: parsedData.data.description,
+                ...(Array.isArray(req.body.mentionedUserIds) && {
+                    mentionedUserIds: req.body.mentionedUserIds,
+                }),
             },
             select: { id: true }
         });

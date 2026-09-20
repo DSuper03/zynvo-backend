@@ -686,8 +686,19 @@
                   "collegeName": {
                     "type": "string"
                   },
-                  "eventType": {
+                  "clubName": {
                     "type": "string"
+                  },
+                  "image": {
+                    "type": "string",
+                    "description": "URL of the post image",
+                    "example": "https://cdn.example.com/post.jpg"
+                  },
+                  "mentionedUserIds": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Array of user IDs tagged with @mention in the post. Each mentioned user receives an in-app notification.",
+                    "example": ["userId1", "userId2"]
                   }
                 }
               }
@@ -2314,6 +2325,401 @@
         }
       }
     },
+    "/api/v1/post/{postId}/comments": {
+      "get": {
+        "summary": "Get comments on a post",
+        "description": "Returns paginated top-level comments with replies nested one level deep. Deleted comments show content '[deleted]' but are included so reply threads stay intact.",
+        "tags": ["Comments"],
+        "parameters": [
+          {
+            "name": "postId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Post ID"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {"type": "integer", "default": 1},
+            "description": "Page number (20 comments per page)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Comments fetched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {"type": "string", "example": "comments fetched"},
+                    "comments": {
+                      "type": "array",
+                      "items": {"$ref": "#/components/schemas/Comment"}
+                    },
+                    "total": {"type": "integer"},
+                    "totalPages": {"type": "integer"},
+                    "page": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          },
+          "500": {"description": "Server error"}
+        }
+      },
+      "post": {
+        "summary": "Add a comment (or reply) to a post",
+        "description": "Creates a top-level comment, or a reply when `parentId` is provided.",
+        "tags": ["Comments"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "postId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["content"],
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "example": "Great post!"
+                  },
+                  "parentId": {
+                    "type": "string",
+                    "description": "ID of the comment being replied to (omit for top-level)",
+                    "example": "abc123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Comment added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {"type": "string", "example": "comment added"},
+                    "comment": {"$ref": "#/components/schemas/Comment"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"description": "Invalid input or parent comment not on this post"},
+          "401": {"description": "Unauthorised"},
+          "404": {"description": "Post not found"}
+        }
+      }
+    },
+    "/api/v1/post/{postId}/comments/count": {
+      "get": {
+        "summary": "Get comment count for a post",
+        "description": "Lightweight count used for post cards in the feed. Does not count soft-deleted comments.",
+        "tags": ["Comments"],
+        "parameters": [
+          {
+            "name": "postId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Count fetched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {"type": "string", "example": "count fetched"},
+                    "count": {"type": "integer", "example": 12}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/post/comments/{commentId}": {
+      "delete": {
+        "summary": "Delete own comment",
+        "description": "Soft-deletes the comment (sets `isDeleted: true`, content becomes '[deleted]'). Only the comment author can delete. Replies are preserved.",
+        "tags": ["Comments"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {"description": "Comment deleted"},
+          "401": {"description": "Unauthorised"},
+          "403": {"description": "Not authorised to delete this comment"},
+          "404": {"description": "Comment not found"}
+        }
+      }
+    },
+    "/api/v1/post/comments/{commentId}/report": {
+      "post": {
+        "summary": "Report an abusive comment",
+        "description": "One report per user per comment. A `409` is returned if the user already reported this comment.",
+        "tags": ["Comments"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason"],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "example": "Harassment / abusive language"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Comment reported"},
+          "401": {"description": "Unauthorised"},
+          "404": {"description": "Comment not found"},
+          "409": {"description": "Already reported"}
+        }
+      }
+    },
+    "/api/v1/user/follow/{targetId}": {
+      "post": {
+        "summary": "Follow a user",
+        "description": "Follow another user. Idempotent — calling again when already following returns 200 without error. Fires an in-app notification to the followed user.",
+        "tags": ["Follow"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "targetId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "ID of the user to follow"
+          }
+        ],
+        "responses": {
+          "200": {"description": "Now following", "content": {"application/json": {"schema": {"type": "object", "properties": {"msg": {"type": "string", "example": "following"}}}}}},
+          "400": {"description": "Cannot follow yourself"},
+          "401": {"description": "Unauthorised"},
+          "404": {"description": "User not found"}
+        }
+      },
+      "delete": {
+        "summary": "Unfollow a user",
+        "description": "Unfollow a user. Idempotent — safe to call even if not following.",
+        "tags": ["Follow"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "targetId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {"description": "Unfollowed"},
+          "401": {"description": "Unauthorised"}
+        }
+      }
+    },
+    "/api/v1/user/follow/status/{targetId}": {
+      "get": {
+        "summary": "Check follow status",
+        "description": "Returns whether the authenticated user currently follows the target user, and when the follow started.",
+        "tags": ["Follow"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "targetId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "isFollowing": {"type": "boolean", "example": true},
+                    "since": {"type": "string", "format": "date-time", "nullable": true, "example": "2026-09-20T13:00:00.000Z"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"description": "Unauthorised"}
+        }
+      }
+    },
+    "/api/v1/user/feed": {
+      "get": {
+        "summary": "Personalised follow feed",
+        "description": "Returns posts from users the authenticated user follows, ordered newest first. Returns a helpful message when the user follows nobody yet.",
+        "tags": ["Follow"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {"type": "integer", "default": 1},
+            "description": "Page number (20 posts per page)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Feed fetched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {"type": "string"},
+                    "posts": {
+                      "type": "array",
+                      "items": {"$ref": "#/components/schemas/PostSummary"}
+                    },
+                    "total": {"type": "integer"},
+                    "totalPages": {"type": "integer"},
+                    "page": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"description": "Unauthorised"}
+        }
+      }
+    },
+    "/api/v1/user/{userId}/followers": {
+      "get": {
+        "summary": "Get followers of a user",
+        "description": "Lists all users who follow the given user. Paginated, 30 per page.",
+        "tags": ["Follow"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {"type": "integer", "default": 1}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Followers fetched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {"type": "string"},
+                    "followers": {
+                      "type": "array",
+                      "items": {"$ref": "#/components/schemas/UserSummary"}
+                    },
+                    "total": {"type": "integer"},
+                    "totalPages": {"type": "integer"},
+                    "page": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"description": "Unauthorised"}
+        }
+      }
+    },
+    "/api/v1/user/{userId}/following": {
+      "get": {
+        "summary": "Get users that a user is following",
+        "description": "Lists all users the given user follows. Paginated, 30 per page.",
+        "tags": ["Follow"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {"type": "integer", "default": 1}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Following list fetched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "msg": {"type": "string"},
+                    "following": {
+                      "type": "array",
+                      "items": {"$ref": "#/components/schemas/UserSummary"}
+                    },
+                    "total": {"type": "integer"},
+                    "totalPages": {"type": "integer"},
+                    "page": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"description": "Unauthorised"}
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health check",
@@ -2346,6 +2752,65 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "UserSummary": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string", "example": "Priya Sharma"},
+          "profileAvatar": {"type": "string", "nullable": true, "example": "https://cdn.example.com/avatar.jpg"},
+          "collegeName": {"type": "string", "example": "IIT Bombay"},
+          "bio": {"type": "string", "nullable": true, "example": "Zynvo Community Fresher"},
+          "followedAt": {"type": "string", "format": "date-time", "description": "When the follow was created (present on follower/following list responses)"}
+        }
+      },
+      "CommentAuthor": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string", "example": "Rahul Verma"},
+          "profileAvatar": {"type": "string", "nullable": true}
+        }
+      },
+      "Comment": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "content": {"type": "string", "example": "Great post!"},
+          "isDeleted": {"type": "boolean", "description": "True if the author deleted it. Content becomes '[deleted]' but the node is kept so replies stay intact."},
+          "parentId": {"type": "string", "nullable": true, "description": "Null for top-level comments, set for replies"},
+          "createdAt": {"type": "string", "format": "date-time"},
+          "updatedAt": {"type": "string", "format": "date-time"},
+          "author": {"$ref": "#/components/schemas/CommentAuthor"},
+          "replies": {
+            "type": "array",
+            "description": "Present only on top-level comments (one level deep)",
+            "items": {"$ref": "#/components/schemas/Comment"}
+          }
+        }
+      },
+      "PostSummary": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "image": {"type": "string", "nullable": true},
+          "clubName": {"type": "string"},
+          "collegeName": {"type": "string"},
+          "authorId": {"type": "string"},
+          "mentionedUserIds": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "User IDs tagged in this post via @mention"
+          },
+          "createdAt": {"type": "string", "format": "date-time"},
+          "author": {"$ref": "#/components/schemas/CommentAuthor"},
+          "upvotes": {"type": "array", "items": {"type": "object"}},
+          "downvotes": {"type": "array", "items": {"type": "object"}}
+        }
       }
     }
   }
