@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { postSchema } from '../types/formtypes';
 import { generateRequestId, sendErrorResponse } from '../utils/helper';
-import { sendToMany } from '../services/notification.service';
+import { sendToMany, notifyFollowersOfNewPost } from '../services/notification.service';
 
 // Normalize query/param values that might be arrays into a single string
 const normalizeParam = (value: string | string[] | undefined): string | undefined =>
@@ -121,6 +121,7 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
                     body: `${user.name ?? 'Someone'} mentioned you: "${parsedData.data.title}"`,
                     data: { postId: post.id, route: `/post/${post.id}` },
                 },
+                push: true,
             }).catch((err: any) => {
                 logger.error(`[${requestId}] Failed to send mention notifications`, {
                     error: err.message,
@@ -128,6 +129,16 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
                 });
             });
         }
+
+        // Fire new-post notifications to the author's followers (fire-and-forget)
+        void notifyFollowersOfNewPost({
+            authorId: userId,
+            postId: post.id,
+            title: parsedData.data.title,
+            description: parsedData.data.description,
+            authorName: user.name,
+            image: image ?? null,
+        });
 
    
 

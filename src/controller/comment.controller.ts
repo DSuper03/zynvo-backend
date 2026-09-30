@@ -97,19 +97,20 @@ export const createComment = async (req: Request, res: Response): Promise<void> 
 
     logger.info(`[${requestId}] Comment created`, { commentId: comment.id, postId, userId });
 
+    const snippet = content.length > 120 ? `${content.slice(0, 117)}...` : content;
+    const commenterName = await prisma.user
+      .findUnique({ where: { id: userId }, select: { name: true } })
+      .then((user: any) => user?.name?.trim() || 'Someone');
+
     // Notify post author (skip self-comment)
     if (post.authorId !== userId) {
-      const commenter = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { name: true },
-      });
-
       void createNotification({
         userId: post.authorId,
         type: 'comment',
         title: 'New comment on your post',
-        body: `${commenter?.name ?? 'Someone'} commented on "${post.title}"`,
+        body: `${commenterName} commented on "${post.title}": "${snippet}"`,
         data: { postId, commentId: comment.id, route: `/post/${postId}` },
+        push: true,
       });
     }
 
@@ -121,17 +122,13 @@ export const createComment = async (req: Request, res: Response): Promise<void> 
       });
 
       if (parent && parent.authorId !== userId && parent.authorId !== post.authorId) {
-        const commenter = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { name: true },
-        });
-
         void createNotification({
           userId: parent.authorId,
           type: 'comment_reply',
-          title: 'Someone replied to your comment',
-          body: `${commenter?.name ?? 'Someone'} replied to your comment`,
+          title: 'New reply to your comment',
+          body: `${commenterName} replied: "${snippet}"`,
           data: { postId, commentId: comment.id, route: `/post/${postId}` },
+          push: true,
         });
       }
     }
@@ -162,7 +159,7 @@ export const getComments = async (req: Request, res: Response): Promise<void> =>
   try {
     const [comments, total] = await Promise.all([
       db.postComment.findMany({
-        where: { postId, parentId: null },
+        where: { postId, parentId: null, isDeleted: false },
         orderBy: { createdAt: 'asc' },
         skip,
         take: limit,
@@ -175,7 +172,7 @@ export const getComments = async (req: Request, res: Response): Promise<void> =>
           },
         },
       }),
-      db.postComment.count({ where: { postId, parentId: null } }),
+      db.postComment.count({ where: { postId, parentId: null, isDeleted: false } }),
     ]);
 
     res.status(200).json({
@@ -192,7 +189,10 @@ export const getComments = async (req: Request, res: Response): Promise<void> =>
 };
 
 // ── deleteComment ─────────────────────────────────────────────
-// DELETE /post/comments/:commentId  — soft-delete, preserves replies
+// DELETE /post/comments/:commentId
+// Soft-deletes the comment and its replies: rows stay for moderation/reports,
+// but they are filtered out of every read path, so nothing "[deleted]" is ever
+// returned to clients.
 
 export const deleteComment = async (req: Request, res: Response): Promise<void> => {
   const requestId = generateRequestId();
@@ -220,12 +220,13 @@ export const deleteComment = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    await db.postComment.update({
-      where: { id: commentId },
-      data: { isDeleted: true, content: '[deleted]' },
+    // Cascade to direct replies so no orphaned replies stay visible or counted.
+    const result = await db.postComment.updateMany({
+      where: { OR: [{ id: commentId }, { parentId: commentId }] },
+      data: { isDeleted: true },
     });
 
-    logger.info(`[${requestId}] Comment soft-deleted`, { commentId, userId });
+    logger.info(`[${requestId}] Comment deleted`, { commentId, userId, removed: result.count });
     res.status(200).json({ msg: 'comment deleted' });
   } catch (error: any) {
     logger.error(`[${requestId}] Error deleting comment`, { error: error.message, commentId });

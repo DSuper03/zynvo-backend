@@ -59,6 +59,7 @@ export const followUser = async (req: Request, res: Response): Promise<void> => 
       title: 'New follower',
       body: `${follower?.name ?? 'Someone'} started following you`,
       data: { followerId, route: `/profile/${followerId}` },
+      push: true,
     });
 
     res.status(200).json({ msg: 'following' });
