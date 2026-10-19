@@ -5,11 +5,16 @@ import {
   getClubByQuery,
   getClubsByCollege,
   getClubById,
+  getPublicClubs,
   createClub,
 } from '../controller/club.controller';
 import { getClubAllannouncements } from '../controller/club.ann.controller';
 
 const router = Router();
+
+// Public (no auth token) — must stay before the `/:id` route so it isn't
+// matched as a club id.
+router.get('/public', getPublicClubs);
 
 router.get('/getAll', AuthMiddleware, getAllClubs);
 router.get('/getClub', AuthMiddleware, getClubByQuery);

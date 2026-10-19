@@ -18,6 +18,22 @@ const clubSelectBase = {
     profilePicUrl: true,
 } as const;
 
+// Public-facing club fields only — never expose founder/faculty/core emails here.
+const publicClubSelect = {
+    id: true,
+    name: true,
+    collegeName: true,
+    description: true,
+    type: true,
+    profilePicUrl: true,
+    clubContact: true,
+    wings: true,
+    instagram: true,
+    twitter: true,
+    linkedin: true,
+    createdAt: true,
+} as const;
+
 const clubSelectWithMembers = {
     ...clubSelectBase,
     founderEmail: true,
@@ -90,6 +106,73 @@ export const getAllClubs = async (req: Request, res: Response): Promise<void> =>
     }
 };
 
+
+// Unauthenticated endpoint: returns club logos + basic info for the public
+// directory. No auth token required, so only non-sensitive fields are selected.
+export const getPublicClubs = async (req: Request, res: Response): Promise<void> => {
+    const requestId = generateRequestId();
+    const collegeName = normalizeParam(req.query.collegeName as string | string[] | undefined);
+
+    logger.info(`[${requestId}] GET /public - Starting request`, {
+        query: req.query
+    });
+
+    try {
+        const requestedPage = parseInt(req.query.page as string, 10);
+        const requestedLimit = parseInt(req.query.limit as string, 10);
+        const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+        const limit = Number.isFinite(requestedLimit)
+            ? Math.min(Math.max(requestedLimit, 1), 100)
+            : 20;
+        const skip = (page - 1) * limit;
+
+        const where = collegeName
+            ? {
+                collegeName: {
+                    contains: collegeName,
+                    mode: 'insensitive' as const
+                }
+            }
+            : undefined;
+
+        const [clubs, totalData] = await Promise.all([
+            prisma.clubs.findMany({
+                where,
+                skip,
+                take: limit,
+                select: publicClubSelect,
+                orderBy: [
+                    { createdAt: 'desc' },
+                    { id: 'asc' },
+                ],
+            }),
+            prisma.clubs.count({ where })
+        ]);
+
+        logger.info(`[${requestId}] Successfully fetched public clubs`, {
+            clubsCount: clubs.length,
+            totalData,
+            page,
+            limit
+        });
+
+        res.status(200).json({
+            clubs,
+            totalPages: Math.ceil(totalData / limit),
+            page,
+            requestId
+        });
+        return;
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error in GET /public`, {
+            error: error.message,
+            stack: error.stack,
+            code: error.code
+        });
+
+        sendErrorResponse(res, requestId, 'Error fetching clubs', 500, error);
+    }
+};
 
 export const getClubByQuery = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();

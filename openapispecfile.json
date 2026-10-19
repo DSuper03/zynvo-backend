@@ -1670,6 +1670,85 @@
         }
       }
     },
+    "/api/v1/clubs/public": {
+      "get": {
+        "summary": "Get public club directory",
+        "description": "Get paginated club logos and public info. No authentication token required.",
+        "tags": ["Clubs"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            },
+            "description": "Results per page"
+          },
+          {
+            "name": "collegeName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional case-insensitive college name filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public clubs retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "clubs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {"type": "string"},
+                          "name": {"type": "string"},
+                          "collegeName": {"type": "string"},
+                          "description": {"type": "string"},
+                          "type": {"type": "string"},
+                          "profilePicUrl": {"type": "string", "nullable": true},
+                          "clubContact": {"type": "string"},
+                          "wings": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                          },
+                          "instagram": {"type": "string", "nullable": true},
+                          "twitter": {"type": "string", "nullable": true},
+                          "linkedin": {"type": "string", "nullable": true},
+                          "createdAt": {"type": "string", "format": "date-time"}
+                        }
+                      }
+                    },
+                    "totalPages": {"type": "integer"},
+                    "page": {"type": "integer"},
+                    "requestId": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error fetching clubs"
+          }
+        }
+      }
+    },
     "/api/v1/clubs/getAll": {
       "get": {
         "summary": "Get all clubs",
