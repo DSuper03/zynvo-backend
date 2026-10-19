@@ -71,6 +71,20 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
                         description: true,
                         image: true
                     }
+                },
+                clubMemberships: {
+                    select: {
+                        clubId: true,
+                        joinedAt: true,
+                        club: {
+                            select: {
+                                id: true,
+                                name: true,
+                                collegeName: true,
+                                profilePicUrl: true
+                            }
+                        }
+                    }
                 }
             },
         });
@@ -101,8 +115,14 @@ export const joinClub = async (req: Request, res: Response): Promise<void> => {
 
     logger.info(`[${requestId}] POST /joinClub - Starting request`, { userId, clubId });
 
+    if (!clubId) {
+        logger.warn(`[${requestId}] Club ID is required`, { userId });
+        res.status(400).json({ msg: 'Club ID is required' });
+        return;
+    }
+
     try {
-        const [club, userClub] = await Promise.all([
+        const [club, user, existingMembership] = await Promise.all([
             prisma.clubs.findUnique({
                 where: { id: clubId },
                 select: { name: true, collegeName: true, collegeStudentsOnly: true }
@@ -110,9 +130,15 @@ export const joinClub = async (req: Request, res: Response): Promise<void> => {
             prisma.user.findUnique({
                 where: { id: userId },
                 select: {
-                    clubName: true,
-                    clubId: true,
                     collegeName: true
+                }
+            }),
+            prisma.userClubMembership.findUnique({
+                where: {
+                    userId_clubId: {
+                        userId,
+                        clubId
+                    }
                 }
             })
         ]);
@@ -123,20 +149,20 @@ export const joinClub = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        if (userClub?.clubId && userClub.clubName) {
-            logger.warn(`[${requestId}] User already in a club`, {
+        if (existingMembership) {
+            logger.warn(`[${requestId}] User already a member of this club`, {
                 userId,
-                currentClub: userClub.clubId
+                clubId
             });
-            res.json({ msg: "you are already a part of club, leave that first to join this." });
+            res.json({ msg: "you are already a member of this club" });
             return;
         }
 
         // If the club restricts membership to same-college students, enforce the check
-        if (club.collegeStudentsOnly && userClub?.collegeName !== club.collegeName) {
+        if (club.collegeStudentsOnly && user?.collegeName !== club.collegeName) {
             logger.warn(`[${requestId}] User college mismatch for restricted club`, {
                 userId,
-                userCollege: userClub?.collegeName,
+                userCollege: user?.collegeName,
                 clubCollege: club.collegeName
             });
 
@@ -144,17 +170,16 @@ export const joinClub = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        const joinClubResult = await prisma.user.update({
-            where: { id: userId },
+        const joinClubResult = await prisma.userClubMembership.create({
             data: {
-                clubName: club.name,
-                clubId: clubId,
+                userId,
+                clubId
             },
             select: { id: true }
         });
 
         logger.info(`[${requestId}] User joined club successfully`, {
-            userId: joinClubResult.id,
+            userId,
             clubId
         });
 
@@ -516,6 +541,20 @@ export const getPublicUser = async (req: Request, res: Response): Promise<void> 
                         id: true,
                         description: true
                     }
+                },
+                clubMemberships: {
+                    select: {
+                        clubId: true,
+                        joinedAt: true,
+                        club: {
+                            select: {
+                                id: true,
+                                name: true,
+                                collegeName: true,
+                                profilePicUrl: true
+                            }
+                        }
+                    }
                 }
             },
         });
@@ -594,80 +633,117 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
 };
 
 export const leaveClub = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const  userId  = req.id;
+  const requestId = generateRequestId();
+  const clubId = normalizeParam(req.params.id);
+  const userId = req.id;
 
-    if (!userId) {
-     res.status(400).json({ msg: "User ID is required" });
-     return;
-    }
+  logger.info(`[${requestId}] POST /leaveClub - Starting request`, { userId, clubId });
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-
-    if (!user) {
-     res.status(404).json({ msg: "User not found" });
-     return
-    }
-
-    if (!user.clubId || user.clubId === "none") {
-      res.status(400).json({ msg: "User is not part of any club" });
-      return
-    }
-
-
-    const leave = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        clubId: null,
-        clubName: null,
-      },
-    });
-
-    if (!leave) {
-     res.status(400).json({ msg: "Failed to leave the club" });
-     return
-    }
-    res.status(200).json(
-        { 
-            msg: "Successfully left the club" 
-        }
-    );
+  if (!clubId) {
+    logger.warn(`[${requestId}] Club ID is required`, { userId });
+    res.status(400).json({ msg: "Club ID is required" });
     return;
-  } catch (error) {
-    console.error("Error leaving club:", error);
-   res.status(500).json({ message: "Internal server error" });
-   return
   }
-}
+
+  try {
+    if (!userId) {
+      res.status(400).json({ msg: "User ID is required" });
+      return;
+    }
+
+    const membership = await prisma.userClubMembership.findUnique({
+      where: {
+        userId_clubId: {
+          userId,
+          clubId
+        }
+      }
+    });
+
+    if (!membership) {
+      logger.warn(`[${requestId}] User is not a member of this club`, { userId, clubId });
+      res.status(400).json({ msg: "User is not a member of this club" });
+      return;
+    }
+
+    await prisma.userClubMembership.delete({
+      where: {
+        userId_clubId: {
+          userId,
+          clubId
+        }
+      }
+    });
+
+    logger.info(`[${requestId}] User left club successfully`, { userId, clubId });
+
+    res.status(200).json({ msg: "Successfully left the club" });
+    return;
+  } catch (error: any) {
+    logger.error(`[${requestId}] Error leaving club`, {
+      error: error.message,
+      stack: error.stack,
+      userId,
+      clubId
+    });
+    res.status(500).json({ msg: "internal server error" });
+  }
+};
 
 export const isClubAdmin = async(req : Request, res: Response) : Promise<void> => {
-    const id = req.id
+    const requestId = generateRequestId();
+    const id = req.id;
+    const clubId = normalizeParam(req.params.id);
+
+    logger.info(`[${requestId}] GET /isClubAdmin - Starting request`, { userId: id, clubId });
+
+    if (!clubId) {
+        logger.warn(`[${requestId}] Club ID is required`, { userId: id });
+        res.status(400).json({
+            msg : "Club ID is required"
+        })
+        return;
+    }
+
     try {
         const userDetails = await prisma.user.findUnique({
             where : {
                 id : id
+            },
+            select: {
+                email: true
             }
         })
+
         if(!userDetails) {
+            logger.warn(`[${requestId}] User not found`, { userId: id });
             res.status(404).json({
                 msg : "Invalid user"
             })
-            console.log("user not found");
             return;
-        } 
-        if (!userDetails.clubId || !userDetails.email) {
-            res.status(400).json({
-                msg : "No club joined"
+        }
+
+        // Check if user is a member of the club
+        const membership = await prisma.userClubMembership.findUnique({
+            where: {
+                userId_clubId: {
+                    userId: id,
+                    clubId
+                }
+            }
+        });
+
+        if (!membership) {
+            logger.warn(`[${requestId}] User is not a member of this club`, { userId: id, clubId });
+            res.status(403).json({
+                msg : "you are not a member of this club"
             })
             return;
         }
 
         const clubFounder = await prisma.clubs.findUnique({
             where : {
-                id : userDetails.clubId
+                id : clubId
             },
             select : {
                 coremember1 : true,
@@ -678,19 +754,26 @@ export const isClubAdmin = async(req : Request, res: Response) : Promise<void> =
         })
 
         if (!clubFounder || (clubFounder.founderEmail !== userDetails.email && clubFounder.coremember1 !== userDetails.email && clubFounder.coremember2 !== userDetails.email && clubFounder.coremember3 !== userDetails.email)) {
+            logger.warn(`[${requestId}] User is not an admin of this club`, { userId: id, clubId });
             res.status(403).json({
                 msg : "you are not an admin"
             })
             return;
-        
+
         }
+        logger.info(`[${requestId}] User is confirmed as club admin`, { userId: id, clubId });
         res.status(200).json({
             msg : "Fetched",
             founder : clubFounder ? 'true' : 'false'
         })
         return;
-    } catch (error) {
-        console.log(error);
+    } catch (error: any) {
+        logger.error(`[${requestId}] Error checking club admin status`, {
+            error: error.message,
+            stack: error.stack,
+            userId: id,
+            clubId
+        });
         res.status(500).json({
             msg : "some error occured in server"
         })

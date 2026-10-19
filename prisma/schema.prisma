@@ -53,6 +53,8 @@ model User {
   following     Follow[]       @relation("UserFollowing")
   followers     Follow[]       @relation("UserFollowers")
 
+  clubMemberships UserClubMembership[]
+
   @@index([name])
   @@index([collegeName])
   @@index([clubId])
@@ -104,34 +106,49 @@ model Notification {
   @@index([userId, createdAt])
 }
 model clubs {
-  id            String             @id @default(uuid())
+  id            String                 @id @default(uuid())
   name          String
   collegeName   String
-  collegeId     String             @unique @default(uuid())
+  collegeId     String                 @unique @default(uuid())
   description   String
   profilePicUrl String?
-  clubContact   String             @default("none")
-  facultyEmail  String             @default("none")
-  founderEmail  String             @unique @default("none")
-  requirements  String?            @default("none")
-  coremember1   String?            @default("none")
-  coremember2   String?            @default("none")
-  coremember3   String?            @default("none")
-  type          String             @default("General")
-  collegeStudentsOnly Boolean      @default(true)
-  wings         String[]           @default([])
+  clubContact   String                 @default("none")
+  facultyEmail  String                 @default("none")
+  founderEmail  String                 @unique @default("none")
+  requirements  String?                @default("none")
+  coremember1   String?                @default("none")
+  coremember2   String?                @default("none")
+  coremember3   String?                @default("none")
+  type          String                 @default("General")
+  collegeStudentsOnly Boolean           @default(true)
+  wings         String[]               @default([])
   instagram     String?
   linkedin      String?
   twitter       String?
-  createdAt     DateTime           @default(now())
+  createdAt     DateTime               @default(now())
   posts         CreatePost[]
   members       User[]
+  memberships   UserClubMembership[]
   announcements clubAnnouncement[]
   events        event[]
 
   @@index([name])
   @@index([collegeName])
   @@index([name, collegeName])
+}
+
+model UserClubMembership {
+  id        String   @id @default(uuid())
+  userId    String
+  clubId    String
+  joinedAt  DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club  clubs @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clubId])
+  @@index([userId])
+  @@index([clubId])
 }
 
 model CreatePost {

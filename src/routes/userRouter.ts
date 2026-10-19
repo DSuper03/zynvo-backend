@@ -60,8 +60,8 @@ router.get('/getSidebarUser', AuthMiddleware, getSidebarUser);
 router.get('/SearchUser', searchUser);
 router.get('/getPublicUser', AuthMiddleware, getPublicUser);
 router.get('/getAllUsers', getAllUsers);
-router.put('/leaveClub', AuthMiddleware, leaveClub);
-router.get('/isClubAdmin', AuthMiddleware, isClubAdmin);
+router.post('/leaveClub/:id', AuthMiddleware, leaveClub);
+router.get('/isClubAdmin/:id', AuthMiddleware, isClubAdmin);
 
 // ── Follow ────────────────────────────────────────────────────
 // NOTE: /follow/status/:targetId and /feed must come BEFORE /:userId/... routes

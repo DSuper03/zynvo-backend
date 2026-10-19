@@ -28,13 +28,14 @@ const postSelectBase = {
 export const createPost = async (req: Request, res: Response): Promise<void> => {
     const requestId = generateRequestId();
 
-    const { title, description, collegeName, clubName, image, mentionedUserIds } = req.body;
+    const { title, description, collegeName, clubName, image, mentionedUserIds, clubId } = req.body;
     const userId = req.id;
 
     logger.info(`[${requestId}] POST /create - Starting post creation`, {
         userId,
         title,
-        clubName
+        clubName,
+        clubId
     });
 
     const parsedData = postSchema.safeParse(req.body);
@@ -55,7 +56,6 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
             select: {
                 email: true,
                 name: true,
-                clubId: true,
             },
         });
 
@@ -66,11 +66,30 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
         }
 
         let club: { collegeId: string; name: string } | null = null;
-        if (user.clubId) {
-            logger.info(`[${requestId}] Fetching club information`, { clubId: user.clubId });
+        if (clubId && typeof clubId === 'string') {
+            // Validate that user is a member of the specified club
+            const membership = await prisma.userClubMembership.findUnique({
+                where: {
+                    userId_clubId: {
+                        userId,
+                        clubId
+                    }
+                }
+            });
+
+            if (!membership) {
+                logger.warn(`[${requestId}] User is not a member of the specified club`, {
+                    userId,
+                    clubId
+                });
+                sendErrorResponse(res, requestId, 'you are not a member of this club', 403);
+                return;
+            }
+
+            logger.info(`[${requestId}] Fetching club information`, { clubId });
 
             club = await prisma.clubs.findUnique({
-                where: { id: user.clubId },
+                where: { id: clubId },
                 select: {
                     collegeId: true,
                     name: true,
@@ -78,17 +97,17 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
             });
 
             if (!club) {
-                logger.warn(`[${requestId}] Club not found`, { clubId: user.clubId });
+                logger.warn(`[${requestId}] Club not found`, { clubId });
                 sendErrorResponse(res, requestId, 'no club found associated to you, either join a club or create one', 404);
                 return;
             }
         } else {
-            logger.info(`[${requestId}] User has no club, creating post without club association`, { userId });
+            logger.info(`[${requestId}] No club specified, creating post without club association`, { userId });
         }
 
         logger.info(`[${requestId}] Creating post`, {
             userId,
-            clubId: user.clubId ?? null,
+            clubId: clubId ?? null,
             collegeId: club?.collegeId ?? null
         });
 
@@ -98,7 +117,7 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
                 description: parsedData.data.description,
                 collegeId: club?.collegeId,
                 collegeName: collegeName,
-                clubName: clubName,
+                clubName: club?.name || clubName,
                 authorId: userId,
                 image: image,
                 published: true,
