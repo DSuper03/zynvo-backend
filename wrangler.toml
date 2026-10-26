@@ -3,3 +3,22 @@ main = "src/worker/index.ts"
 tsconfig = "tsconfig.worker.json"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
+
+# ── Non-secret config vars ────────────────────────────────────
+# Secrets (JWT_SECRET, DATABASE_URL, FIREBASE_*, CLERK_SECRET_KEY, ADMIN_EMAILS)
+# are stored via: npx wrangler secret put <KEY>
+# Never put secrets in this file.
+
+[vars]
+NODE_ENV = "production"
+FE_URL = "https://www.zynvosocial.com"
+
+# ── Deployment environments ───────────────────────────────────
+
+[env.production]
+name = "zynvo-backend-worker"
+vars = { NODE_ENV = "production", FE_URL = "https://www.zynvosocial.com" }
+
+[env.staging]
+name = "zynvo-backend-worker-staging"
+vars = { NODE_ENV = "staging", FE_URL = "http://localhost:3000" }
