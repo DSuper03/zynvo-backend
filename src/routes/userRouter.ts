@@ -21,7 +21,8 @@ import {
   getPublicUser, 
   getAllUsers, 
   leaveClub,
-  isClubAdmin
+  isClubAdmin,
+  deleteUser
 } from '../controller/user.controller';
 import { clerkLogin, syncWithClerk, checkUserExists } from '../controller/auth.controller.new';
 import {
@@ -62,6 +63,9 @@ router.get('/getPublicUser', AuthMiddleware, getPublicUser);
 router.get('/getAllUsers', getAllUsers);
 router.post('/leaveClub/:id', AuthMiddleware, leaveClub);
 router.get('/isClubAdmin/:id', AuthMiddleware, isClubAdmin);
+
+// ── Account deletion (immediate; also deletes the Clerk user) ─
+router.post('/deleteAccount', AuthMiddleware, deleteUser);
 
 // ── Follow ────────────────────────────────────────────────────
 // NOTE: /follow/status/:targetId and /feed must come BEFORE /:userId/... routes
