@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { HonoEnv } from '../types';
-import { authMiddleware, clubHeadAuthMiddleware, adminCoreAuthMiddleware } from '../middleware/auth';
+import { authMiddleware, clubHeadAuthMiddleware, adminCoreAuthMiddleware, specificClubHeadAuthMiddleware } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
 
@@ -122,6 +122,33 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
   }
 });
 
+// ── GET /founder-event-count ──────────────────────────────────
+// Number of events created by the caller's club (0 if not a club head/core member).
+
+router.get('/founder-event-count', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const prisma = c.get('prisma');
+  try {
+    const user = await prisma.user.findUnique({ where: { id: c.get('userId') }, select: { email: true } });
+    if (!user) return c.json({ count: 0 }, 200);
+    const club = await prisma.clubs.findFirst({
+      where: {
+        OR: [
+          { founderEmail: { equals: user.email, mode: 'insensitive' } },
+          { coremember1: { equals: user.email, mode: 'insensitive' } },
+          { coremember2: { equals: user.email, mode: 'insensitive' } },
+          { coremember3: { equals: user.email, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true },
+    });
+    const count = club ? await prisma.event.count({ where: { clubId: club.id } }) : 0;
+    return c.json({ count }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
 // ── GET /getSpeakers ──────────────────────────────────────────
 
 router.get('/getSpeakers', async (c) => {
@@ -236,6 +263,766 @@ router.delete('/unregister/:id', authMiddleware, async (c) => {
   } catch (err: any) {
     if (err.code === 'P2025') return jsonError(c, requestId, 'Registration not found', 404);
     return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Routes ported from the Express EventRouter (Cloud Run retirement)
+// ═══════════════════════════════════════════════════════════════
+
+// Surface payment amount under friendlier keys for responses.
+const mapEventFees = <T extends { Fees?: string | null }>(event: T) => ({
+  ...event,
+  paymentAmount: event.Fees,
+  fees: event.Fees,
+});
+
+const generatePassId = (): string => `Zynvo ${crypto.randomUUID()}`;
+
+const readJson = async (c: any): Promise<any> => {
+  try { return await c.req.json(); } catch { return {}; }
+};
+
+// Whether the user is the founder or a core member of the event's club.
+const managesEventClub = async (prisma: any, eventId: string, userId: string) => {
+  const [user, event] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
+    prisma.event.findUnique({ where: { id: eventId }, select: { clubId: true } }),
+  ]);
+  if (!user || !event) return { user, event, allowed: false };
+  const club = await prisma.clubs.findUnique({
+    where: { id: event.clubId },
+    select: { founderEmail: true, coremember1: true, coremember2: true, coremember3: true },
+  });
+  const allowed = !!club && [club.founderEmail, club.coremember1, club.coremember2, club.coremember3]
+    .some((e: string | null) => e === user.email);
+  return { user, event, allowed };
+};
+
+// ── POST /checkEventDates ─────────────────────────────────────
+
+router.post('/checkEventDates', async (c) => {
+  const requestId = generateRequestId();
+  const { eventStartDate, eventEndDate, applicationStartDate, applicationEndDate } = await readJson(c);
+  const prisma = c.get('prisma');
+  try {
+    const result: {
+      isValid: boolean; errors: string[]; warnings: string[]; info: string[];
+      sameDayEventsAllowed: boolean; existingEvents?: any[];
+    } = { isValid: true, errors: [], warnings: [], info: [], sameDayEventsAllowed: true };
+
+    const now = new Date();
+    const startDate = eventStartDate ? new Date(eventStartDate) : null;
+    const endDate = eventEndDate ? new Date(eventEndDate) : null;
+    const appStartDate = applicationStartDate ? new Date(applicationStartDate) : null;
+    const appEndDate = applicationEndDate ? new Date(applicationEndDate) : null;
+
+    if (startDate && endDate) {
+      if (startDate >= endDate) {
+        result.isValid = false;
+        result.errors.push('Event start date must be before event end date');
+      }
+      if (startDate < now) result.warnings.push('Event start date is in the past');
+
+      const s = startDate.toISOString();
+      const e = endDate.toISOString();
+      const existingEvents = await prisma.event.findMany({
+        where: {
+          OR: [
+            { startDate: { lte: s }, endDate: { gte: s } },
+            { startDate: { lte: e }, endDate: { gte: e } },
+            { startDate: { gte: s }, endDate: { lte: e } },
+          ],
+        },
+        select: { id: true, EventName: true, startDate: true, endDate: true, clubName: true, Venue: true },
+        take: 10,
+      });
+      if (existingEvents.length > 0) {
+        // Informational only: same-period events must not block submission.
+        result.existingEvents = existingEvents;
+        result.info.push(`${existingEvents.length} other event(s) exist during the same period. This does not prevent creating your event.`);
+      }
+    }
+
+    if (appStartDate && appEndDate) {
+      if (appStartDate >= appEndDate) {
+        result.isValid = false;
+        result.errors.push('Application start date must be before application end date');
+      }
+      if (appEndDate < now) result.warnings.push('Application end date is in the past');
+    }
+    if (appStartDate && startDate && appStartDate >= startDate) {
+      result.warnings.push('Application start date is on or after event start date');
+    }
+    if (appEndDate && startDate && appEndDate > startDate) {
+      result.warnings.push('Application end date is after event start date');
+    }
+
+    return c.json({ msg: 'Event dates validated', ...result }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+// ── GET /eventByClub/:id ──────────────────────────────────────
+
+router.get('/eventByClub/:id', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const clubId = c.req.param('id');
+  const prisma = c.get('prisma');
+  try {
+    const events = await prisma.event.findMany({
+      where: { clubId }, select: eventSelectBase, orderBy: { createdAt: 'desc' },
+    });
+    if (!events || events.length === 0) return jsonError(c, requestId, 'no club found', 404);
+    return c.json({ msg: 'fetched', event: events.map(mapEventFees) }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal Server error', 500, err);
+  }
+});
+
+// ── GET /search ───────────────────────────────────────────────
+
+router.get('/search', async (c) => {
+  const requestId = generateRequestId();
+  const q = (k: string) => c.req.query(k)?.trim();
+  const term = (q('q') ?? q('name') ?? '').substring(0, 200);
+  const eventType = q('eventType')?.substring(0, 100);
+  const eventMode = q('eventMode')?.substring(0, 50);
+  const university = (q('university') ?? q('college'))?.substring(0, 200);
+  const isPaidRaw = q('isPaid')?.toLowerCase();
+  const clubId = q('clubId');
+  const upcomingRaw = q('upcoming')?.toLowerCase();
+
+  const rawPage = parseInt(c.req.query('page') ?? '');
+  const rawLimit = parseInt(c.req.query('limit') ?? '');
+  const page = Number.isNaN(rawPage) || rawPage < 1 ? 1 : rawPage;
+  const limit = Number.isNaN(rawLimit) ? 10 : Math.min(Math.max(rawLimit, 1), 50);
+  const skip = (page - 1) * limit;
+
+  const andFilters: any[] = [];
+  if (term) {
+    andFilters.push({
+      OR: [
+        { EventName: { contains: term, mode: 'insensitive' } },
+        { tagline: { contains: term, mode: 'insensitive' } },
+        { description: { contains: term, mode: 'insensitive' } },
+        { clubName: { contains: term, mode: 'insensitive' } },
+      ],
+    });
+  }
+  if (eventType) andFilters.push({ EventType: { equals: eventType, mode: 'insensitive' } });
+  if (eventMode) andFilters.push({ EventMode: { equals: eventMode, mode: 'insensitive' } });
+  if (university) andFilters.push({ university: { contains: university, mode: 'insensitive' } });
+  if (clubId) andFilters.push({ clubId: { equals: clubId } });
+  if (isPaidRaw === 'true' || isPaidRaw === 'false') andFilters.push({ isPaid: isPaidRaw === 'true' });
+  if (upcomingRaw === 'true') {
+    andFilters.push({ startDate: { gte: new Date().toISOString().substring(0, 10) } });
+  }
+  const where = andFilters.length > 0 ? { AND: andFilters } : {};
+
+  const prisma = c.get('prisma');
+  try {
+    const [events, total] = await Promise.all([
+      prisma.event.findMany({ where, take: limit, skip, orderBy: { createdAt: 'desc' }, select: eventSelectBase }),
+      prisma.event.count({ where }),
+    ]);
+    return c.json({
+      msg: 'search completed', response: events.map(mapEventFees),
+      total, page, totalPages: Math.ceil(total / limit),
+    }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
+// ── POST /registerEvent ───────────────────────────────────────
+
+router.post('/registerEvent', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const userId = c.get('userId');
+  const { eventId, paymentScreenshotUrl, paymentProofUrl, customAnswers } = await readJson(c);
+  const paymentScreenshot = paymentScreenshotUrl ?? paymentProofUrl;
+  if (!eventId) return jsonError(c, requestId, 'Event ID is required', 400);
+  const prisma = c.get('prisma');
+
+  try {
+    const alreadyRegistered = await prisma.userEvents.findUnique({
+      where: { userId_eventId: { userId, eventId } },
+    });
+    if (alreadyRegistered) return jsonError(c, requestId, 'already registered bro', 402);
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        isPaid: true, collegeStudentsOnly: true, university: true, maxParticipants: true,
+        _count: { select: { attendees: true } },
+        acceptanceBased: true, applicationStatus: true, applicationEndDate: true,
+        customQuestions: { where: { required: true }, select: { id: true, label: true } },
+      },
+    });
+    if (!event) return jsonError(c, requestId, 'Event not found', 404);
+
+    if (event.applicationStatus && event.applicationStatus.toLowerCase() !== 'open') {
+      return jsonError(c, requestId, 'Registration is closed for this event', 400);
+    }
+    if (event.applicationEndDate) {
+      const deadline = new Date(event.applicationEndDate);
+      if (!Number.isNaN(deadline.getTime()) && deadline.getTime() < Date.now()) {
+        return jsonError(c, requestId, 'Registration is closed for this event', 400);
+      }
+    }
+
+    const answers: any[] = Array.isArray(customAnswers) ? customAnswers : [];
+    if (event.customQuestions.length > 0) {
+      const answeredIds = new Set(
+        answers
+          .filter((a) => a && a.answer !== undefined && a.answer !== null && String(a.answer).trim() !== '')
+          .map((a) => a.questionId),
+      );
+      const missing = event.customQuestions.filter((q) => !answeredIds.has(q.id));
+      if (missing.length > 0) {
+        return jsonError(c, requestId, `Please answer all required questions: ${missing.map((q) => q.label).join(', ')}`, 400);
+      }
+    }
+
+    if (event.maxParticipants !== null && event.maxParticipants !== undefined && event._count.attendees >= event.maxParticipants) {
+      return jsonError(c, requestId, 'Participation limit reached for this event', 400);
+    }
+
+    if (event.collegeStudentsOnly) {
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { collegeName: true } });
+      if (!user) return jsonError(c, requestId, 'User not found', 404);
+      const eventCollege = (event.university || '').trim().toLowerCase();
+      const userCollege = (user.collegeName || '').trim().toLowerCase();
+      if (!eventCollege || !userCollege || eventCollege !== userCollege) {
+        return jsonError(c, requestId, 'This event is restricted to students of the organizer college', 403);
+      }
+    }
+
+    if (event.isPaid && !paymentScreenshot) {
+      return jsonError(c, requestId, 'Payment screenshot is required for paid events', 400);
+    }
+
+    const paymentStatus = event.isPaid ? (paymentScreenshot ? 'CONFIRMED' : 'PENDING') : 'CONFIRMED';
+    const saveAnswers = async () => {
+      if (answers.length === 0) return;
+      await prisma.registrationAnswer.createMany({
+        data: answers.map((ans) => ({ questionId: ans.questionId, userId, eventId, answer: ans.answer })),
+        skipDuplicates: true,
+      });
+    };
+
+    // Acceptance-based events: register as pending and queue for organiser approval.
+    if (event.acceptanceBased) {
+      const response = await prisma.userEvents.create({
+        data: {
+          userId, eventId, uniquePassId: generatePassId(),
+          paymentScreenshotUrl: paymentScreenshot || null, paymentStatus, approvalStatus: 'pending',
+        },
+        select: { uniquePassId: true, paymentStatus: true },
+      });
+      await saveAnswers();
+      await prisma.eventQueue.create({ data: { eventId, userId } });
+      return c.json({
+        msg: 'registered successfully , waiting for approval',
+        ForkedUpId: response.uniquePassId,
+        paymentStatus: response.paymentStatus,
+        requiresPaymentVerification: event.isPaid,
+        approvalStatus: 'pending',
+      }, 200);
+    }
+
+    // Re-count inside a transaction so concurrent registrations can't exceed maxParticipants.
+    let response;
+    try {
+      response = await prisma.$transaction(async (tx: any) => {
+        if (event.maxParticipants !== null && event.maxParticipants !== undefined) {
+          const currentCount = await tx.userEvents.count({ where: { eventId } });
+          if (currentCount >= event.maxParticipants) throw new Error('PARTICIPATION_LIMIT_REACHED');
+        }
+        return tx.userEvents.create({
+          data: { userId, eventId, uniquePassId: generatePassId(), paymentScreenshotUrl: paymentScreenshot || null, paymentStatus },
+          select: { uniquePassId: true, paymentStatus: true },
+        });
+      });
+    } catch (txErr: any) {
+      if (txErr.message === 'PARTICIPATION_LIMIT_REACHED') {
+        return jsonError(c, requestId, 'Participation limit reached for this event', 400);
+      }
+      throw txErr;
+    }
+    await saveAnswers();
+
+    return c.json({
+      msg: 'registered successfully',
+      ForkedUpId: response.uniquePassId,
+      paymentStatus: response.paymentStatus,
+      requiresPaymentVerification: event.isPaid,
+      approvalStatus: 'confirmed',
+    }, 200);
+  } catch (err: any) {
+    if (err?.code === 'P2002') return jsonError(c, requestId, 'you are already registered for this event', 409);
+    logger.error(`[${requestId}] registerEvent error`, { error: err.message });
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
+// ── POST /addSpeakers ─────────────────────────────────────────
+
+router.post('/addSpeakers', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const { profilePic, about, name, email, eventId } = await readJson(c);
+  if (!eventId) return jsonError(c, requestId, 'Event ID is required', 400);
+  const prisma = c.get('prisma');
+  try {
+    const speaker = await prisma.speakers.create({
+      data: { profilePic: profilePic || '', about, name, email, eventId },
+      select: { id: true },
+    });
+    return c.json({ msg: 'Speaker added', id: speaker.id }, 200);
+  } catch (err: any) {
+    // speakers.email has a global unique constraint
+    if (err.code === 'P2002') return jsonError(c, requestId, 'A speaker with this email already exists', 409);
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
+// ── GET /ver-event ────────────────────────────────────────────
+
+router.get('/ver-event', async (c) => {
+  const requestId = generateRequestId();
+  const id = c.req.query('id') ?? '';
+  if (!id.startsWith('Z')) return c.json({ status: 'invalid' }, 502);
+  const prisma = c.get('prisma');
+  try {
+    const found = await prisma.userEvents.findFirst({ where: { uniquePassId: id }, select: { uniquePassId: true } });
+    return found ? c.json({ status: 'registered' }, 200) : c.json({ status: 'unregistered' }, 404);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
+// ── GET /event-details ────────────────────────────────────────
+
+router.get('/event-details', async (c) => {
+  const requestId = generateRequestId();
+  const id = c.req.query('id') ?? '';
+  if (!id.startsWith('Z')) return c.json({ status: 'invalid' }, 502);
+  const prisma = c.get('prisma');
+  try {
+    const found = await prisma.userEvents.findFirst({
+      where: { uniquePassId: id },
+      select: {
+        event: {
+          select: {
+            EventName: true, clubName: true, club: { select: { collegeName: true } },
+            startDate: true, Venue: true, posterUrl: true,
+          },
+        },
+        user: { select: { profileAvatar: true } },
+        approvalStatus: true,
+      },
+    });
+    if (!found) return c.json({ data: {} }, 404);
+    return c.json({
+      data: {
+        eventName: found.event.EventName,
+        clubName: found.event.clubName,
+        collegeName: found.event.club.collegeName,
+        startDate: found.event.startDate,
+        profilePic: found.user.profileAvatar,
+        approvalStatus: found.approvalStatus,
+        venue: found.event.Venue,
+        posterUrl: found.event.posterUrl,
+      },
+    }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
+// ── GET /user-details ─────────────────────────────────────────
+
+router.get('/user-details', async (c) => {
+  const requestId = generateRequestId();
+  // c.req.query already URL-decodes; trim whitespace only
+  const id = (c.req.query('id') ?? '').trim();
+  if (!id) return c.json({ status: 'error', message: 'Pass ID is required', requestId }, 400);
+  if (!id.startsWith('Z')) return c.json({ status: 'invalid', message: 'Invalid pass ID format', requestId }, 400);
+
+  const prisma = c.get('prisma');
+  try {
+    const registration = await prisma.userEvents.findFirst({
+      where: { uniquePassId: { equals: id, mode: 'insensitive' } },
+      select: {
+        uniquePassId: true, joinedAt: true, paymentStatus: true,
+        event: { select: { EventName: true } },
+        user: {
+          select: {
+            id: true, name: true, email: true, collegeName: true,
+            course: true, year: true, profileAvatar: true,
+          },
+        },
+      },
+    });
+    if (!registration) {
+      return c.json({ status: 'error', message: 'Registration not found', data: {}, requestId }, 404);
+    }
+    return c.json({
+      status: 'success',
+      data: {
+        passId: registration.uniquePassId,
+        eventName: registration.event?.EventName ?? '',
+        joinedAt: registration.joinedAt,
+        paymentStatus: registration.paymentStatus,
+        user: registration.user,
+      },
+      requestId,
+    }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+// ── Announcements ─────────────────────────────────────────────
+// The frontend sends the announcement id as ?id=; Express read ?annId=. Accept both.
+
+const annIdFrom = (c: any): string => String(c.req.query('annId') || c.req.query('id') || '');
+
+router.get('/getAnn/:eventId', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const prisma = c.get('prisma');
+  try {
+    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true } });
+    if (!event) return c.json({ msg: 'no event found' }, 404);
+    const data = await prisma.eventAnnouncement.findMany({ where: { eventId }, orderBy: { createdAt: 'desc' } });
+    return c.json({ msg: 'announcements fetched', data }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
+router.post('/announcement/:eventId', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const { Title, Description } = await readJson(c);
+  const prisma = c.get('prisma');
+  try {
+    const data = await prisma.eventAnnouncement.create({ data: { Title, Description, eventId } });
+    return c.json({ msg: 'Announcement published', data }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
+router.put('/announcement/:eventId', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const annId = annIdFrom(c);
+  if (!annId) return c.json({ msg: 'announcement id (annId) required in query' }, 400);
+  const { Title, Description } = await readJson(c);
+  const prisma = c.get('prisma');
+  try {
+    const ann = await prisma.eventAnnouncement.findUnique({ where: { id: annId } });
+    if (!ann || ann.eventId !== eventId) return c.json({ msg: 'announcement not found for this event' }, 404);
+    const data = await prisma.eventAnnouncement.update({
+      where: { id: annId },
+      data: { Title: Title ?? ann.Title, Description: Description ?? ann.Description },
+    });
+    return c.json({ msg: 'announcement updated', data }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
+router.delete('/announcement/:eventId', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const annId = annIdFrom(c);
+  if (!annId) return c.json({ msg: 'announcement id (annId) required in query' }, 400);
+  const prisma = c.get('prisma');
+  try {
+    const ann = await prisma.eventAnnouncement.findUnique({ where: { id: annId } });
+    if (!ann || ann.eventId !== eventId) return c.json({ msg: 'announcement not found for this event' }, 404);
+    await prisma.eventAnnouncement.delete({ where: { id: annId } });
+    return c.json({ msg: 'announcement deleted' }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
+// ── Gallery ───────────────────────────────────────────────────
+
+router.get('/:eventId/gallery', async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const prisma = c.get('prisma');
+  try {
+    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true } });
+    if (!event) return jsonError(c, requestId, 'Event not found', 404);
+    const data = await prisma.eventGallery.findMany({ where: { eventId }, orderBy: { createdAt: 'desc' } });
+    return c.json({ msg: 'Gallery fetched successfully', data }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+router.post('/:eventId/gallery', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const { imageUrl, caption } = await readJson(c);
+  if (!imageUrl) return jsonError(c, requestId, 'Image URL is required', 400);
+  const prisma = c.get('prisma');
+  try {
+    const data = await prisma.eventGallery.create({ data: { imageUrl, caption: caption || '', eventId } });
+    return c.json({ msg: 'Image added to gallery', data }, 201);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+router.put('/:eventId/gallery', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const galleryId = c.req.query('galleryId');
+  if (!galleryId) return jsonError(c, requestId, 'Gallery ID is required in query parameters', 400);
+  const { imageUrl, caption } = await readJson(c);
+  const prisma = c.get('prisma');
+  try {
+    const existing = await prisma.eventGallery.findFirst({ where: { id: galleryId, eventId } });
+    if (!existing) return jsonError(c, requestId, 'Gallery item not found for this event', 404);
+    const data = await prisma.eventGallery.update({
+      where: { id: galleryId },
+      data: {
+        imageUrl: imageUrl ?? existing.imageUrl,
+        caption: caption !== undefined ? caption : existing.caption,
+      },
+    });
+    return c.json({ msg: 'Gallery item updated', data }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+router.delete('/:eventId/gallery', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const galleryId = c.req.query('galleryId');
+  if (!galleryId) return jsonError(c, requestId, 'Gallery ID is required in query parameters', 400);
+  const prisma = c.get('prisma');
+  try {
+    const existing = await prisma.eventGallery.findFirst({ where: { id: galleryId, eventId } });
+    if (!existing) return jsonError(c, requestId, 'Gallery item not found for this event', 404);
+    await prisma.eventGallery.delete({ where: { id: galleryId } });
+    return c.json({ msg: 'Gallery item deleted successfully' }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+// ── Judges ────────────────────────────────────────────────────
+
+router.get('/:eventId/judges', async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const prisma = c.get('prisma');
+  try {
+    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true } });
+    if (!event) return jsonError(c, requestId, 'Event not found', 404);
+    const data = await prisma.judges.findMany({ where: { eventId }, orderBy: { createdAt: 'desc' } });
+    return c.json({ msg: 'Judges fetched successfully', data }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+router.post('/:eventId/judges', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const { name, description, achievement } = await readJson(c);
+  if (!name || !description || !achievement) {
+    return jsonError(c, requestId, 'Name, description, and achievement are required', 400);
+  }
+  const prisma = c.get('prisma');
+  try {
+    const data = await prisma.judges.create({ data: { name, description, achievement, eventId } });
+    return c.json({ msg: 'Judge added successfully', data }, 201);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+router.put('/:eventId/judges/:judgeId', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const judgeId = c.req.param('judgeId');
+  const { name, description, achievement } = await readJson(c);
+  const prisma = c.get('prisma');
+  try {
+    const existing = await prisma.judges.findFirst({ where: { id: judgeId, eventId } });
+    if (!existing) return jsonError(c, requestId, 'Judge not found for this event', 404);
+    const data = await prisma.judges.update({
+      where: { id: judgeId },
+      data: {
+        name: name ?? existing.name,
+        description: description ?? existing.description,
+        achievement: achievement ?? existing.achievement,
+      },
+    });
+    return c.json({ msg: 'Judge updated successfully', data }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+router.delete('/:eventId/judges/:judgeId', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const judgeId = c.req.param('judgeId');
+  const prisma = c.get('prisma');
+  try {
+    const existing = await prisma.judges.findFirst({ where: { id: judgeId, eventId } });
+    if (!existing) return jsonError(c, requestId, 'Judge not found for this event', 404);
+    await prisma.judges.delete({ where: { id: judgeId } });
+    return c.json({ msg: 'Judge deleted successfully' }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+// ── PUT /event/:id ────────────────────────────────────────────
+
+const UPDATABLE_EVENT_FIELDS = [
+  'EventName', 'description', 'tagline', 'EventMode', 'EventType',
+  'EventUrl', 'Venue', 'TeamSize', 'prizes', 'startDate', 'endDate',
+  'applicationStartDate', 'applicationEndDate', 'collegeStudentsOnly',
+  'contactEmail', 'contactPhone', 'participationFee', 'posterUrl',
+  'link1', 'link2', 'link3', 'whatsappLink', 'qrCodeUrl', 'maxParticipants',
+  'eventHeaderImage', 'Form', 'Fees', 'desiredSponsors',
+];
+
+router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('id');
+  const body = await readJson(c);
+  const updateData: Record<string, any> = {};
+  for (const field of UPDATABLE_EVENT_FIELDS) {
+    if (field in body) updateData[field] = body[field];
+  }
+  if (Object.keys(updateData).length === 0 && !('customQuestions' in body)) {
+    return c.json({ msg: 'No valid fields provided for update' }, 400);
+  }
+  if (Array.isArray(body.customQuestions)) {
+    updateData.customQuestions = {
+      deleteMany: {},
+      create: body.customQuestions.map((q: any) => ({
+        label: q.label, type: q.type || 'text', options: q.options || [],
+        required: q.required || false, sortOrder: q.sortOrder || 0,
+      })),
+    };
+  }
+  const prisma = c.get('prisma');
+  try {
+    const updated = await prisma.event.update({ where: { id: eventId }, data: updateData, select: eventSelectBase });
+    return c.json({ msg: 'Event updated successfully', response: mapEventFees(updated) }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] updateEvent error`, { error: err.message });
+    return c.json({ msg: 'Internal server error' }, 500);
+  }
+});
+
+// ── DELETE /event/:id ─────────────────────────────────────────
+
+router.delete('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('id');
+  const prisma = c.get('prisma');
+  try {
+    await prisma.$transaction([
+      prisma.registrationAnswer.deleteMany({ where: { eventId } }),
+      prisma.eventCustomQuestion.deleteMany({ where: { eventId } }),
+      prisma.eventAnnouncement.deleteMany({ where: { eventId } }),
+      prisma.eventGallery.deleteMany({ where: { eventId } }),
+      prisma.judges.deleteMany({ where: { eventId } }),
+      prisma.speakers.deleteMany({ where: { eventId } }),
+      prisma.userEvents.deleteMany({ where: { eventId } }),
+      prisma.teamMember.deleteMany({ where: { team: { eventId } } }),
+      prisma.team.deleteMany({ where: { eventId } }),
+      prisma.scheduleSession.deleteMany({ where: { scheduleDay: { eventId } } }),
+      prisma.scheduleDay.deleteMany({ where: { eventId } }),
+      prisma.event.delete({ where: { id: eventId } }),
+    ]);
+    return c.json({ msg: 'Event deleted successfully' }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] deleteEvent error`, { error: err.message });
+    return c.json({ msg: 'Internal server error' }, 500);
+  }
+});
+
+// ── Event queue (acceptance-based registrations) ──────────────
+
+router.get('/eventQueue/:eventId', authMiddleware, async (c) => {
+  const eventId = c.req.param('eventId');
+  const prisma = c.get('prisma');
+  try {
+    const { user, event, allowed } = await managesEventClub(prisma, eventId, c.get('userId'));
+    if (!user) return c.json({ msg: 'User not found' }, 404);
+    if (!event) return c.json({ msg: 'Event not found' }, 404);
+    if (!allowed) {
+      return c.json({ msg: 'Access denied. Only club heads or core members can view the event queue' }, 403);
+    }
+
+    const queueEntries = await prisma.eventQueue.findMany({ where: { eventId }, orderBy: { createdAt: 'asc' } });
+    const userIds = queueEntries.map((q) => q.userId);
+    const [registrationAnswers, registrationInfo] = await Promise.all([
+      prisma.registrationAnswer.findMany({
+        where: { eventId, userId: { in: userIds } },
+        select: { question: true, answer: true, userId: true },
+      }),
+      prisma.userEvents.findMany({
+        where: { eventId, userId: { in: userIds } },
+        select: {
+          userId: true, uniquePassId: true, paymentStatus: true, paymentScreenshotUrl: true,
+          paymentVerifiedAt: true, joinedAt: true,
+          user: { select: { name: true, email: true, collegeName: true } },
+        },
+      }),
+    ]);
+
+    const queue = queueEntries.map((entry) => ({
+      ...entry,
+      registration: registrationInfo.find((r) => r.userId === entry.userId),
+      registrationAnswers: registrationAnswers.filter((a) => a.userId === entry.userId),
+    }));
+    return c.json({ msg: 'Event queue fetched successfully', total: queueEntries.length, queue }, 200);
+  } catch (err: any) {
+    return c.json({ msg: 'Internal server error' }, 500);
+  }
+});
+
+router.put('/eventQueue/:eventId/approve', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const { userId, accepted } = await readJson(c);
+  if (!userId) return c.json({ msg: 'User ID is required' }, 400);
+  const prisma = c.get('prisma');
+  try {
+    // Express had no ownership check here; only the event's club managers may approve.
+    const { event, allowed } = await managesEventClub(prisma, eventId, c.get('userId'));
+    if (!event) return c.json({ msg: 'Event not found' }, 404);
+    if (!allowed) return c.json({ msg: 'Access denied. Only club heads or core members can approve registrations' }, 403);
+
+    await prisma.userEvents.updateMany({
+      where: { eventId, userId },
+      data: { approvalStatus: accepted ? 'approved' : 'rejected' },
+    });
+    await prisma.eventQueue.deleteMany({ where: { eventId, userId } });
+    return c.json({ msg: 'User accepted successfully' }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] approve queue error`, { error: err.message });
+    return c.json({ msg: 'Internal server error' }, 500);
   }
 });
 

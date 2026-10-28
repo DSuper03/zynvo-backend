@@ -75,13 +75,21 @@ export const clubHeadAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next
     });
     if (!user) return c.json({ message: 'User not found' }, toStatus(404));
 
-    const club = await prisma.clubs.findUnique({
-      where: { founderEmail: user.email },
+    // Founder or core member, matching Express ClubHeadAuthMiddleware
+    const club = await prisma.clubs.findFirst({
+      where: {
+        OR: [
+          { founderEmail: { equals: user.email, mode: 'insensitive' } },
+          { coremember1: { equals: user.email, mode: 'insensitive' } },
+          { coremember2: { equals: user.email, mode: 'insensitive' } },
+          { coremember3: { equals: user.email, mode: 'insensitive' } },
+        ],
+      },
       select: { id: true, name: true, collegeName: true },
     });
     if (!club) {
       return c.json(
-        { message: 'Access denied. Only club heads can perform this action.' },
+        { message: 'Access denied. Only club heads and core members can perform this action.' },
         toStatus(403),
       );
     }
@@ -93,6 +101,89 @@ export const clubHeadAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next
     await next();
   } catch (err: any) {
     logger.error('clubHeadAuthMiddleware error', { error: err.message });
+    return c.json({ msg: 'Internal server error' }, toStatus(500));
+  }
+};
+
+// ── specificClubHeadAuthMiddleware ─────────────────────────────
+// Must run after authMiddleware. Ensures the caller manages the specific club
+// owning the resource: :eventId/:id (event) → club head, core member or event
+// creator; :clubId → club head or core member. Mirrors Express
+// SpecificClubHeadAuthMiddleware.
+
+export const specificClubHeadAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
+  const userId = c.get('userId');
+  if (!userId) return c.json({ msg: 'Please login' }, toStatus(401));
+
+  const prisma = c.get('prisma');
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!user) return c.json({ message: 'User not found' }, toStatus(404));
+
+    let bodyEventId: string | undefined;
+    if (c.req.header('content-type')?.includes('application/json')) {
+      // Hono caches the parsed body, so handlers can still call c.req.json()
+      const body = await c.req.json().catch(() => null);
+      bodyEventId = typeof body?.eventId === 'string' ? body.eventId : undefined;
+    }
+
+    const eventId =
+      c.req.param('eventId') || bodyEventId || c.req.query('eventId') || c.req.param('id');
+    const clubIdParam = c.req.param('clubId');
+
+    const clubSelect = {
+      id: true, name: true, founderEmail: true,
+      coremember1: true, coremember2: true, coremember3: true,
+    } as const;
+    const isManager = (club: { founderEmail: string; coremember1: string | null; coremember2: string | null; coremember3: string | null }) =>
+      club.founderEmail === user.email ||
+      club.coremember1 === user.email ||
+      club.coremember2 === user.email ||
+      club.coremember3 === user.email;
+
+    if (eventId) {
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { clubId: true, createdById: true },
+      });
+      if (!event) return c.json({ message: 'Event not found' }, toStatus(404));
+
+      const club = await prisma.clubs.findUnique({ where: { id: event.clubId }, select: clubSelect });
+      if (!(club && isManager(club)) && event.createdById !== userId) {
+        return c.json(
+          { message: 'Access denied. Only club heads, core members, or event creators can manage this event.' },
+          toStatus(403),
+        );
+      }
+      if (club) {
+        c.set('clubId', club.id);
+        c.set('clubName', club.name);
+      }
+    } else if (clubIdParam) {
+      const club = await prisma.clubs.findUnique({ where: { id: clubIdParam }, select: clubSelect });
+      if (!club) return c.json({ message: 'Club not found' }, toStatus(404));
+      if (!isManager(club)) {
+        return c.json(
+          { message: 'Access denied. Only club heads and core members can perform this action.' },
+          toStatus(403),
+        );
+      }
+      c.set('clubId', club.id);
+      c.set('clubName', club.name);
+    } else {
+      const club = await prisma.clubs.findUnique({ where: { founderEmail: user.email }, select: { id: true, name: true } });
+      if (!club) {
+        return c.json({ message: 'Access denied. Only club heads can perform this action.' }, toStatus(403));
+      }
+      c.set('clubId', club.id);
+      c.set('clubName', club.name);
+    }
+
+    c.set('userEmail', user.email);
+    await next();
+  } catch (err: any) {
+    logger.error('specificClubHeadAuthMiddleware error', { error: err.message });
     return c.json({ msg: 'Internal server error' }, toStatus(500));
   }
 };

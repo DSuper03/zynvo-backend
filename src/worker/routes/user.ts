@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { HonoEnv } from '../types';
 import { authMiddleware } from '../middleware/auth';
@@ -284,15 +284,21 @@ router.get('/isClubAdmin/:id', authMiddleware, async (c) => {
   }
 });
 
-// ── DELETE /me ────────────────────────────────────────────────
+// ── DELETE /me, POST /deleteAccount ───────────────────────────
+// Deletes the user's data and their Clerk account.
 
-router.delete('/me', authMiddleware, async (c) => {
+const deleteAccount = async (c: Context<HonoEnv>) => {
   const requestId = generateRequestId();
   const userId = c.get('userId');
   const prisma = c.get('prisma');
   try {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { clerkId: true } });
+    if (!user) return c.json({ success: true }, 200);
+
     await prisma.$transaction(async (tx: any) => {
       await tx.team.deleteMany({ where: { createdById: userId } });
+      // OfferSave has no onDelete: Cascade, so it would block user.delete
+      await tx.offerSave.deleteMany({ where: { userId } });
       await tx.teamMember.deleteMany({ where: { userId } });
       await tx.userEvents.deleteMany({ where: { userId } });
       await tx.registrationAnswer.deleteMany({ where: { userId } });
@@ -305,12 +311,28 @@ router.delete('/me', authMiddleware, async (c) => {
       await tx.createPost.deleteMany({ where: { authorId: userId } });
       await tx.user.delete({ where: { id: userId } });
     });
+
+    if (user.clerkId) {
+      const res = await fetch(`https://api.clerk.com/v1/users/${encodeURIComponent(user.clerkId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${c.env.CLERK_SECRET_KEY}` },
+      });
+      // 404 means the Clerk user is already gone
+      if (!res.ok && res.status !== 404) {
+        logger.error(`[${requestId}] Failed to delete Clerk user`, { userId, status: res.status });
+        return c.json({ success: false, msg: 'Failed to delete Clerk account' }, 500);
+      }
+    }
+
     return c.json({ success: true }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] deleteUser error`, { error: err.message });
     return jsonError(c, requestId, 'Internal server error', 500);
   }
-});
+};
+
+router.delete('/me', authMiddleware, deleteAccount);
+router.post('/deleteAccount', authMiddleware, deleteAccount);
 
 // ── Follow routes ─────────────────────────────────────────────
 
