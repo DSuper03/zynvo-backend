@@ -19,7 +19,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   if (!token) return c.json({ msg: 'Please login' }, toStatus(401));
 
   try {
-    const decoded = await verify(token, c.env.JWT_SECRET);
+    const decoded = await verify(token, c.env.JWT_SECRET, 'HS256');
     if (typeof decoded !== 'object' || !decoded || !('id' in decoded)) {
       return c.json({ msg: 'Invalid token format' }, toStatus(401));
     }

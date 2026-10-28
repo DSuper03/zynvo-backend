@@ -153,15 +153,25 @@ router.get('/attendees/:id', authMiddleware, adminCoreAuthMiddleware, async (c) 
             userId: true, joinedAt: true, uniquePassId: true,
             paymentStatus: true, approvalStatus: true, paymentScreenshotUrl: true,
             user: { select: { id: true, name: true, email: true, profileAvatar: true, collegeName: true } },
-            registrationAnswers: {
-              select: { answer: true, question: { select: { label: true, type: true } } },
-            },
           },
         },
       },
     });
     if (!event) return jsonError(c, requestId, 'Event not found', 404);
-    return c.json({ msg: 'attendees fetched', event }, 200);
+
+    // registrationAnswers hangs off event/User, not userEvents — fetch once and group per attendee
+    const answers = await prisma.registrationAnswer.findMany({
+      where: { eventId },
+      select: { userId: true, answer: true, question: { select: { label: true, type: true } } },
+    });
+    const attendees = event.attendees.map((a) => ({
+      ...a,
+      registrationAnswers: answers
+        .filter((ans) => ans.userId === a.userId)
+        .map(({ answer, question }) => ({ answer, question })),
+    }));
+
+    return c.json({ msg: 'attendees fetched', event: { ...event, attendees } }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'internal server error', 500, err);
   }

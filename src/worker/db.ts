@@ -11,7 +11,7 @@ import { withAccelerate } from '@prisma/extension-accelerate';
  */
 export function createPrismaClient(databaseUrl: string) {
   return new PrismaClient({
-    datasourceUrl: databaseUrl,
+    accelerateUrl: databaseUrl,
   }).$extends(withAccelerate());
 }
 
