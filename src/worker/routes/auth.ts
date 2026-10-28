@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Handler } from 'hono';
 import { sign } from 'hono/jwt';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
@@ -119,7 +119,7 @@ router.post('/password-login', rateLimiter(30), async (c) => {
 
 // ── POST /login (Clerk-aware — primary login route) ───────────
 
-router.post('/login', rateLimiter(30), async (c) => {
+const loginHandler: Handler<HonoEnv> = async (c) => {
   const requestId = generateRequestId();
   let body: any;
   try { body = await c.req.json(); } catch { return jsonError(c, requestId, 'Invalid JSON', 400); }
@@ -179,15 +179,15 @@ router.post('/login', rateLimiter(30), async (c) => {
     logger.error(`[${requestId}] clerkLogin error`, { error: err.message });
     return jsonError(c, requestId, 'internal server error', 500);
   }
-});
+};
+
+router.post('/login', rateLimiter(30), loginHandler);
 
 // ── POST /clerkLogin ──────────────────────────────────────────
-// Alias kept for frontend compatibility
+// Alias kept for frontend compatibility. Shares the /login handler: a redirect
+// breaks behind the Next.js proxy, which cannot replay a streamed POST body.
 
-router.post('/clerkLogin', rateLimiter(30), async (c) => {
-  // Delegate to /login handler by mutating the path internally
-  return c.redirect('/api/v1/user/login', 307);
-});
+router.post('/clerkLogin', rateLimiter(30), loginHandler);
 
 // ── POST /checkUserExists ─────────────────────────────────────
 
