@@ -7,6 +7,9 @@ import { authMiddleware } from '../middleware/auth';
 import { rateLimiter } from '../middleware/ratelimit';
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
+import { sendMail } from '../mail';
+import { getResendVerificationEmailHTML } from '../emails/verification';
+import { generatePasswordEmailHtml } from '../emails/password';
 
 const router = new Hono<HonoEnv>();
 
@@ -240,6 +243,83 @@ router.post('/syncWithClerk', rateLimiter(20), async (c) => {
 
   const token = await sign({ id: user.id, email: user.email, pfp: user.profileAvatar, name: user.name }, c.env.JWT_SECRET);
   return c.json({ msg: 'login success', token }, 200);
+});
+
+const randomHex = (bytes: number): string =>
+  Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (b) => b.toString(16).padStart(2, '0')).join('');
+
+const PASSWORD_CHARSET =
+  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~`|}{[]:;?><,./-=';
+
+const generateRandomPassword = (length = 10): string =>
+  Array.from(crypto.getRandomValues(new Uint32Array(length)), (n) => PASSWORD_CHARSET[n % PASSWORD_CHARSET.length]).join('');
+
+const appOrigin = (c: { env: { FE_URL: string } }) =>
+  (c.env.FE_URL || 'https://www.zynvosocial.com').replace(/\/$/, '');
+
+// ── POST /forgot ──────────────────────────────────────────────
+// Sets a random temporary password and emails it.
+
+router.post('/forgot', rateLimiter(5), async (c) => {
+  const requestId = generateRequestId();
+  let body: any;
+  try { body = await c.req.json(); } catch { return jsonError(c, requestId, 'Invalid JSON', 400); }
+
+  const email = typeof body?.email === 'string' ? body.email.trim() : '';
+  if (!email) return jsonError(c, requestId, 'Email is required', 400);
+
+  const prisma = c.get('prisma');
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true } });
+    if (!user) return jsonError(c, requestId, 'no such user exists', 404);
+
+    // Send first so a mail failure leaves the existing password untouched.
+    const tempPassword = generateRandomPassword();
+    const sent = await sendMail(c.env, {
+      to: email,
+      subject: 'Your Temporary Password for Zynvo Account',
+      html: generatePasswordEmailHtml(user.name ?? 'User', tempPassword, appOrigin(c)),
+    });
+    if (!sent) return jsonError(c, requestId, 'error in sending mail', 400);
+
+    await prisma.user.update({ where: { email }, data: { password: bcrypt.hashSync(tempPassword, 10) } });
+    return c.json({ msg: 'temporary password sent to your email' }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] forgot password error`, { error: err.message });
+    return jsonError(c, requestId, 'internal server error', 500);
+  }
+});
+
+// ── POST /ResendEmail?email= ──────────────────────────────────
+
+router.post('/ResendEmail', rateLimiter(5), async (c) => {
+  const requestId = generateRequestId();
+  const email = c.req.query('email');
+  if (!email) return jsonError(c, requestId, 'Email is required', 400);
+
+  const prisma = c.get('prisma');
+  try {
+    const user = await prisma.user.findUnique({ where: { email }, select: { name: true } });
+    if (!user?.name) return jsonError(c, requestId, 'No user found', 404);
+
+    const vToken = randomHex(20);
+    await prisma.user.update({
+      where: { email },
+      data: { vToken, expiryToken: Math.floor(Date.now() / 1000) },
+    });
+
+    const url = `${appOrigin(c)}/verification-mail?token=${vToken}&email=${encodeURIComponent(email)}`;
+    const sent = await sendMail(c.env, {
+      to: email,
+      subject: 'One click away from greatness (seriously, just one)',
+      html: getResendVerificationEmailHTML(user.name, url),
+    });
+    if (!sent) return jsonError(c, requestId, 'Error in sending mail', 400);
+    return c.json({ msg: 'Email sent successfully' }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] resend email error`, { error: err.message });
+    return jsonError(c, requestId, 'internal server error', 500);
+  }
 });
 
 // ── POST /verify ──────────────────────────────────────────────

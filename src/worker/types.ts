@@ -11,6 +11,9 @@ export type CFEnv = {
   FIREBASE_CLIENT_EMAIL: string;
   FIREBASE_PRIVATE_KEY: string;
   CLERK_SECRET_KEY: string;
+  SENDGRID_API_KEY?: string;
+  SENDGRID_FROM?: string;
+  SENDGRID_CONTACT_FROM?: string;
   NODE_ENV: string;
 };
 

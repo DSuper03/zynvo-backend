@@ -123,6 +123,29 @@ const founderClub = async (prisma: any, userId: string, clubId: string | undefin
   return club && club.founderEmail === user.email ? club : null;
 };
 
+// ── POST /createAnn/:clubId — club founder posts an announcement ──
+
+router.post('/createAnn/:clubId', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const clubId = c.req.param('clubId');
+  let body: any;
+  try { body = await c.req.json(); } catch { return jsonError(c, requestId, 'Invalid JSON', 400); }
+
+  const { Title, Description } = body ?? {};
+  if (!Title || !Description) return jsonError(c, requestId, 'title and description both are mandatory', 403);
+
+  const prisma = c.get('prisma');
+  try {
+    if (!(await founderClub(prisma, c.get('userId'), clubId))) {
+      return jsonError(c, requestId, 'forbidden access', 403);
+    }
+    await prisma.clubAnnouncement.create({ data: { Title, Description, clubId } });
+    return c.json({ msg: 'Announcement published' }, 201);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
 const ensureMembership = (prisma: any, userId: string, clubId: string) =>
   prisma.userClubMembership.upsert({
     where: { userId_clubId: { userId, clubId } },

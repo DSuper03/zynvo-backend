@@ -21,6 +21,7 @@ import offersRouter from './routes/offers';
 import notificationsRouter from './routes/notifications';
 import waveRouter from './routes/wave';
 import adminRouter from './routes/admin';
+import contactRouter from './routes/contact';
 
 const app = new Hono<HonoEnv>();
 
@@ -68,6 +69,7 @@ app.route('/api/v1/clubs', clubsRouter);
 app.route('/api/v1/teams', teamsRouter);
 app.route('/api/v1/offers', offersRouter);
 app.route('/api/v1/notifications', notificationsRouter);
+app.route('/api/v1/contact', contactRouter);
 app.route('/api/v1/users', waveRouter);    // wave: POST /api/v1/users/:userId
 
 // Admin
