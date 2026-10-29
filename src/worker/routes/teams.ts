@@ -144,6 +144,7 @@ router.get('/my-team/:eventId', authMiddleware, async (c) => {
       team: {
         select: {
           id: true, teamName: true, teamCode: true, eventId: true, createdById: true, createdAt: true,
+          lookingForMembers: true, lookingFor: true,
           event: { select: { EventName: true, TeamSize: true } },
           members: {
             select: { id: true, role: true, joinedAt: true, user: { select: { id: true, name: true, email: true, profileAvatar: true } } },
