@@ -17,6 +17,8 @@ model User {
   vToken        String?
   ValidFor      Int?
   expiryToken   Int?
+  resetTokenHash   String?
+  resetTokenExpiry DateTime?
   clubId        String?
   clubName      String?
   collegeName   String         @default("not joined")

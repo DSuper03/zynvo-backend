@@ -63,3 +63,26 @@ function escapeHtml(input: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+export function generateResetLinkEmailHtml(name: string, resetUrl: string): string {
+  const year = new Date().getFullYear();
+  const safeName = String(name ?? 'User').replace(/[&<>"']/g, '');
+  return `<!doctype html>
+<html>
+  <body style="margin:0;background:#0b0b0b;font-family:Arial,Helvetica,sans-serif;color:#f5f5f5;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
+      <tr><td align="center">
+        <table role="presentation" width="100%" style="max-width:480px;background:#151515;border-radius:12px;padding:32px;">
+          <tr><td>
+            <h1 style="margin:0 0 16px;font-size:22px;color:#facc15;">Reset your password</h1>
+            <p style="margin:0 0 16px;line-height:1.5;">Hi ${safeName}, we received a request to reset your Zynvo password.</p>
+            <p style="margin:0 0 24px;line-height:1.5;">This link works once and expires in 30 minutes.</p>
+            <a href="${resetUrl}" style="display:inline-block;background:#facc15;color:#000;font-weight:bold;text-decoration:none;padding:12px 20px;border-radius:8px;">Choose a new password</a>
+            <p style="margin:24px 0 0;font-size:13px;color:#a3a3a3;line-height:1.5;">If you didn't ask for this, ignore this email. Your password stays the same.</p>
+          </td></tr>
+        </table>
+        <p style="font-size:12px;color:#737373;">© ${year} Zynvo</p>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
+}

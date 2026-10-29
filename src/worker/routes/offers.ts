@@ -228,7 +228,10 @@ router.post('/admin/offer', authMiddleware, adminAuthMiddleware, async (c) => {
   const prisma = c.get('prisma');
   const brand = await prisma.brand.findUnique({ where: { id: parsed.data.brandId } });
   if (!brand) return jsonError(c, requestId, 'Brand ID not found', 404);
-  const offer = await prisma.offer.create({ data: parsed.data });
+  // Optional in the shared schema, but the column is required for new offers.
+  const { redemptionLink } = parsed.data;
+  if (!redemptionLink) return jsonError(c, requestId, 'redemptionLink is required', 400);
+  const offer = await prisma.offer.create({ data: { ...parsed.data, redemptionLink } });
   return c.json({ msg: 'Offer created successfully', offer }, 201);
 });
 
