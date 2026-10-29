@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { defineConfig, env } from 'prisma/config'
+import { defineConfig } from 'prisma/config'
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',
@@ -8,6 +8,8 @@ export default defineConfig({
     seed: 'tsx prisma/seed.ts'
   },
   datasource: {
-    url: env('DIRECT_DATABASE_URL'),
+    // process.env (not env()) so `prisma generate` works in CI builds where no
+    // database URL is set; migrate/seed still need DIRECT_DATABASE_URL.
+    url: process.env.DIRECT_DATABASE_URL ?? '',
   },
 })

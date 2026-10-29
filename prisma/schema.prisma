@@ -17,6 +17,8 @@ model User {
   vToken        String?
   ValidFor      Int?
   expiryToken   Int?
+  resetTokenHash   String?
+  resetTokenExpiry DateTime?
   clubId        String?
   clubName      String?
   collegeName   String         @default("not joined")
@@ -54,6 +56,10 @@ model User {
   followers     Follow[]       @relation("UserFollowers")
 
   clubMemberships UserClubMembership[]
+  reportsFiled  ContentReport[] @relation("ContentReporter")
+  blocking      UserBlock[]     @relation("UserBlocking")
+  blockedBy     UserBlock[]     @relation("UserBlockedBy")
+  teamJoinRequests TeamJoinRequest[] @relation("TeamJoinRequester")
 
   @@index([name])
   @@index([collegeName])
@@ -281,6 +287,8 @@ model userEvents {
   paymentStatus        String    @default("CONFIRMED")
   paymentVerifiedAt    DateTime?
   approvalStatus       String    @default("approved")
+  checkedInAt          DateTime?
+  checkedInById        String?
   event                event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -339,9 +347,33 @@ model Team {
   eventId     String
   createdById String
   createdAt   DateTime     @default(now())
+  // Team finder: open teams list what they still need.
+  lookingForMembers Boolean @default(false)
+  lookingFor        String?
   user        User         @relation(fields: [createdById], references: [id])
   event       event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   members     TeamMember[]
+  joinRequests TeamJoinRequest[]
+}
+
+// ── Team join requests (team finder) ──────────────────────────
+
+model TeamJoinRequest {
+  id        String   @id @default(uuid())
+  teamId    String
+  userId    String
+  eventId   String
+  message   String?
+  status    String   @default("pending") // pending | accepted | declined
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation("TeamJoinRequester", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([teamId, status])
+  @@index([eventId, userId])
 }
 
 model TeamMember {
@@ -554,4 +586,39 @@ model Follow {
   @@id([followerId, followingId])
   @@index([followerId])
   @@index([followingId])
+}
+
+// ── Content reports (posts / users) ───────────────────────────
+// Filed from the mobile app's moderation sheet; one report per reporter
+// per target.
+
+model ContentReport {
+  id         String   @id @default(uuid())
+  reporterId String
+  targetType String // "post" | "user"
+  targetId   String
+  reason     String
+  details    String?
+  status     String   @default("open")
+  createdAt  DateTime @default(now())
+
+  reporter User @relation("ContentReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@unique([reporterId, targetType, targetId])
+  @@index([targetType, targetId])
+  @@index([status])
+}
+
+// ── User blocks ───────────────────────────────────────────────
+
+model UserBlock {
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("UserBlocking", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("UserBlockedBy", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
 }
