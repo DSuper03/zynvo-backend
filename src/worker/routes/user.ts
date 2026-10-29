@@ -26,7 +26,12 @@ router.get('/getUser', authMiddleware, async (c) => {
         clubId: true, email: true, isVerified: true,
         eventAttended: {
           where: { userId },
-          select: { uniquePassId: true, event: { select: { EventName: true, id: true, posterUrl: true } } },
+          select: {
+            uniquePassId: true,
+            checkedInAt: true,
+            // Dates/venue feed the app's "My events" calendar.
+            event: { select: { EventName: true, id: true, posterUrl: true, startDate: true, endDate: true, Venue: true, EventMode: true, clubName: true } },
+          },
         },
         CreatePost: {
           where: { authorId: userId },
@@ -445,6 +450,108 @@ router.get('/:userId/following', authMiddleware, async (c) => {
     prisma.follow.count({ where: { followerId: userId } }),
   ]);
   return c.json({ msg: 'following fetched', following: rows.map((r: any) => ({ ...r.following, followedAt: r.createdAt })), total, totalPages: Math.ceil(total / limit), page }, 200);
+});
+
+// ── GET /suggestions ──────────────────────────────────────────
+// People at the caller's college ranked by shared skills (User.tags),
+// excluding people they follow or have a block with.
+
+const PLACEHOLDER_COLLEGES = ['not joined', 'not_joined', 'zync college', 'n/a', 'na', 'none', ''];
+
+router.get('/suggestions', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const userId = c.get('userId');
+  const prisma = c.get('prisma');
+  try {
+    const me = await prisma.user.findUnique({ where: { id: userId }, select: { collegeName: true, tags: true } });
+    if (!me) return jsonError(c, requestId, 'User not found', 404);
+
+    const [follows, blocks] = await Promise.all([
+      prisma.follow.findMany({ where: { followerId: userId }, select: { followingId: true } }),
+      prisma.userBlock.findMany({
+        where: { OR: [{ blockerId: userId }, { blockedId: userId }] },
+        select: { blockerId: true, blockedId: true },
+      }),
+    ]);
+    const exclude = new Set<string>([userId, ...follows.map((f) => f.followingId)]);
+    for (const b of blocks) exclude.add(b.blockerId === userId ? b.blockedId : b.blockerId);
+
+    const myTags = me.tags.map((t) => t.toLowerCase());
+    const hasCollege = !PLACEHOLDER_COLLEGES.includes(me.collegeName.trim().toLowerCase());
+    if (!hasCollege && myTags.length === 0) return c.json({ suggestions: [] }, 200);
+
+    const candidates = await prisma.user.findMany({
+      where: {
+        id: { notIn: [...exclude] },
+        ...(hasCollege ? { collegeName: me.collegeName } : { tags: { hasSome: me.tags } }),
+      },
+      take: 200,
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, profileAvatar: true, collegeName: true, course: true, year: true, tags: true },
+    });
+
+    const suggestions = candidates
+      .map((u) => ({ ...u, sharedTags: u.tags.filter((t) => myTags.includes(t.toLowerCase())) }))
+      .sort((a, b) => b.sharedTags.length - a.sharedTags.length)
+      .slice(0, 20);
+    return c.json({ suggestions }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'error fetching suggestions', 500, err);
+  }
+});
+
+// ── GET /:userId/badges ───────────────────────────────────────
+// Derived from existing data (tiers from BADGE_ACHIEVEMENT_SYSTEM.md, plus
+// attendee tiers). Returns every badge with earned + progress.
+
+const CREATOR_TIERS = [
+  { id: 'event_creator', name: 'Event Creator', icon: '⭐', goal: 1, description: 'Created a first event' },
+  { id: 'event_master', name: 'Event Master', icon: '🏆', goal: 5, description: 'Created 5 events' },
+  { id: 'event_legendary', name: 'Event Legendary', icon: '⚡', goal: 10, description: 'Created 10 events' },
+  { id: 'community_champion', name: 'Community Champion', icon: '🌟', goal: 20, description: 'Created 20 events' },
+];
+const ATTENDEE_TIERS = [
+  { id: 'first_event', name: 'First Event', icon: '🎟️', goal: 1, description: 'Registered for a first event' },
+  { id: 'regular', name: 'Regular', icon: '🔥', goal: 5, description: 'Registered for 5 events' },
+  { id: 'event_explorer', name: 'Event Explorer', icon: '🧭', goal: 10, description: 'Registered for 10 events' },
+];
+
+router.get('/:userId/badges', async (c) => {
+  const requestId = generateRequestId();
+  const userId = c.req.param('userId');
+  const prisma = c.get('prisma');
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!user) return jsonError(c, requestId, 'User not found', 404);
+
+    const [founded, memberships, created, attended] = await Promise.all([
+      prisma.clubs.findMany({ where: { founderEmail: user.email }, select: { id: true, name: true } }),
+      prisma.userClubMembership.count({ where: { userId } }),
+      prisma.event.count({ where: { createdById: userId } }),
+      prisma.userEvents.count({ where: { userId } }),
+    ]);
+
+    const tier = (t: (typeof CREATOR_TIERS)[number], count: number) => ({
+      id: t.id, name: t.name, icon: t.icon, description: t.description,
+      earned: count >= t.goal, progress: Math.min(count, t.goal), goal: t.goal,
+    });
+    const badges = [
+      {
+        id: 'club_founder', name: 'Club Founder', icon: '👑',
+        description: founded.length ? `Founded ${founded.map((f) => f.name).join(', ')}` : 'Founded a club',
+        earned: founded.length > 0, progress: Math.min(founded.length, 1), goal: 1,
+      },
+      {
+        id: 'club_member', name: 'Club Member', icon: '🤝', description: 'Joined a club',
+        earned: memberships > 0, progress: Math.min(memberships, 1), goal: 1,
+      },
+      ...CREATOR_TIERS.map((t) => tier(t, created)),
+      ...ATTENDEE_TIERS.map((t) => tier(t, attended)),
+    ];
+    return c.json({ badges, stats: { clubsFounded: founded.length, clubsJoined: memberships, eventsCreated: created, eventsAttended: attended } }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'error fetching badges', 500, err);
+  }
 });
 
 export default router;

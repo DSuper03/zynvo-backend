@@ -59,6 +59,7 @@ model User {
   reportsFiled  ContentReport[] @relation("ContentReporter")
   blocking      UserBlock[]     @relation("UserBlocking")
   blockedBy     UserBlock[]     @relation("UserBlockedBy")
+  teamJoinRequests TeamJoinRequest[] @relation("TeamJoinRequester")
 
   @@index([name])
   @@index([collegeName])
@@ -286,6 +287,8 @@ model userEvents {
   paymentStatus        String    @default("CONFIRMED")
   paymentVerifiedAt    DateTime?
   approvalStatus       String    @default("approved")
+  checkedInAt          DateTime?
+  checkedInById        String?
   event                event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -344,9 +347,33 @@ model Team {
   eventId     String
   createdById String
   createdAt   DateTime     @default(now())
+  // Team finder: open teams list what they still need.
+  lookingForMembers Boolean @default(false)
+  lookingFor        String?
   user        User         @relation(fields: [createdById], references: [id])
   event       event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   members     TeamMember[]
+  joinRequests TeamJoinRequest[]
+}
+
+// ── Team join requests (team finder) ──────────────────────────
+
+model TeamJoinRequest {
+  id        String   @id @default(uuid())
+  teamId    String
+  userId    String
+  eventId   String
+  message   String?
+  status    String   @default("pending") // pending | accepted | declined
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation("TeamJoinRequester", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([teamId, status])
+  @@index([eventId, userId])
 }
 
 model TeamMember {

@@ -1068,7 +1068,7 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
         where: { eventId, ...(since ? { joinedAt: { gt: since } } : {}) },
         orderBy: { joinedAt: 'desc' },
         select: {
-          joinedAt: true, uniquePassId: true, paymentStatus: true, paymentScreenshotUrl: true,
+          joinedAt: true, uniquePassId: true, paymentStatus: true, paymentScreenshotUrl: true, checkedInAt: true,
           user: { select: { id: true, name: true, email: true, collegeName: true } },
         },
       });
@@ -1080,6 +1080,7 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
 
       const header = [
         'User ID', 'Name', 'Email', 'College', 'Joined At', 'Pass ID', 'Payment Status', 'Payment Screenshot URL',
+        'Checked In At',
         ...customQuestions.map((q: any) => q.label),
       ];
       const lines = [header.map(csvCell).join(',')];
@@ -1089,6 +1090,7 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
         lines.push([
           u.id ?? '', u.name ?? '', u.email ?? '', u.collegeName ?? '', r.joinedAt.toISOString(),
           r.uniquePassId ?? '', r.paymentStatus ?? 'CONFIRMED', r.paymentScreenshotUrl ?? '',
+          r.checkedInAt ? r.checkedInAt.toISOString() : '',
           ...customQuestions.map((q: any) => ua[q.id] || ''),
         ].map(csvCell).join(','));
       }
@@ -1112,7 +1114,7 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
         skip: (page - 1) * limit,
         orderBy: { joinedAt: 'desc' },
         select: {
-          joinedAt: true, uniquePassId: true,
+          joinedAt: true, uniquePassId: true, checkedInAt: true,
           user: { select: { id: true, name: true, email: true, collegeName: true, course: true, year: true } },
         },
       }),
@@ -1130,6 +1132,7 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
       data: participants.map((p: any) => ({
         joinedAt: p.joinedAt,
         passId: p.uniquePassId,
+        checkedInAt: p.checkedInAt,
         user: p.user,
         customAnswers: (p.user?.id && answersByUser[p.user.id]) || [],
       })),
@@ -1221,6 +1224,118 @@ router.delete('/schedule/:eventId/session/:sessionId', authMiddleware, async (c)
     return c.json({ msg: 'Session deleted' }, 200);
   } catch {
     return c.json({ msg: 'Internal server error' }, 500);
+  }
+});
+
+// ── GET /friends-going?ids=a,b,c ──────────────────────────────
+// Per event: total registrations plus up to 5 people the caller follows who
+// registered. Batched so event lists need one request.
+
+router.get('/friends-going', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const ids = [...new Set((c.req.query('ids') ?? '').split(',').map((s) => s.trim()).filter(Boolean))].slice(0, 50);
+  if (ids.length === 0) return c.json({ events: {} }, 200);
+
+  const prisma = c.get('prisma');
+  try {
+    const follows = await prisma.follow.findMany({ where: { followerId: c.get('userId') }, select: { followingId: true } });
+    const followingIds = follows.map((f) => f.followingId);
+    const [friendRows, totals] = await Promise.all([
+      followingIds.length === 0
+        ? Promise.resolve([])
+        : prisma.userEvents.findMany({
+          where: { eventId: { in: ids }, userId: { in: followingIds } },
+          orderBy: { joinedAt: 'desc' },
+          select: { eventId: true, user: { select: { id: true, name: true, profileAvatar: true } } },
+        }),
+      prisma.userEvents.groupBy({ by: ['eventId'], where: { eventId: { in: ids } }, _count: { _all: true } }),
+    ]);
+
+    type Friend = { id: string; name: string | null; profileAvatar: string | null };
+    const events: Record<string, { total: number; friendsCount: number; friends: Friend[] }> = {};
+    for (const id of ids) events[id] = { total: 0, friendsCount: 0, friends: [] };
+    for (const t of totals) events[t.eventId].total = t._count._all;
+    for (const r of friendRows as { eventId: string; user: Friend }[]) {
+      const e = events[r.eventId];
+      e.friendsCount++;
+      if (e.friends.length < 5) e.friends.push(r.user);
+    }
+    return c.json({ events }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] friends-going error`, { error: err.message });
+    return jsonError(c, requestId, 'Internal server error', 500);
+  }
+});
+
+// ── QR check-in ───────────────────────────────────────────────
+// Organisers (club founder/core members, event creator) scan a pass QR.
+// QRs encode .../verify-event/<passId> (app) or .../verify-pass/<passId>
+// (web); a bare pass id is accepted too.
+
+const passIdFromScan = (raw: string): string => {
+  const value = raw.trim();
+  const last = value.includes('/') ? value.split('?')[0].replace(/\/+$/, '').split('/').pop() ?? '' : value;
+  try { return decodeURIComponent(last); } catch { return last; }
+};
+
+router.post('/:eventId/check-in', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const body = await readJson(c);
+  const passId = typeof body?.passId === 'string' ? passIdFromScan(body.passId) : '';
+  if (!passId) return c.json({ status: 'invalid', msg: 'No pass found in this QR code.' }, 400);
+
+  const prisma = c.get('prisma');
+  const userId = c.get('userId');
+  try {
+    const denied = await canManageSchedule(prisma, eventId, userId);
+    if (denied) return c.json({ msg: denied.msg }, denied.status);
+
+    const reg = await prisma.userEvents.findFirst({
+      where: { eventId, uniquePassId: passId },
+      select: {
+        userId: true, checkedInAt: true, approvalStatus: true, paymentStatus: true,
+        user: { select: { id: true, name: true, profileAvatar: true, collegeName: true } },
+      },
+    });
+    if (!reg) return c.json({ status: 'invalid', msg: 'This pass is not for this event.' }, 404);
+    if (reg.approvalStatus !== 'approved') {
+      return c.json({ status: 'not_approved', msg: 'This registration has not been approved.', attendee: reg.user }, 409);
+    }
+    if (['PENDING', 'REJECTED'].includes(String(reg.paymentStatus).toUpperCase())) {
+      return c.json({ status: 'payment_pending', msg: 'Payment for this pass is not confirmed.', attendee: reg.user }, 409);
+    }
+    if (reg.checkedInAt) {
+      return c.json({ status: 'already', msg: 'Already checked in.', checkedInAt: reg.checkedInAt, attendee: reg.user }, 200);
+    }
+
+    const updated = await prisma.userEvents.update({
+      where: { userId_eventId: { userId: reg.userId, eventId } },
+      data: { checkedInAt: new Date(), checkedInById: userId },
+      select: { checkedInAt: true },
+    });
+    return c.json({ status: 'checked_in', msg: 'Checked in.', checkedInAt: updated.checkedInAt, attendee: reg.user }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] check-in error`, { error: err.message, eventId });
+    return jsonError(c, requestId, 'Internal server error', 500);
+  }
+});
+
+router.get('/:eventId/check-in/stats', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const prisma = c.get('prisma');
+  try {
+    const denied = await canManageSchedule(prisma, eventId, c.get('userId'));
+    if (denied) return c.json({ msg: denied.msg }, denied.status);
+    const [registered, checkedIn] = await Promise.all([
+      prisma.userEvents.count({ where: { eventId } }),
+      prisma.userEvents.count({ where: { eventId, checkedInAt: { not: null } } }),
+    ]);
+    return c.json({ registered, checkedIn }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] check-in stats error`, { error: err.message, eventId });
+    return jsonError(c, requestId, 'Internal server error', 500);
   }
 });
 
