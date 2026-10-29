@@ -33,7 +33,13 @@ async function main() {
       return;
     }
     for (const u of plaintext) {
-      await prisma.user.update({ where: { id: u.id }, data: { password: bcrypt.hashSync(u.password, 10) } });
+      // Return only the id: the full row includes columns from migrations that
+      // may not be applied yet.
+      await prisma.user.update({
+        where: { id: u.id },
+        data: { password: bcrypt.hashSync(u.password, 10) },
+        select: { id: true },
+      });
     }
     console.log(`Hashed ${plaintext.length} passwords.`);
   } finally {
