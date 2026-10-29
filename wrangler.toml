@@ -3,6 +3,10 @@ main = "src/worker/index.ts"
 tsconfig = "tsconfig.worker.json"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
+# DATABASE_URL, JWT_SECRET, SENDGRID_API_KEY etc. are set in the dashboard as
+# variables; without this every deploy (CLI or Git build) replaces them with
+# the [vars] below and the worker loses its database.
+keep_vars = true
 
 # ── Non-secret config vars ────────────────────────────────────
 # Secrets (JWT_SECRET, DATABASE_URL, FIREBASE_*, CLERK_SECRET_KEY, ADMIN_EMAILS)
