@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { HonoEnv } from '../types';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, optionalUserId } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
 import { createNotification, sendToMany, notifyFollowersOfNewPost } from '../utils/notification';
@@ -121,12 +121,23 @@ router.get('/all', async (c) => {
   const skip = (page - 1) * limit;
   const prisma = c.get('prisma') as any;
   try {
+    // Signed-in callers don't see posts from users they blocked or who blocked them.
+    const viewerId = await optionalUserId(c);
+    let where: Record<string, unknown> = {};
+    if (viewerId) {
+      const blocks = await prisma.userBlock.findMany({
+        where: { OR: [{ blockerId: viewerId }, { blockedId: viewerId }] },
+        select: { blockerId: true, blockedId: true },
+      });
+      const hidden = blocks.map((b: any) => (b.blockerId === viewerId ? b.blockedId : b.blockerId));
+      if (hidden.length > 0) where = { authorId: { notIn: hidden } };
+    }
     const [posts, totalData] = await Promise.all([
       prisma.createPost.findMany({
-        skip, take: limit, orderBy: { createdAt: 'desc' },
+        where, skip, take: limit, orderBy: { createdAt: 'desc' },
         select: { ...postSelectBase, author: { select: { profileAvatar: true, name: true } }, upvotes: true, downvotes: true },
       }),
-      prisma.createPost.count(),
+      prisma.createPost.count({ where }),
     ]);
     if (!posts || posts.length === 0) return c.json({ msg: 'not enough posts to show' }, 200);
     return c.json({ msg: 'fetched', posts, totalPages: Math.ceil(totalData / limit) }, 200);

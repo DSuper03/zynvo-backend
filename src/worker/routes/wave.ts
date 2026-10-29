@@ -38,6 +38,18 @@ const waveHandler: Handler<HonoEnv> = async (c) => {
     if (!sender) return jsonError(c, requestId, 'Sender not found.', 401);
     if (!recipient) return jsonError(c, requestId, 'Recipient not found.', 404);
 
+    // A user who blocked the sender (or was blocked by them) gets no waves.
+    const blocked = await prisma.userBlock.findFirst({
+      where: {
+        OR: [
+          { blockerId: receiverId, blockedId: senderId },
+          { blockerId: senderId, blockedId: receiverId },
+        ],
+      },
+      select: { blockerId: true },
+    });
+    if (blocked) return jsonError(c, requestId, 'You cannot wave at this user.', 403);
+
     // Rate limit check
     const existingWave = await prisma.wave.findUnique({
       where: { senderId_receiverId: { senderId, receiverId } },
@@ -93,5 +105,55 @@ const waveHandler: Handler<HonoEnv> = async (c) => {
 
 router.post('/:userId', authMiddleware, waveHandler);
 router.post('/:userId/wave', authMiddleware, waveHandler);
+
+// ── POST/DELETE /:userId/block ────────────────────────────────
+// Blocking is idempotent and also drops any follow between the two users.
+
+router.post('/:userId/block', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const blockerId = c.get('userId');
+  const blockedId = c.req.param('userId');
+  if (!blockedId) return jsonError(c, requestId, 'userId is required', 400);
+  if (blockerId === blockedId) return jsonError(c, requestId, 'You cannot block yourself.', 400);
+
+  const prisma = c.get('prisma');
+  try {
+    const target = await prisma.user.findUnique({ where: { id: blockedId }, select: { id: true } });
+    if (!target) return jsonError(c, requestId, 'User not found.', 404);
+
+    await prisma.$transaction([
+      prisma.userBlock.upsert({
+        where: { blockerId_blockedId: { blockerId, blockedId } },
+        create: { blockerId, blockedId },
+        update: {},
+      }),
+      prisma.follow.deleteMany({
+        where: {
+          OR: [
+            { followerId: blockerId, followingId: blockedId },
+            { followerId: blockedId, followingId: blockerId },
+          ],
+        },
+      }),
+    ]);
+    return c.json({ msg: 'User blocked', blockedUserId: blockedId }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error.', 500, err);
+  }
+});
+
+router.delete('/:userId/block', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const blockedId = c.req.param('userId');
+  if (!blockedId) return jsonError(c, requestId, 'userId is required', 400);
+
+  const prisma = c.get('prisma');
+  try {
+    await prisma.userBlock.deleteMany({ where: { blockerId: c.get('userId'), blockedId } });
+    return c.json({ msg: 'User unblocked' }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error.', 500, err);
+  }
+});
 
 export default router;

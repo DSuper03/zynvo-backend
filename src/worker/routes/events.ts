@@ -1026,4 +1026,202 @@ router.put('/eventQueue/:eventId/approve', authMiddleware, async (c) => {
   }
 });
 
+// ── GET /participants/:eventId — attendee list (JSON or ?format=csv) ──
+// Ported from Express eventAttendees; same response shapes.
+
+const csvCell = (v: unknown): string => {
+  if (v == null) return '';
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const prisma = c.get('prisma');
+  try {
+    const customQuestions = await prisma.eventCustomQuestion.findMany({
+      where: { eventId },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    if (c.req.query('format') === 'csv') {
+      const sinceParam = c.req.query('since');
+      let since: Date | null = null;
+      if (sinceParam) {
+        since = new Date(sinceParam);
+        if (Number.isNaN(since.getTime())) return c.json({ message: 'Invalid since timestamp' }, 400);
+      }
+      const event = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true } });
+      if (!event) return c.json({ message: 'Event not found' }, 404);
+
+      const [latest, total] = await Promise.all([
+        prisma.userEvents.findFirst({ where: { eventId }, orderBy: { joinedAt: 'desc' }, select: { joinedAt: true } }),
+        prisma.userEvents.count({ where: { eventId } }),
+      ]);
+      const etag = latest ? `${total}-${latest.joinedAt.getTime()}` : `0-${total}`;
+      if (c.req.header('if-none-match') === etag) {
+        return new Response(null, { status: 304, headers: { ETag: etag, 'Cache-Control': 'no-cache' } });
+      }
+
+      const rows = await prisma.userEvents.findMany({
+        where: { eventId, ...(since ? { joinedAt: { gt: since } } : {}) },
+        orderBy: { joinedAt: 'desc' },
+        select: {
+          joinedAt: true, uniquePassId: true, paymentStatus: true, paymentScreenshotUrl: true,
+          user: { select: { id: true, name: true, email: true, collegeName: true } },
+        },
+      });
+      const answers = await prisma.registrationAnswer.findMany({
+        where: { eventId, userId: { in: rows.map((r: any) => r.user.id).filter(Boolean) } },
+      });
+      const byUser: Record<string, Record<string, string>> = {};
+      for (const a of answers) (byUser[a.userId] ??= {})[a.questionId] = a.answer;
+
+      const header = [
+        'User ID', 'Name', 'Email', 'College', 'Joined At', 'Pass ID', 'Payment Status', 'Payment Screenshot URL',
+        ...customQuestions.map((q: any) => q.label),
+      ];
+      const lines = [header.map(csvCell).join(',')];
+      for (const r of rows as any[]) {
+        const u = r.user;
+        const ua = (u.id && byUser[u.id]) || {};
+        lines.push([
+          u.id ?? '', u.name ?? '', u.email ?? '', u.collegeName ?? '', r.joinedAt.toISOString(),
+          r.uniquePassId ?? '', r.paymentStatus ?? 'CONFIRMED', r.paymentScreenshotUrl ?? '',
+          ...customQuestions.map((q: any) => ua[q.id] || ''),
+        ].map(csvCell).join(','));
+      }
+      return new Response('﻿' + lines.join('\n') + '\n', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="participants_${eventId}.csv"`,
+          ETag: etag,
+          'Cache-Control': 'no-cache',
+        },
+      });
+    }
+
+    const page = Math.max(parseInt(c.req.query('page') ?? '1') || 1, 1);
+    const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '50') || 50, 1), 100);
+    const [participants, total] = await Promise.all([
+      prisma.userEvents.findMany({
+        where: { eventId },
+        take: limit,
+        skip: (page - 1) * limit,
+        orderBy: { joinedAt: 'desc' },
+        select: {
+          joinedAt: true, uniquePassId: true,
+          user: { select: { id: true, name: true, email: true, collegeName: true, course: true, year: true } },
+        },
+      }),
+      prisma.userEvents.count({ where: { eventId } }),
+    ]);
+    const answers = await prisma.registrationAnswer.findMany({
+      where: { eventId, userId: { in: participants.map((p: any) => p.user?.id).filter(Boolean) } },
+      include: { question: { select: { label: true } } },
+    });
+    const answersByUser: Record<string, { label: string; answer: string }[]> = {};
+    for (const a of answers as any[]) (answersByUser[a.userId] ??= []).push({ label: a.question.label, answer: a.answer });
+
+    return c.json({
+      msg: 'participants fetched',
+      data: participants.map((p: any) => ({
+        joinedAt: p.joinedAt,
+        passId: p.uniquePassId,
+        user: p.user,
+        customAnswers: (p.user?.id && answersByUser[p.user.id]) || [],
+      })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] participants error`, { error: err.message, eventId });
+    return jsonError(c, requestId, 'Internal server error', 500);
+  }
+});
+
+// ── Schedule ──────────────────────────────────────────────────
+// Ported from Express. Managing sessions is open to the club's founder/core
+// members and the event's creator.
+
+const canManageSchedule = async (prisma: any, eventId: string, userId: string) => {
+  const { event, allowed } = await managesEventClub(prisma, eventId, userId);
+  if (!event) return { status: 404 as const, msg: 'Event not found' };
+  if (allowed) return null;
+  const creator = await prisma.event.findUnique({ where: { id: eventId }, select: { createdById: true } });
+  if (creator?.createdById === userId) return null;
+  return { status: 403 as const, msg: 'Access denied. Only club heads, core members, or event creators can manage this event.' };
+};
+
+router.get('/schedule/:eventId', async (c) => {
+  const eventId = c.req.param('eventId');
+  const prisma = c.get('prisma');
+  try {
+    const days = await prisma.scheduleDay.findMany({
+      where: { eventId },
+      include: { sessions: true },
+      orderBy: { day: 'asc' },
+    });
+    if (days.length === 0) {
+      return c.json({ response: [{ id: 'default-day-1', day: 1, date: 'Day 1', name: 'Day 1', sessions: [] }] }, 200);
+    }
+    return c.json({ response: days }, 200);
+  } catch {
+    return c.json({ msg: 'Internal server error' }, 500);
+  }
+});
+
+router.post('/schedule/:eventId/session', authMiddleware, async (c) => {
+  const eventId = c.req.param('eventId');
+  const body = await readJson(c);
+  const { day, time, title, description, location, speakers } = body ?? {};
+
+  const dayNum = Number(day);
+  if (!Number.isInteger(dayNum) || dayNum < 1) return c.json({ msg: 'day must be a positive integer' }, 400);
+  if (!time || !title || !location) return c.json({ msg: 'time, title and location are required' }, 400);
+
+  const prisma = c.get('prisma');
+  try {
+    const denied = await canManageSchedule(prisma, eventId, c.get('userId'));
+    if (denied) return c.json({ msg: denied.msg }, denied.status);
+
+    const scheduleDay = await prisma.scheduleDay.upsert({
+      where: { eventId_day: { eventId, day: dayNum } },
+      create: { eventId, day: dayNum, date: `Day ${dayNum}`, name: `Day ${dayNum}` },
+      update: {},
+    });
+    const session = await prisma.scheduleSession.create({
+      data: {
+        scheduleDayId: scheduleDay.id,
+        time, title, location,
+        description: description || '',
+        speakers: speakers || [],
+      },
+    });
+    return c.json({ msg: 'Session added', response: session }, 201);
+  } catch {
+    return c.json({ msg: 'Internal server error' }, 500);
+  }
+});
+
+router.delete('/schedule/:eventId/session/:sessionId', authMiddleware, async (c) => {
+  const eventId = c.req.param('eventId');
+  const sessionId = c.req.param('sessionId');
+  const prisma = c.get('prisma');
+  try {
+    const denied = await canManageSchedule(prisma, eventId, c.get('userId'));
+    if (denied) return c.json({ msg: denied.msg }, denied.status);
+
+    // Only delete sessions that belong to this event's schedule.
+    const { count } = await prisma.scheduleSession.deleteMany({
+      where: { id: sessionId, scheduleDay: { eventId } },
+    });
+    if (count === 0) return c.json({ msg: 'Session not found' }, 404);
+    return c.json({ msg: 'Session deleted' }, 200);
+  } catch {
+    return c.json({ msg: 'Internal server error' }, 500);
+  }
+});
+
 export default router;

@@ -260,6 +260,32 @@ router.post('/leaveClub/:id', authMiddleware, async (c) => {
 
 // ── GET /isClubAdmin/:id ──────────────────────────────────────
 
+// GET /isClubAdmin (no id) — is the caller a founder or core member of any
+// club? The mobile app gates event creation on this; 403 means "no".
+router.get('/isClubAdmin', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const prisma = c.get('prisma');
+  try {
+    const user = await prisma.user.findUnique({ where: { id: c.get('userId') }, select: { email: true } });
+    if (!user) return jsonError(c, requestId, 'Invalid user', 404);
+    const email = user.email;
+    const club = await prisma.clubs.findFirst({
+      where: { OR: [{ founderEmail: email }, { coremember1: email }, { coremember2: email }, { coremember3: email }] },
+      select: { id: true, name: true, founderEmail: true },
+    });
+    if (!club) return jsonError(c, requestId, 'you are not an admin', 403);
+    return c.json({
+      msg: 'Fetched',
+      founder: 'true',
+      role: club.founderEmail === email ? 'founder' : 'core',
+      clubId: club.id,
+      clubName: club.name,
+    }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'some error occured in server', 500, err);
+  }
+});
+
 router.get('/isClubAdmin/:id', authMiddleware, async (c) => {
   const requestId = generateRequestId();
   const id = c.get('userId');

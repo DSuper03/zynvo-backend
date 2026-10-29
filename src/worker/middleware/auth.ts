@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { verify } from 'hono/jwt';
 import type { HonoEnv } from '../types';
@@ -32,6 +32,22 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
       return c.json({ msg: 'Token expired' }, toStatus(401));
     }
     return c.json({ msg: 'Invalid token' }, toStatus(401));
+  }
+};
+
+// ── optionalUserId ─────────────────────────────────────────────
+// For public routes that personalise when a valid token is sent: returns the
+// caller's id, or null for anonymous / invalid tokens (never rejects).
+
+export const optionalUserId = async (c: Context<HonoEnv>): Promise<string | null> => {
+  const authHeader = c.req.header('authorization');
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return null;
+  try {
+    const decoded = await verify(token, c.env.JWT_SECRET, 'HS256');
+    return typeof decoded === 'object' && decoded && 'id' in decoded ? (decoded.id as string) : null;
+  } catch {
+    return null;
   }
 };
 
