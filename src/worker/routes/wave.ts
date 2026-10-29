@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Handler } from 'hono';
 import type { HonoEnv } from '../types';
 import { authMiddleware } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
@@ -16,9 +16,10 @@ const getFcmCfg = (c: any): FcmConfig => ({
   privateKey: c.env.FIREBASE_PRIVATE_KEY,
 });
 
-// ── POST /:userId ─────────────────────────────────────────────
+// ── POST /:userId, POST /:userId/wave ─────────────────────────
+// /:userId/wave is the Express path the mobile app calls.
 
-router.post('/:userId', authMiddleware, async (c) => {
+const waveHandler: Handler<HonoEnv> = async (c) => {
   const requestId = generateRequestId();
   const senderId = c.get('userId');
   const receiverId = c.req.param('userId');
@@ -88,6 +89,9 @@ router.post('/:userId', authMiddleware, async (c) => {
     logger.error(`[${requestId}] waveUser error`, { error: err.message, senderId, receiverId });
     return jsonError(c, requestId, 'Internal server error.', 500);
   }
-});
+};
+
+router.post('/:userId', authMiddleware, waveHandler);
+router.post('/:userId/wave', authMiddleware, waveHandler);
 
 export default router;
