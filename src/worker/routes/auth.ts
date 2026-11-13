@@ -10,7 +10,7 @@ import { logger } from '../logger';
 import { sendMail } from '../mail';
 import { getResendVerificationEmailHTML, getSignupVerificationEmailHTML } from '../emails/verification';
 import { generateResetLinkEmailHtml } from '../emails/password';
-import { verifyClerkSession, isClerkConfigured, setClerkPassword } from '../clerk';
+import { verifyClerkSession, isClerkConfigured, setClerkPassword, type ClerkSession } from '../clerk';
 
 const router = new Hono<HonoEnv>();
 
@@ -159,10 +159,17 @@ const loginHandler: Handler<HonoEnv> = async (c) => {
   // The body's email/clerkId are only trusted once the caller proves the Clerk
   // session behind them. Clients send `clerkToken` (Clerk getToken()); it must
   // be valid and the email must be one of that Clerk user's verified emails.
-  let session: Awaited<ReturnType<typeof verifyClerkSession>> = null;
+  let session: ClerkSession | null = null;
   if (body.clerkToken && isClerkConfigured(c.env)) {
-    session = await verifyClerkSession(c.env, String(body.clerkToken));
-    if (!session) return jsonError(c, requestId, 'Your session has expired. Please sign in again.', 401);
+    const result = await verifyClerkSession(c.env, String(body.clerkToken));
+    if (!result.ok) {
+      logger.warn(`[${requestId}] clerk session rejected`, { reason: result.reason, detail: result.detail, email });
+      if (result.reason === 'unavailable') {
+        return jsonError(c, requestId, 'Sign-in is temporarily unavailable. Please try again.', 503);
+      }
+      return jsonError(c, requestId, 'Your session has expired. Please sign in again.', 401);
+    }
+    session = result.session;
     if (!session.emails.includes(String(email).toLowerCase())) {
       return jsonError(c, requestId, 'This email does not belong to your account.', 403);
     }
