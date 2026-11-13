@@ -6,7 +6,7 @@
  * Clerk Backend API, so the backend never trusts an email or clerkId taken
  * from the request body alone.
  */
-import { verifyWithJwks } from 'hono/jwt';
+import { decode, verifyWithJwks } from 'hono/jwt';
 import type { CFEnv } from './types';
 
 const CLERK_API = 'https://api.clerk.com/v1';
@@ -47,7 +47,22 @@ export async function verifyClerkSession(env: CFEnv, token: string): Promise<Cle
     const msg = String(err?.message ?? err);
     // A JWKS fetch failure is Clerk being unreachable, not a bad token.
     if (msg.includes('JWKS')) return { ok: false, reason: 'unavailable', detail: msg };
-    return { ok: false, reason: 'invalid', detail: `${err?.name ?? 'Error'}: ${msg}` };
+    // Never log the token itself (hono's messages embed it); describe it instead.
+    let kid: unknown;
+    let iss: unknown;
+    try {
+      const { header, payload: claims } = decode(token);
+      kid = (header as { kid?: unknown }).kid;
+      iss = claims.iss;
+    } catch {
+      // Undecodable token: nothing more to add.
+    }
+    const name = err?.name ?? 'Error';
+    const hint =
+      name === 'JwtTokenInvalid' && kid
+        ? ' (signing key not in JWKS: CLERK_SECRET_KEY is probably from a different Clerk instance than the issuer)'
+        : '';
+    return { ok: false, reason: 'invalid', detail: `${name}${hint} kid=${String(kid)} iss=${String(iss)}` };
   }
 
   const now = Math.floor(Date.now() / 1000);
