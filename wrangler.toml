@@ -46,6 +46,20 @@ simple = { limit = 100, period = 60 }
 NODE_ENV = "production"
 FE_URL = "https://www.zynvosocial.com"
 
+# ── Observability ─────────────────────────────────────────────
+# Workers Logs (console output + one log per request, incl. errors and
+# exceptions) and traces, browsable under Observability in the dashboard.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
+
 # ── Deployment environments ───────────────────────────────────
 
 [env.production]
