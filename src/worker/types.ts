@@ -21,6 +21,11 @@ export type CFEnv = {
   REQUIRE_CLERK_TOKEN?: string;
   /** Shared with the Next.js proxy; marks requests whose x-zynvo-client-ip can be trusted. */
   INTERNAL_PROXY_SECRET?: string;
+  /** Telegram bot for alerts and the daily digest (set as secrets). */
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_CHAT_ID?: string;
+  /** Alert dedup + 48h alert history for the digest (wrangler.toml [[kv_namespaces]]). */
+  ALERTS_KV?: KVNamespace;
   RL_5?: RateLimitBinding;
   RL_10?: RateLimitBinding;
   RL_20?: RateLimitBinding;

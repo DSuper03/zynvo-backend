@@ -163,7 +163,12 @@ const loginHandler: Handler<HonoEnv> = async (c) => {
   if (body.clerkToken && isClerkConfigured(c.env)) {
     const result = await verifyClerkSession(c.env, String(body.clerkToken));
     if (!result.ok) {
-      logger.warn(`[${requestId}] clerk session rejected`, { reason: result.reason, detail: result.detail, email });
+      logger.warn(`[${requestId}] clerk session rejected`, {
+        reason: result.reason,
+        detail: result.detail,
+        email,
+        notify: true,
+      });
       if (result.reason === 'unavailable') {
         return jsonError(c, requestId, 'Sign-in is temporarily unavailable. Please try again.', 503);
       }

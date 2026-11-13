@@ -46,6 +46,17 @@ simple = { limit = 100, period = 60 }
 NODE_ENV = "production"
 FE_URL = "https://www.zynvosocial.com"
 
+# ── Alerts ────────────────────────────────────────────────────
+# Telegram alerts (src/worker/alerts.ts). TELEGRAM_BOT_TOKEN and
+# TELEGRAM_CHAT_ID are secrets: npx wrangler secret put <KEY>
+[[kv_namespaces]]
+binding = "ALERTS_KV"
+id = "0426a5fbadc74f9abd99e0318c0a025a"
+
+# Daily digest at 09:00 IST (03:30 UTC).
+[triggers]
+crons = ["30 3 * * *"]
+
 # ── Observability ─────────────────────────────────────────────
 # Workers Logs (console output + one log per request, incl. errors and
 # exceptions) and traces, browsable under Observability in the dashboard.

@@ -7,8 +7,12 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger as honoLogger } from 'hono/logger';
-import type { HonoEnv } from './types';
+import type { CFEnv, HonoEnv } from './types';
 import { prismaMiddleware } from './middleware/prisma';
+import { alertingMiddleware } from './middleware/alerting';
+import { logger } from './logger';
+import { raiseAlert } from './alerts';
+import { sendDailyDigest } from './digest';
 
 // ── Route imports ─────────────────────────────────────────────
 import authRouter from './routes/auth';
@@ -23,6 +27,7 @@ import waveRouter from './routes/wave';
 import adminRouter from './routes/admin';
 import contactRouter from './routes/contact';
 import reportsRouter from './routes/reports';
+import opsRouter from './routes/ops';
 
 const app = new Hono<HonoEnv>();
 
@@ -47,6 +52,9 @@ app.use('*', async (c, next) => {
 
 // ── Request logger ────────────────────────────────────────────
 app.use('*', honoLogger());
+
+// ── Telegram alerts for 5xx / logged errors ───────────────────
+app.use('*', alertingMiddleware);
 
 // ── Prisma client (per-request) ───────────────────────────────
 app.use('*', prismaMiddleware);
@@ -77,14 +85,35 @@ app.route('/api/v1/users', waveRouter);    // wave: POST /api/v1/users/:userId
 // Admin
 app.route('/api/v2/admin', adminRouter);
 
+// Internal ops (alerts from the website, test message, digest) — secret-protected
+app.route('/api/v1/ops', opsRouter);
+
 // ── 404 fallback ──────────────────────────────────────────────
 app.notFound((c) => c.json({ msg: 'Not found' }, 404));
 
 // ── Error handler ─────────────────────────────────────────────
 app.onError((err, c) => {
-  console.error('Unhandled Worker error:', err);
+  // Logged through logger so the alerting middleware includes it in the alert.
+  logger.error(`Unhandled Worker error: ${err?.message ?? err}`, {
+    stack: String(err?.stack ?? '').split('\n').slice(0, 4).join(' | '),
+  });
   return c.json({ error: 'Internal server error' }, 500);
 });
 
 // ── CF Worker export ──────────────────────────────────────────
-export default app;
+export default {
+  fetch: app.fetch,
+  // Daily digest (wrangler.toml [triggers] crons).
+  async scheduled(_event: ScheduledController, env: CFEnv, ctx: ExecutionContext) {
+    ctx.waitUntil(
+      sendDailyDigest(env).catch((err: any) =>
+        raiseAlert(env, {
+          key: 'daily-digest-failed',
+          title: 'Daily digest failed',
+          detail: String(err?.message ?? err),
+          source: 'cron',
+        }),
+      ),
+    );
+  },
+};
