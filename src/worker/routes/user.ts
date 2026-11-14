@@ -4,6 +4,8 @@ import type { HonoEnv } from '../types';
 import { authMiddleware, optionalUserId } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
+import { rateLimiter } from '../middleware/ratelimit';
+import { cleanCollegeName, collegeKey, isPlaceholderCollege, sameCollege } from '../utils/college';
 
 const router = new Hono<HonoEnv>();
 
@@ -194,10 +196,47 @@ router.put('/updateCollegeName', authMiddleware, async (c) => {
   if (!parsed.success) return jsonError(c, requestId, parsed.error.errors[0]?.message ?? 'Invalid', 400);
   const prisma = c.get('prisma');
   const updated = await prisma.user.update({
-    where: { id: userId }, data: { collegeName: parsed.data.collegeName },
+    where: { id: userId }, data: { collegeName: cleanCollegeName(parsed.data.collegeName) },
     select: { id: true, collegeName: true },
   });
   return c.json({ msg: 'College name updated successfully', user: updated }, 200);
+});
+
+// ── GET /colleges?q= — college names other users entered ──────
+// Public (used on signup). Suggests existing spellings for colleges outside
+// the built-in list so students of one college converge on one name.
+// Case/spacing variants are merged; the most used spelling wins. Names only.
+
+router.get('/colleges', rateLimiter(30), async (c) => {
+  const requestId = generateRequestId();
+  const q = cleanCollegeName(c.req.query('q')).slice(0, 100);
+  if (q.length < 2) return c.json({ colleges: [] }, 200);
+  const prisma = c.get('prisma') as any;
+  try {
+    const rows: { collegeName: string; _count: { collegeName: number } }[] = await prisma.user.groupBy({
+      by: ['collegeName'],
+      where: { collegeName: { contains: q, mode: 'insensitive' } },
+      _count: { collegeName: true },
+      orderBy: { _count: { collegeName: 'desc' } },
+      take: 50,
+    });
+    const byKey = new Map<string, { name: string; count: number; best: number }>();
+    for (const r of rows) {
+      if (isPlaceholderCollege(r.collegeName)) continue;
+      const n = r._count.collegeName;
+      const k = collegeKey(r.collegeName);
+      const entry = byKey.get(k);
+      if (!entry) byKey.set(k, { name: cleanCollegeName(r.collegeName), count: n, best: n });
+      else {
+        entry.count += n;
+        if (n > entry.best) { entry.best = n; entry.name = cleanCollegeName(r.collegeName); }
+      }
+    }
+    const colleges = [...byKey.values()].sort((a, b) => b.count - a.count).slice(0, 8).map((e) => e.name);
+    return c.json({ colleges }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
 });
 
 // ── GET /isFounder ────────────────────────────────────────────
@@ -245,7 +284,7 @@ router.post('/joinClub/:id', authMiddleware, async (c) => {
     ]);
     if (!club) return c.json({ msg: 'no club found' }, 200);
     if (existing) return c.json({ msg: 'you are already a member of this club' }, 200);
-    if (club.collegeStudentsOnly && user?.collegeName !== club.collegeName) {
+    if (club.collegeStudentsOnly && !sameCollege(user?.collegeName, club.collegeName)) {
       return jsonError(c, requestId, "Only students from the club founder's college can join", 403);
     }
     await prisma.userClubMembership.create({ data: { userId, clubId }, select: { id: true } });
@@ -489,7 +528,9 @@ router.get('/suggestions', authMiddleware, async (c) => {
     const candidates = await prisma.user.findMany({
       where: {
         id: { notIn: [...exclude] },
-        ...(hasCollege ? { collegeName: me.collegeName } : { tags: { hasSome: me.tags } }),
+        ...(hasCollege
+          ? { collegeName: { equals: cleanCollegeName(me.collegeName), mode: 'insensitive' as const } }
+          : { tags: { hasSome: me.tags } }),
       },
       take: 200,
       orderBy: { createdAt: 'desc' },
