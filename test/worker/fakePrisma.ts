@@ -137,6 +137,7 @@ export function createFakePrisma() {
     eventCustomQuestion: new Model(),
     userEvents: new Model(() => ({ joinedAt: new Date() })),
     registrationAnswer: new Model(),
+    speakers: new Model(),
     async $transaction(arg: any) {
       if (Array.isArray(arg)) return Promise.all(arg);
       return arg(db);
