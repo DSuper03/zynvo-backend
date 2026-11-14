@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { HonoEnv } from '../types';
 import { authMiddleware } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
+import { founderClub, ensureMembership } from '../utils/clubAuth';
 
 const router = new Hono<HonoEnv>();
 
@@ -114,15 +115,6 @@ const readJson = async (c: any): Promise<any> => {
   try { return await c.req.json(); } catch { return {}; }
 };
 
-// Returns the club if the caller is its founder, else null.
-const founderClub = async (prisma: any, userId: string, clubId: string | undefined) => {
-  if (!clubId) return null;
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-  if (!user) return null;
-  const club = await prisma.clubs.findUnique({ where: { id: clubId } });
-  return club && club.founderEmail === user.email ? club : null;
-};
-
 // ── POST /createAnn/:clubId — club founder posts an announcement ──
 
 router.post('/createAnn/:clubId', authMiddleware, async (c) => {
@@ -145,13 +137,6 @@ router.post('/createAnn/:clubId', authMiddleware, async (c) => {
     return jsonError(c, requestId, 'internal server error', 500, err);
   }
 });
-
-const ensureMembership = (prisma: any, userId: string, clubId: string) =>
-  prisma.userClubMembership.upsert({
-    where: { userId_clubId: { userId, clubId } },
-    create: { userId, clubId },
-    update: {},
-  });
 
 // ── PUT /updateClubLinks/:id ──────────────────────────────────
 

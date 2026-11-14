@@ -3,6 +3,9 @@ import type { HonoEnv } from '../types';
 import { authMiddleware } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
+import { rateLimiter } from '../middleware/ratelimit';
+import { founderClub } from '../utils/clubAuth';
+import { addCoreMembersByEmail, parseEmails } from '../coreInvites';
 
 const router = new Hono<HonoEnv>();
 
@@ -195,6 +198,82 @@ router.post('/club', authMiddleware, async (c) => {
     if (err?.code === 'P2002') return jsonError(c, requestId, 'a club with these details already exists', 409, err);
     logger.error(`[${requestId}] createClub error`, { error: err.message });
     return jsonError(c, requestId, 'error creating club', 500, err);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Core team: add by email + pending invites. Club head (founder) only,
+// enforced here on the server.
+// ═══════════════════════════════════════════════════════════════
+
+// ── POST /:clubId/core-members/by-email  { emails: string[] } ──
+
+router.post('/:clubId/core-members/by-email', authMiddleware, rateLimiter(10), async (c) => {
+  const requestId = generateRequestId();
+  const clubId = c.req.param('clubId');
+  const prisma = c.get('prisma') as any;
+  let body: any;
+  try { body = await c.req.json(); } catch { return jsonError(c, requestId, 'Invalid JSON', 400); }
+
+  try {
+    const club = await founderClub(prisma, c.get('userId'), clubId);
+    if (!club) return jsonError(c, requestId, 'Only the club head can add core members', 403);
+
+    const parsed = parseEmails(body?.emails);
+    if (!parsed.ok) return jsonError(c, requestId, parsed.error, 400);
+
+    const inviter = await prisma.user.findUnique({ where: { id: c.get('userId') }, select: { id: true, name: true } });
+    const results = await addCoreMembersByEmail(c, club, inviter, parsed.entries);
+    const summary = results.reduce<Record<string, number>>((acc, r) => {
+      acc[r.status] = (acc[r.status] ?? 0) + 1;
+      return acc;
+    }, {});
+    return c.json({ msg: 'Processed', results, summary }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+// ── GET /:clubId/core-invites — live pending invites ──────────
+
+router.get('/:clubId/core-invites', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const clubId = c.req.param('clubId');
+  const prisma = c.get('prisma') as any;
+  try {
+    const club = await founderClub(prisma, c.get('userId'), clubId);
+    if (!club) return jsonError(c, requestId, 'Only the club head can view core invites', 403);
+    const invites = await prisma.clubCoreInvite.findMany({
+      where: { clubId, status: 'PENDING', expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, email: true, status: true, expiresAt: true, createdAt: true },
+    });
+    return c.json({ invites }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+// ── DELETE /:clubId/core-invites/:inviteId — revoke ───────────
+
+router.delete('/:clubId/core-invites/:inviteId', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const clubId = c.req.param('clubId');
+  const inviteId = c.req.param('inviteId');
+  const prisma = c.get('prisma') as any;
+  try {
+    const club = await founderClub(prisma, c.get('userId'), clubId);
+    if (!club) return jsonError(c, requestId, 'Only the club head can revoke core invites', 403);
+    // Scoped to this club and still pending: an invite id from another club
+    // or an already-accepted invite can't be revoked here.
+    const res = await prisma.clubCoreInvite.updateMany({
+      where: { id: inviteId, clubId, status: 'PENDING' },
+      data: { status: 'REVOKED' },
+    });
+    if (res.count === 0) return jsonError(c, requestId, 'Pending invite not found', 404);
+    return c.json({ msg: 'Invite revoked' }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
   }
 });
 
