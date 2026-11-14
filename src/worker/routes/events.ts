@@ -4,6 +4,7 @@ import type { HonoEnv } from '../types';
 import { authMiddleware, clubHeadAuthMiddleware, adminCoreAuthMiddleware, specificClubHeadAuthMiddleware } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
+import { sameCollege } from '../utils/college';
 
 const router = new Hono<HonoEnv>();
 
@@ -493,9 +494,7 @@ router.post('/registerEvent', authMiddleware, async (c) => {
     if (event.collegeStudentsOnly) {
       const user = await prisma.user.findUnique({ where: { id: userId }, select: { collegeName: true } });
       if (!user) return jsonError(c, requestId, 'User not found', 404);
-      const eventCollege = (event.university || '').trim().toLowerCase();
-      const userCollege = (user.collegeName || '').trim().toLowerCase();
-      if (!eventCollege || !userCollege || eventCollege !== userCollege) {
+      if (!sameCollege(event.university, user.collegeName)) {
         return jsonError(c, requestId, 'This event is restricted to students of the organizer college', 403);
       }
     }

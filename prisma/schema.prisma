@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -60,6 +61,7 @@ model User {
   blocking      UserBlock[]     @relation("UserBlocking")
   blockedBy     UserBlock[]     @relation("UserBlockedBy")
   teamJoinRequests TeamJoinRequest[] @relation("TeamJoinRequester")
+  coreInvitesSent  ClubCoreInvite[]  @relation("CoreInviteSender")
 
   @@index([name])
   @@index([collegeName])
@@ -137,6 +139,7 @@ model clubs {
   memberships   UserClubMembership[]
   announcements clubAnnouncement[]
   events        event[]
+  coreInvites   ClubCoreInvite[]
 
   @@index([name])
   @@index([collegeName])
@@ -621,4 +624,33 @@ model UserBlock {
 
   @@id([blockerId, blockedId])
   @@index([blockedId])
+}
+
+// ── Core team invites ─────────────────────────────────────────
+// Pending "add by email" invites to a club's core team for people without a
+// (verified) account. The core team itself stays in clubs.coremember1..3; an
+// invite reserves one of those slots until it is accepted, revoked or expires.
+
+enum CoreInviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+model ClubCoreInvite {
+  id          String           @id @default(uuid())
+  clubId      String
+  email       String // lowercased
+  invitedById String
+  status      CoreInviteStatus @default(PENDING)
+  expiresAt   DateTime
+  createdAt   DateTime         @default(now())
+
+  club      clubs @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  invitedBy User  @relation("CoreInviteSender", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  // At most one pending invite per (club, email); accepted/revoked rows are history.
+  @@unique([clubId, email], map: "ClubCoreInvite_clubId_email_pending_key", where: raw("status = 'PENDING'"))
+  @@index([email, status])
+  @@index([clubId, status])
 }

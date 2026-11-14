@@ -11,6 +11,8 @@ import { sendMail } from '../mail';
 import { getResendVerificationEmailHTML, getSignupVerificationEmailHTML } from '../emails/verification';
 import { generateResetLinkEmailHtml } from '../emails/password';
 import { verifyClerkSession, isClerkConfigured, setClerkPassword, type ClerkSession } from '../clerk';
+import { convertPendingCoreInvites } from '../coreInvites';
+import { cleanCollegeName, isPlaceholderCollege } from '../utils/college';
 
 const router = new Hono<HonoEnv>();
 
@@ -67,7 +69,7 @@ router.post('/signup', rateLimiter(20), async (c) => {
         email,
         name,
         password: hashedPassword,
-        collegeName: collegeName ?? 'not joined',
+        collegeName: cleanCollegeName(collegeName) || 'not joined',
         profileAvatar: avatarUrl,
         phone: phone ?? '',
         // Unverified until the emailed link is opened (POST /verify).
@@ -117,6 +119,9 @@ router.post('/password-login', rateLimiter(30), async (c) => {
 
     if (!bcrypt.compareSync(password, user.password)) return jsonError(c, requestId, 'Invalid email or password', 403);
 
+    // Verified account proved its email → accept pending core-team invites.
+    await convertPendingCoreInvites(prisma, c.env, user);
+
     const token = await issueToken(
       { id: user.id, email: user.email, pfp: user.profileAvatar, name: user.name },
       c.env.JWT_SECRET,
@@ -148,6 +153,7 @@ const loginHandler: Handler<HonoEnv> = async (c) => {
     if (!user) return jsonError(c, requestId, 'Invalid email or password', 404);
     if (!user.isVerified) return jsonError(c, requestId, 'please verify yourself', 403);
     if (!bcrypt.compareSync(password, user.password)) return jsonError(c, requestId, 'Invalid email or password', 403);
+    await convertPendingCoreInvites(prisma, c.env, user);
     const token = await issueToken({ id: user.id, email: user.email, pfp: user.profileAvatar, name: user.name }, c.env.JWT_SECRET);
     return c.json({ msg: 'login success', token }, 200);
   }
@@ -199,7 +205,7 @@ const loginHandler: Handler<HonoEnv> = async (c) => {
     if (user) {
       const updateData: Record<string, unknown> = {};
       if (user.clerkId !== verifiedClerkId) updateData.clerkId = verifiedClerkId;
-      if (collegeName && !['not joined', 'not_joined', 'zync college'].includes(collegeName)) updateData.collegeName = collegeName;
+      if (collegeName && !isPlaceholderCollege(collegeName)) updateData.collegeName = cleanCollegeName(collegeName);
       if (name && name !== user.name) updateData.name = name;
       const pfp = avatarUrl || imgUrl;
       if (pfp && pfp !== user.profileAvatar) updateData.profileAvatar = pfp;
@@ -216,6 +222,10 @@ const loginHandler: Handler<HonoEnv> = async (c) => {
         },
       });
     }
+
+    // Only a verified Clerk session proves the email; legacy clients without
+    // a clerkToken never convert invites.
+    if (session) await convertPendingCoreInvites(prisma, c.env, user);
 
     const token = await issueToken({ id: user.id, email: user.email, pfp: user.profileAvatar, name: user.name }, c.env.JWT_SECRET);
     return c.json({ msg: 'login success', token }, 200);
@@ -276,6 +286,8 @@ router.post('/syncWithClerk', rateLimiter(20), async (c) => {
   if (!user.isVerified) return jsonError(c, requestId, 'Please verify your email first', 403);
 
   if (!bcrypt.compareSync(password, user.password)) return jsonError(c, requestId, 'Invalid email or password', 403);
+
+  await convertPendingCoreInvites(prisma, c.env, user);
 
   const token = await issueToken({ id: user.id, email: user.email, pfp: user.profileAvatar, name: user.name }, c.env.JWT_SECRET);
   return c.json({ msg: 'login success', token }, 200);
@@ -434,8 +446,11 @@ router.post('/verify', async (c) => {
   const verified = await prisma.user.update({
     where: { id: user.id },
     data: { isVerified: true },
-    select: { id: true, isVerified: true },
+    select: { id: true, email: true, isVerified: true },
   });
+
+  // Email just verified → accept pending core-team invites for it.
+  await convertPendingCoreInvites(prisma, c.env, verified);
 
   const token = await issueToken({ id: verified.id, isVerified: verified.isVerified }, c.env.JWT_SECRET);
   return c.json({ msg: 'Verified successfully', token }, 200);
