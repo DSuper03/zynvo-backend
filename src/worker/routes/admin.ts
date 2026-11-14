@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { HonoEnv } from '../types';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, specificClubHeadAuthMiddleware } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { founderClub, ensureMembership } from '../utils/clubAuth';
 
@@ -157,6 +157,43 @@ router.put('/updateClubLinks/:id', authMiddleware, async (c) => {
     await prisma.clubs.update({ where: { id: clubId }, data: updated });
     return c.json({ msg: 'Social links updated successfully', updated }, 200);
   } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
+  }
+});
+
+// ── PUT /updateClubLogo/:clubId  { logo } ─────────────────────
+// Club head or core member (specificClubHeadAuthMiddleware on :clubId).
+// Only https ImageKit URLs: the web/app upload flow stores logos there.
+
+const LOGO_HOSTS = ['ik.imagekit.io'];
+
+export const isAllowedLogoUrl = (value: unknown): value is string => {
+  if (typeof value !== 'string' || value.length > 1000) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && LOGO_HOSTS.includes(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
+router.put('/updateClubLogo/:clubId', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const clubId = c.req.param('clubId');
+  const { logo } = await readJson(c);
+  if (!isAllowedLogoUrl(logo)) {
+    return jsonError(c, requestId, 'logo must be an https ImageKit URL', 400);
+  }
+  const prisma = c.get('prisma');
+  try {
+    const club = await prisma.clubs.update({
+      where: { id: clubId },
+      data: { profilePicUrl: logo },
+      select: { id: true, profilePicUrl: true },
+    });
+    return c.json({ msg: 'Club logo updated', club }, 200);
+  } catch (err: any) {
+    if (err.code === 'P2025') return jsonError(c, requestId, 'Club not found', 404);
     return jsonError(c, requestId, 'Internal server error', 500, err);
   }
 });
