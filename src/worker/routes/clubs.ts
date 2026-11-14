@@ -254,6 +254,45 @@ router.get('/:clubId/core-invites', authMiddleware, async (c) => {
   }
 });
 
+// ── POST /:clubId/delete  { confirmName } — delete the club ───
+// Club head only, and the typed club name must match. One transaction:
+//  1. clear the legacy User.clubId/clubName pointer for anyone pointing here —
+//     that FK is ON DELETE CASCADE, so without this step deleting the club would
+//     delete those users' accounts;
+//  2. delete the club's events (their registrations, teams, schedule, speakers,
+//     judges, gallery, questions, queue … cascade in the database);
+//  3. delete the club (memberships, core invites, announcements and the club's
+//     posts cascade).
+
+router.post('/:clubId/delete', authMiddleware, rateLimiter(5), async (c) => {
+  const requestId = generateRequestId();
+  const clubId = c.req.param('clubId');
+  const prisma = c.get('prisma') as any;
+  let body: any;
+  try { body = await c.req.json(); } catch { body = {}; }
+  try {
+    const club = await founderClub(prisma, c.get('userId'), clubId);
+    if (!club) return jsonError(c, requestId, 'Only the club head can delete this club', 403);
+
+    const typed = String(body?.confirmName ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const expected = String(club.name ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+    if (!typed || typed !== expected) {
+      return jsonError(c, requestId, 'Type the club name exactly to confirm deletion', 400);
+    }
+
+    await prisma.$transaction([
+      prisma.user.updateMany({ where: { clubId }, data: { clubId: null, clubName: null } }),
+      prisma.event.deleteMany({ where: { clubId } }),
+      prisma.clubs.delete({ where: { id: clubId } }),
+    ]);
+    logger.info('club deleted', { clubId, by: c.get('userId') });
+    return c.json({ msg: 'Club deleted' }, 200);
+  } catch (err: any) {
+    if (err?.code === 'P2025') return jsonError(c, requestId, 'Club not found', 404);
+    return jsonError(c, requestId, 'Could not delete the club', 500, err);
+  }
+});
+
 // ── DELETE /:clubId/core-invites/:inviteId — revoke ───────────
 
 router.delete('/:clubId/core-invites/:inviteId', authMiddleware, async (c) => {
