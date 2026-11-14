@@ -271,7 +271,7 @@ export async function convertPendingCoreInvites(
         type: 'core_invite_accepted',
         title: 'Core team invite accepted',
         body: `${user.email} joined the ${club.name} core team.`,
-        data: { clubId: club.id, route: `/admin/${club.id}` },
+        data: { clubId: club.id, route: `/clubs/${club.id}` },
       });
     }
   } catch (err: any) {
