@@ -95,8 +95,7 @@ router.get('/getClub', async (c) => {
     }
     if (name) {
       const response = await prisma.clubs.findMany({ where: { name }, select: clubSelectBase, orderBy: { createdAt: 'desc' } });
-      if (!response || response.length === 0) return jsonError(c, requestId, 'no such club', 404);
-      return c.json({ msg: 'clubs found', response, requestId }, 200);
+      return c.json({ msg: response.length ? 'clubs found' : 'no such club', response, requestId }, 200);
     }
     return jsonError(c, requestId, 'Please provide at least one parameter: id, name, or collegeName', 400);
   } catch (err: any) {

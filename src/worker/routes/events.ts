@@ -49,8 +49,8 @@ router.get('/all', async (c) => {
       }),
       prisma.event.count(),
     ]);
-    if (!response || response.length === 0) return jsonError(c, requestId, 'No events found', 404);
-    return c.json({ msg: 'found', response, totalPages: Math.ceil(totalData / limit) }, 200);
+    // An empty page is a normal answer (no events yet / past the last page), not a 404.
+    return c.json({ msg: response.length ? 'found' : 'No events found', response, totalPages: Math.ceil(totalData / limit) }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'internal server error', 500, err);
   }
@@ -161,8 +161,8 @@ router.get('/getSpeakers', async (c) => {
     where: { eventId },
     select: { id: true, profilePic: true, about: true, name: true, email: true, eventId: true },
   });
-  if (!speakers || speakers.length === 0) return jsonError(c, requestId, 'No speakers added for the event', 404);
-  return c.json({ msg: 'speakers are there', speakers }, 200);
+  // No speakers yet is a normal state: 200 with an empty list (callers use `speakers || []`).
+  return c.json({ msg: speakers.length ? 'speakers are there' : 'No speakers added for the event', speakers }, 200);
 });
 
 // ── GET /attendees/:id ────────────────────────────────────────
@@ -375,8 +375,8 @@ router.get('/eventByClub/:id', authMiddleware, async (c) => {
     const events = await prisma.event.findMany({
       where: { clubId }, select: eventSelectBase, orderBy: { createdAt: 'desc' },
     });
-    if (!events || events.length === 0) return jsonError(c, requestId, 'no club found', 404);
-    return c.json({ msg: 'fetched', event: events.map(mapEventFees) }, 200);
+    // A club with no events yet: 200 with an empty list.
+    return c.json({ msg: events.length ? 'fetched' : 'no events yet', event: events.map(mapEventFees) }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'Internal Server error', 500, err);
   }
