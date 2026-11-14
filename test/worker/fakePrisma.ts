@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 
 type Row = Record<string, any>;
 
-const OPERATORS = ['equals', 'in', 'gt', 'gte', 'lt', 'lte', 'not', 'mode'];
+const OPERATORS = ['equals', 'contains', 'in', 'gt', 'gte', 'lt', 'lte', 'not', 'mode'];
 
 const isOperatorObject = (v: any) =>
   v && typeof v === 'object' && !(v instanceof Date) && Object.keys(v).some((k) => OPERATORS.includes(k));
@@ -30,6 +30,7 @@ function matches(row: Row, where: Row | undefined): boolean {
       const ci = cond.mode === 'insensitive';
       const norm = (x: any) => (ci && typeof x === 'string' ? x.toLowerCase() : x);
       if ('equals' in cond && norm(value) !== norm(cond.equals)) return false;
+      if ('contains' in cond && !(typeof value === 'string' && norm(value).includes(norm(cond.contains)))) return false;
       if ('in' in cond && !cond.in.map(norm).includes(norm(value))) return false;
       if ('gt' in cond && !(value > cond.gt)) return false;
       if ('gte' in cond && !(value >= cond.gte)) return false;

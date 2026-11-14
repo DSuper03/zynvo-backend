@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { HonoEnv } from '../types';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, optionalUserId } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
 
@@ -126,18 +126,24 @@ router.get('/getAllUsers', async (c) => {
 
 // ── GET /SearchUser ───────────────────────────────────────────
 
+// Public: matches by name, no emails. Signed-in callers (valid Bearer token)
+// also match by email and get `email` back, which pickers such as the club
+// president select need.
 router.get('/SearchUser', async (c) => {
   const requestId = generateRequestId();
-  const name = c.req.query('name');
+  const name = (c.req.query('name') ?? c.req.query('search') ?? '').trim();
   if (!name) return jsonError(c, requestId, "Please enter user's name", 404);
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1') || 1);
   const rawLimit = parseInt(c.req.query('limit') ?? '20');
   const limit = Math.min(Math.max(rawLimit, 1), 50);
   const skip = (page - 1) * limit;
   const prisma = c.get('prisma');
+  const signedIn = !!(await optionalUserId(c));
   const users = await prisma.user.findMany({
-    where: { name: { contains: name, mode: 'insensitive' } },
-    select: { id: true, name: true, profileAvatar: true, collegeName: true },
+    where: signedIn
+      ? { OR: [{ name: { contains: name, mode: 'insensitive' } }, { email: { contains: name, mode: 'insensitive' } }] }
+      : { name: { contains: name, mode: 'insensitive' } },
+    select: { id: true, name: true, profileAvatar: true, collegeName: true, email: signedIn },
     take: limit, skip, orderBy: { name: 'asc' },
   });
   return c.json({ users }, 200);
