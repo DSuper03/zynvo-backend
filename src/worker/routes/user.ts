@@ -331,7 +331,9 @@ router.get('/isClubAdmin', authMiddleware, async (c) => {
       where: { OR: [{ founderEmail: email }, { coremember1: email }, { coremember2: email }, { coremember3: email }] },
       select: { id: true, name: true, founderEmail: true },
     });
-    if (!club) return jsonError(c, requestId, 'you are not an admin', 403);
+    // "Not a club leader" is a normal answer, not an error: 200 with founder:false
+    // (clients treat a falsy founder as "no"; a 403 showed as a console error).
+    if (!club) return c.json({ msg: 'you are not an admin', founder: false, role: null }, 200);
     return c.json({
       msg: 'Fetched',
       founder: 'true',
@@ -353,15 +355,16 @@ router.get('/isClubAdmin/:id', authMiddleware, async (c) => {
   try {
     const userDetails = await prisma.user.findUnique({ where: { id }, select: { email: true } });
     if (!userDetails) return jsonError(c, requestId, 'Invalid user', 404);
-    const membership = await prisma.userClubMembership.findUnique({ where: { userId_clubId: { userId: id, clubId } } });
-    if (!membership) return jsonError(c, requestId, 'you are not a member of this club', 403);
+    // Leadership is the founder/core slots (by email, any case). A membership row
+    // is not required: founders of older clubs often have none.
     const clubFounder = await prisma.clubs.findUnique({
       where: { id: clubId },
       select: { coremember1: true, coremember2: true, coremember3: true, founderEmail: true },
     });
-    const isAdmin = clubFounder && [clubFounder.founderEmail, clubFounder.coremember1, clubFounder.coremember2, clubFounder.coremember3]
-      .includes(userDetails.email);
-    if (!isAdmin) return jsonError(c, requestId, 'you are not an admin', 403);
+    const email = userDetails.email.toLowerCase();
+    const isAdmin = !!clubFounder && [clubFounder.founderEmail, clubFounder.coremember1, clubFounder.coremember2, clubFounder.coremember3]
+      .some((e) => typeof e === 'string' && e.toLowerCase() === email);
+    if (!isAdmin) return c.json({ msg: 'you are not an admin', founder: false }, 200);
     return c.json({ msg: 'Fetched', founder: 'true' }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'some error occured in server', 500, err);
