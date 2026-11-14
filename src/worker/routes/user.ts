@@ -302,9 +302,17 @@ router.post('/leaveClub/:id', authMiddleware, async (c) => {
   const clubId = c.req.param('id');
   if (!clubId) return jsonError(c, requestId, 'Club ID is required', 400);
   const prisma = c.get('prisma');
-  const membership = await prisma.userClubMembership.findUnique({ where: { userId_clubId: { userId, clubId } } });
-  if (!membership) return jsonError(c, requestId, 'User is not a member of this club', 400);
-  await prisma.userClubMembership.delete({ where: { userId_clubId: { userId, clubId } } });
+  // A user belongs to a club through a membership row and/or the legacy
+  // single-club pointer (User.clubId, older accounts). Leaving clears both.
+  const [membership, legacy] = await Promise.all([
+    prisma.userClubMembership.findUnique({ where: { userId_clubId: { userId, clubId } } }),
+    prisma.user.findFirst({ where: { id: userId, clubId }, select: { id: true } }),
+  ]);
+  if (!membership && !legacy) return jsonError(c, requestId, 'User is not a member of this club', 400);
+  await prisma.$transaction([
+    prisma.userClubMembership.deleteMany({ where: { userId, clubId } }),
+    prisma.user.updateMany({ where: { id: userId, clubId }, data: { clubId: null, clubName: null } }),
+  ]);
   return c.json({ msg: 'Successfully left the club' }, 200);
 });
 
