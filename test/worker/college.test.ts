@@ -85,6 +85,7 @@ describe('routes', () => {
     await add('Netaji Subhash Chandra'); await add('Netaji Subhash Chandra'); await add('netaji  subhash chandra');
     await add('Netaji Subhash University');
     await add('not joined');
+    await add('Jadavpur University');
     const r = await req('GET', '/api/v1/user/colleges?q=netaji');
     expect(r.status).toBe(200);
     expect(r.body.colleges).toEqual(['Netaji Subhash Chandra', 'Netaji Subhash University']);
