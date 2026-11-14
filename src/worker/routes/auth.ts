@@ -12,6 +12,7 @@ import { getResendVerificationEmailHTML, getSignupVerificationEmailHTML } from '
 import { generateResetLinkEmailHtml } from '../emails/password';
 import { verifyClerkSession, isClerkConfigured, setClerkPassword, type ClerkSession } from '../clerk';
 import { convertPendingCoreInvites } from '../coreInvites';
+import { cleanCollegeName, isPlaceholderCollege } from '../utils/college';
 
 const router = new Hono<HonoEnv>();
 
@@ -68,7 +69,7 @@ router.post('/signup', rateLimiter(20), async (c) => {
         email,
         name,
         password: hashedPassword,
-        collegeName: collegeName ?? 'not joined',
+        collegeName: cleanCollegeName(collegeName) || 'not joined',
         profileAvatar: avatarUrl,
         phone: phone ?? '',
         // Unverified until the emailed link is opened (POST /verify).
@@ -204,7 +205,7 @@ const loginHandler: Handler<HonoEnv> = async (c) => {
     if (user) {
       const updateData: Record<string, unknown> = {};
       if (user.clerkId !== verifiedClerkId) updateData.clerkId = verifiedClerkId;
-      if (collegeName && !['not joined', 'not_joined', 'zync college'].includes(collegeName)) updateData.collegeName = collegeName;
+      if (collegeName && !isPlaceholderCollege(collegeName)) updateData.collegeName = cleanCollegeName(collegeName);
       if (name && name !== user.name) updateData.name = name;
       const pfp = avatarUrl || imgUrl;
       if (pfp && pfp !== user.profileAvatar) updateData.profileAvatar = pfp;

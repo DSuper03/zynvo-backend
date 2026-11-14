@@ -61,6 +61,16 @@ class Model {
   async findMany({ where }: Row = {}) { return this.rows.filter((r) => matches(r, where)); }
   async count({ where }: Row = {}) { return this.rows.filter((r) => matches(r, where)).length; }
 
+  async groupBy({ by, where, take }: Row) {
+    const field = by[0];
+    const counts = new Map<any, number>();
+    for (const r of this.rows.filter((r) => matches(r, where))) counts.set(r[field], (counts.get(r[field]) ?? 0) + 1);
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, take ?? Infinity)
+      .map(([value, n]) => ({ [field]: value, _count: { [field]: n } }));
+  }
+
   async create({ data }: Row) {
     const row = { id: randomUUID(), ...this.defaults(), ...data };
     this.conflict(row);

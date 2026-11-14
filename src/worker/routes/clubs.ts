@@ -5,6 +5,7 @@ import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
 import { rateLimiter } from '../middleware/ratelimit';
 import { founderClub } from '../utils/clubAuth';
+import { sameCollege } from '../utils/college';
 import { addCoreMembersByEmail, parseEmails } from '../coreInvites';
 
 const router = new Hono<HonoEnv>();
@@ -171,7 +172,7 @@ router.post('/club', authMiddleware, async (c) => {
 
     if (!college?.collegeName) return jsonError(c, requestId, 'User college information not found', 400);
     if (!founder) return jsonError(c, requestId, 'founder not found, ask him to register', 404);
-    if (collegeStudentsOnly && founder.collegeName !== college.collegeName) {
+    if (collegeStudentsOnly && !sameCollege(founder.collegeName, college.collegeName)) {
       return jsonError(c, requestId, 'Founder must belong to the same college', 400);
     }
 
