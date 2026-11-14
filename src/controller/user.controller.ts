@@ -807,6 +807,11 @@ export const deleteUser = async (
                     where: { createdById: userId },
                 });
 
+                // OfferSave has no onDelete: Cascade, so it would block user.delete
+                await tx.offerSave.deleteMany({
+                    where: { userId },
+                });
+
                 await tx.teamMember.deleteMany({
                     where: { userId },
                 });
