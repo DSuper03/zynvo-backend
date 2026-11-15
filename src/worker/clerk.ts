@@ -100,6 +100,46 @@ export async function verifyClerkSession(env: CFEnv, token: string): Promise<Cle
 }
 
 /**
+ * Makes sure a Clerk user exists for `email` so Clerk's password-reset code
+ * flow can find it. Accounts created before Clerk was added have no Clerk user;
+ * one is created with the email pre-verified (Backend API default) and a random
+ * password the owner replaces during the reset. Returns the Clerk user id, or
+ * null if Clerk is unavailable.
+ */
+export async function ensureClerkUserForEmail(
+  env: CFEnv,
+  email: string,
+  name?: string | null,
+): Promise<string | null> {
+  if (!env.CLERK_SECRET_KEY) return null;
+  const headers = { Authorization: `Bearer ${env.CLERK_SECRET_KEY}`, 'content-type': 'application/json' };
+  try {
+    const found = await fetch(`${CLERK_API}/users?email_address=${encodeURIComponent(email)}&limit=1`, { headers });
+    if (!found.ok) return null;
+    const users = (await found.json()) as { id: string }[];
+    if (users.length > 0) return users[0].id;
+
+    const [firstName, ...rest] = (name ?? '').trim().split(/\s+/).filter(Boolean);
+    const randomPassword = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, '0')).join('');
+    const created = await fetch(`${CLERK_API}/users`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        email_address: [email],
+        password: randomPassword,
+        skip_password_checks: true,
+        ...(firstName ? { first_name: firstName } : {}),
+        ...(rest.length ? { last_name: rest.join(' ') } : {}),
+      }),
+    });
+    if (!created.ok) return null;
+    return ((await created.json()) as { id: string }).id;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Best-effort: keep the Clerk password in step with the backend one, since
  * web email sign-in checks the backend hash while the app signs in via Clerk.
  */
