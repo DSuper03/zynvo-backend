@@ -21,10 +21,30 @@ const publicClubSelect = {
   twitter: true, linkedin: true, createdAt: true,
 } as const;
 
+// Membership lives in two places: the legacy single-club `User.clubId`
+// (`clubs.members`, set for founders and pre-migration joins) and the
+// `UserClubMembership` table that /user/joinClub writes. Select both and merge
+// with `withAllMembers` so counts and member lists include everyone.
+const memberBasicSelect = { id: true, name: true, email: true } as const;
+const memberDetailSelect = {
+  id: true, name: true, email: true, profileAvatar: true, course: true, year: true,
+} as const;
+
 const clubSelectWithMembers = {
   ...clubSelectBase, founderEmail: true, facultyEmail: true,
-  members: { select: { id: true, name: true, email: true } },
+  members: { select: memberBasicSelect },
+  memberships: { select: { user: { select: memberBasicSelect } } },
 } as const;
+
+function withAllMembers<M extends { id: string }, T extends { members: M[]; memberships: { user: M }[] }>(
+  club: T,
+): Omit<T, 'memberships'> {
+  const { memberships, ...rest } = club;
+  const byId = new Map<string, M>();
+  for (const m of club.members) byId.set(m.id, m);
+  for (const { user } of memberships) if (user && !byId.has(user.id)) byId.set(user.id, user);
+  return { ...rest, members: [...byId.values()] };
+}
 
 // ── GET /getAll ───────────────────────────────────────────────
 
@@ -40,7 +60,7 @@ router.get('/getAll', async (c) => {
       prisma.clubs.findMany({ skip, take: limit, select: clubSelectWithMembers, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }),
       prisma.clubs.count(),
     ]);
-    return c.json({ resp, totalPages: Math.ceil(totalData / limit) }, 200);
+    return c.json({ resp: resp.map(withAllMembers), totalPages: Math.ceil(totalData / limit) }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'Error fetching clubs', 500, err);
   }
@@ -76,12 +96,18 @@ router.get('/getClub', async (c) => {
   const prisma = c.get('prisma');
   try {
     if (id) {
-      const response = await prisma.clubs.findUnique({
+      // Explicit member fields: `members: true` used to leak every User column
+      // (password hash, reset/verification tokens, phone) on this public route.
+      const club = await prisma.clubs.findUnique({
         where: { id },
-        select: { id: true, name: true, collegeName: true, description: true, founderEmail: true, facultyEmail: true, members: true },
+        select: {
+          id: true, name: true, collegeName: true, description: true, founderEmail: true, facultyEmail: true,
+          members: { select: memberDetailSelect },
+          memberships: { select: { user: { select: memberDetailSelect } } },
+        },
       });
-      if (!response) return jsonError(c, requestId, 'no such club', 404);
-      return c.json({ msg: 'club found', response, requestId }, 200);
+      if (!club) return jsonError(c, requestId, 'no such club', 404);
+      return c.json({ msg: 'club found', response: withAllMembers(club), requestId }, 200);
     }
     if (name && collegeName) {
       const response = await prisma.clubs.findFirst({ where: { name, collegeName }, select: clubSelectBase });
@@ -89,7 +115,7 @@ router.get('/getClub', async (c) => {
       return c.json({ msg: 'club found', response, requestId }, 200);
     }
     if (collegeName) {
-      const response = await prisma.clubs.findMany({ where: { collegeName }, select: clubSelectWithMembers, orderBy: { createdAt: 'desc' } });
+      const response = (await prisma.clubs.findMany({ where: { collegeName }, select: clubSelectWithMembers, orderBy: { createdAt: 'desc' } })).map(withAllMembers);
       if (!response || response.length === 0) return c.json({ msg: 'no clubs found for this college', requestId }, 200);
       return c.json({ msg: 'clubs found', response, count: response.length, requestId }, 200);
     }
@@ -110,10 +136,10 @@ router.get('/getClubs/:college', async (c) => {
   const collegeName = decodeURIComponent(c.req.param('college') ?? '');
   if (!collegeName.trim()) return jsonError(c, requestId, 'College name is required', 400);
   const prisma = c.get('prisma');
-  const clubs = await prisma.clubs.findMany({
+  const clubs = (await prisma.clubs.findMany({
     where: { collegeName: { contains: collegeName, mode: 'insensitive' } },
     select: clubSelectWithMembers, orderBy: { createdAt: 'desc' },
-  });
+  })).map(withAllMembers);
   return c.json({ msg: `Clubs for ${collegeName} found`, clubs, count: clubs.length, requestId }, 200);
 });
 
@@ -138,11 +164,12 @@ router.get('/:id', async (c) => {
             announcements: { select: { id: true, Title: true, Description: true } },
           },
         },
-        members: { select: { id: true, name: true, email: true, profileAvatar: true, course: true, year: true } },
+        members: { select: memberDetailSelect },
+        memberships: { select: { user: { select: memberDetailSelect } } },
       },
     });
     if (!club) return jsonError(c, requestId, 'Club not found', 404);
-    return c.json({ msg: 'Club details retrieved successfully', club, requestId }, 200);
+    return c.json({ msg: 'Club details retrieved successfully', club: withAllMembers(club), requestId }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'Error retrieving club details', 500, err);
   }
