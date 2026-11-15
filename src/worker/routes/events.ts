@@ -5,8 +5,75 @@ import { authMiddleware, clubHeadAuthMiddleware, adminCoreAuthMiddleware, specif
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
 import { sameCollege } from '../utils/college';
+import { createNotification, sendToMany } from '../utils/notification';
+import type { FcmConfig } from '../fcm';
 
 const router = new Hono<HonoEnv>();
+
+const getFcmCfg = (c: any): FcmConfig => ({
+  projectId: c.env.FIREBASE_PROJECT_ID,
+  clientEmail: c.env.FIREBASE_CLIENT_EMAIL,
+  privateKey: c.env.FIREBASE_PRIVATE_KEY,
+});
+
+/**
+ * Tells an event's organisers (club founder + core members, and the event
+ * creator) about a new registration. Every registration lands in their in-app
+ * inbox; a push is sent only when it needs action (approval or a payment
+ * screenshot to check), so big events don't buzz phones for every sign-up.
+ */
+async function notifyOrganisersOfRegistration(
+  prisma: any,
+  fcmCfg: FcmConfig,
+  input: { eventId: string; attendeeId: string; needsApproval: boolean; paymentToReview: boolean },
+): Promise<void> {
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id: input.eventId },
+      select: { EventName: true, clubId: true, createdById: true },
+    });
+    if (!event) return;
+    const [club, attendee] = await Promise.all([
+      event.clubId
+        ? prisma.clubs.findUnique({
+            where: { id: event.clubId },
+            select: { founderEmail: true, coremember1: true, coremember2: true, coremember3: true },
+          })
+        : null,
+      prisma.user.findUnique({ where: { id: input.attendeeId }, select: { name: true } }),
+    ]);
+    const emails = club
+      ? [club.founderEmail, club.coremember1, club.coremember2, club.coremember3].filter(
+          (e: string | null): e is string => !!e && e !== 'none',
+        )
+      : [];
+    const managers = emails.length
+      ? await prisma.user.findMany({
+          where: { OR: emails.map((e) => ({ email: { equals: e, mode: 'insensitive' as const } })) },
+          select: { id: true },
+        })
+      : [];
+    const ids = new Set<string>(managers.map((m: any) => m.id));
+    if (event.createdById) ids.add(event.createdById);
+    ids.delete(input.attendeeId); // an organiser registering for their own event
+    if (ids.size === 0) return;
+
+    const who = attendee?.name || 'Someone';
+    const action = input.needsApproval ? ' and is waiting for approval' : input.paymentToReview ? ' and sent a payment screenshot' : '';
+    await sendToMany(prisma, fcmCfg, {
+      userIds: [...ids],
+      type: 'event_registration',
+      message: {
+        title: input.needsApproval || input.paymentToReview ? `Action needed: ${event.EventName}` : `New registration: ${event.EventName}`,
+        body: `${who} registered${action}.`,
+        data: { eventId: input.eventId, tab: 'manage' },
+      },
+      push: input.needsApproval || input.paymentToReview,
+    });
+  } catch (err: any) {
+    logger.error('notifyOrganisersOfRegistration failed', { error: err.message, eventId: input.eventId });
+  }
+}
 
 const EventSchema = z.object({
   eventName: z.string(), description: z.string().optional(), whatsappLink: z.string().optional(),
@@ -523,6 +590,9 @@ router.post('/registerEvent', authMiddleware, async (c) => {
       });
       await saveAnswers();
       await prisma.eventQueue.create({ data: { eventId, userId } });
+      c.executionCtx.waitUntil(notifyOrganisersOfRegistration(prisma, getFcmCfg(c), {
+        eventId, attendeeId: userId, needsApproval: true, paymentToReview: Boolean(event.isPaid && paymentScreenshot),
+      }));
       return c.json({
         msg: 'registered successfully , waiting for approval',
         ForkedUpId: response.uniquePassId,
@@ -552,6 +622,9 @@ router.post('/registerEvent', authMiddleware, async (c) => {
       throw txErr;
     }
     await saveAnswers();
+    c.executionCtx.waitUntil(notifyOrganisersOfRegistration(prisma, getFcmCfg(c), {
+      eventId, attendeeId: userId, needsApproval: false, paymentToReview: Boolean(event.isPaid && paymentScreenshot),
+    }));
 
     return c.json({
       msg: 'registered successfully',
@@ -1034,42 +1107,103 @@ const csvCell = (v: unknown): string => {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
+// Filters shared by the attendee list, its CSV and its email export:
+//   q=         name, email, college, course, pass ID or any registration answer
+//   checkedIn= yes | no
+//   payment=   CONFIRMED | PENDING | REJECTED   (rows with no status count as CONFIRMED)
+//   approval=  pending | approved | rejected    (acceptance-based events)
+type AttendeeFilters = { where: any; filtered: boolean; key: string };
+
+const PAYMENT_FILTERS = ['CONFIRMED', 'PENDING', 'REJECTED'];
+const APPROVAL_FILTERS = ['pending', 'approved', 'rejected'];
+
+async function attendeeFilters(prisma: any, eventId: string, query: (k: string) => string | undefined): Promise<AttendeeFilters> {
+  const q = (query('q') ?? '').trim().slice(0, 100);
+  const checkedIn = (query('checkedIn') ?? '').toLowerCase();
+  const payment = (query('payment') ?? '').toUpperCase();
+  const approval = (query('approval') ?? '').toLowerCase();
+
+  const and: any[] = [];
+  if (q) {
+    const contains = { contains: q, mode: 'insensitive' as const };
+    const answerMatches = await prisma.registrationAnswer.findMany({
+      where: { eventId, answer: contains },
+      select: { userId: true },
+      distinct: ['userId'],
+      take: 1000,
+    });
+    and.push({
+      OR: [
+        { user: { name: contains } },
+        { user: { email: contains } },
+        { user: { collegeName: contains } },
+        { user: { course: contains } },
+        { uniquePassId: contains },
+        ...(answerMatches.length ? [{ userId: { in: answerMatches.map((a: any) => a.userId) } }] : []),
+      ],
+    });
+  }
+  if (checkedIn === 'yes') and.push({ checkedInAt: { not: null } });
+  if (checkedIn === 'no') and.push({ checkedInAt: null });
+  if (PAYMENT_FILTERS.includes(payment)) {
+    and.push(payment === 'CONFIRMED'
+      ? { OR: [{ paymentStatus: 'CONFIRMED' }, { paymentStatus: null }] }
+      : { paymentStatus: payment });
+  }
+  if (APPROVAL_FILTERS.includes(approval)) and.push({ approvalStatus: approval });
+
+  const key = [q, checkedIn === 'yes' || checkedIn === 'no' ? checkedIn : '', PAYMENT_FILTERS.includes(payment) ? payment : '', APPROVAL_FILTERS.includes(approval) ? approval : ''].join('|');
+  return { where: and.length ? { eventId, AND: and } : { eventId }, filtered: and.length > 0, key };
+}
+
 router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, async (c) => {
   const requestId = generateRequestId();
   const eventId = c.req.param('eventId');
   const prisma = c.get('prisma');
   try {
+    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true, isPaid: true } });
+    if (!event) return c.json({ message: 'Event not found' }, 404);
+    // Payment columns/fields only mean something for paid events.
+    const isPaid = Boolean(event.isPaid);
+    const { where, filtered, key } = await attendeeFilters(prisma, eventId, (k) => c.req.query(k));
+    const format = c.req.query('format');
+
+    if (format === 'emails') {
+      // For "Email all": every matching attendee's address, not one page.
+      const rows = await prisma.userEvents.findMany({
+        where, orderBy: { joinedAt: 'desc' }, take: 5000,
+        select: { user: { select: { email: true } } },
+      });
+      const emails = [...new Set(rows.map((r: any) => r.user?.email).filter(Boolean))];
+      return c.json({ emails, total: emails.length }, 200);
+    }
+
     const customQuestions = await prisma.eventCustomQuestion.findMany({
       where: { eventId },
       orderBy: { sortOrder: 'asc' },
     });
 
-    if (c.req.query('format') === 'csv') {
+    if (format === 'csv') {
       const sinceParam = c.req.query('since');
       let since: Date | null = null;
       if (sinceParam) {
         since = new Date(sinceParam);
         if (Number.isNaN(since.getTime())) return c.json({ message: 'Invalid since timestamp' }, 400);
       }
-      const event = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true, isPaid: true } });
-      if (!event) return c.json({ message: 'Event not found' }, 404);
-      // Payment columns only mean something for paid events; free events
-      // would show "CONFIRMED" and an empty screenshot on every row.
-      const includePayment = Boolean(event.isPaid);
 
       const [latest, total] = await Promise.all([
-        prisma.userEvents.findFirst({ where: { eventId }, orderBy: { joinedAt: 'desc' }, select: { joinedAt: true } }),
-        prisma.userEvents.count({ where: { eventId } }),
+        prisma.userEvents.findFirst({ where, orderBy: { joinedAt: 'desc' }, select: { joinedAt: true } }),
+        prisma.userEvents.count({ where }),
       ]);
-      // Columns depend on isPaid, so it is part of the ETag: switching an event
-      // between free and paid must not serve a cached CSV with the old columns.
-      const etag = `${latest ? `${total}-${latest.joinedAt.getTime()}` : `0-${total}`}-${includePayment ? 'p' : 'f'}`;
+      // Columns depend on isPaid and rows on the filters, so both are part of
+      // the ETag: a cached CSV with other columns/rows must not be served.
+      const etag = `${latest ? `${total}-${latest.joinedAt.getTime()}` : `0-${total}`}-${isPaid ? 'p' : 'f'}${filtered ? `-${key}` : ''}`;
       if (c.req.header('if-none-match') === etag) {
         return new Response(null, { status: 304, headers: { ETag: etag, 'Cache-Control': 'no-cache' } });
       }
 
       const rows = await prisma.userEvents.findMany({
-        where: { eventId, ...(since ? { joinedAt: { gt: since } } : {}) },
+        where: since ? { AND: [where, { joinedAt: { gt: since } }] } : where,
         orderBy: { joinedAt: 'desc' },
         select: {
           joinedAt: true, uniquePassId: true, paymentStatus: true, paymentScreenshotUrl: true, checkedInAt: true,
@@ -1084,7 +1218,7 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
 
       const header = [
         'User ID', 'Name', 'Email', 'College', 'Joined At', 'Pass ID',
-        ...(includePayment ? ['Payment Status', 'Payment Screenshot URL'] : []),
+        ...(isPaid ? ['Payment Status', 'Payment Screenshot URL'] : []),
         'Checked In At',
         ...customQuestions.map((q: any) => q.label),
       ];
@@ -1095,7 +1229,7 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
         lines.push([
           u.id ?? '', u.name ?? '', u.email ?? '', u.collegeName ?? '', r.joinedAt.toISOString(),
           r.uniquePassId ?? '',
-          ...(includePayment ? [r.paymentStatus ?? 'CONFIRMED', r.paymentScreenshotUrl ?? ''] : []),
+          ...(isPaid ? [r.paymentStatus ?? 'CONFIRMED', r.paymentScreenshotUrl ?? ''] : []),
           r.checkedInAt ? r.checkedInAt.toISOString() : '',
           ...customQuestions.map((q: any) => ua[q.id] || ''),
         ].map(csvCell).join(','));
@@ -1113,35 +1247,6 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
 
     const page = Math.max(parseInt(c.req.query('page') ?? '1') || 1, 1);
     const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '50') || 50, 1), 100);
-    const q = (c.req.query('q') ?? '').trim().slice(0, 100);
-
-    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { isPaid: true } });
-    if (!event) return jsonError(c, requestId, 'Event not found', 404);
-    const isPaid = Boolean(event.isPaid);
-
-    // ?q= searches every attendee of the event (not just one page): name,
-    // email, college, course, pass ID, or any registration answer.
-    let where: any = { eventId };
-    if (q) {
-      const contains = { contains: q, mode: 'insensitive' as const };
-      const answerMatches = await prisma.registrationAnswer.findMany({
-        where: { eventId, answer: contains },
-        select: { userId: true },
-        distinct: ['userId'],
-        take: 1000,
-      });
-      where = {
-        eventId,
-        OR: [
-          { user: { name: contains } },
-          { user: { email: contains } },
-          { user: { collegeName: contains } },
-          { user: { course: contains } },
-          { uniquePassId: contains },
-          ...(answerMatches.length ? [{ userId: { in: answerMatches.map((a: any) => a.userId) } }] : []),
-        ],
-      };
-    }
 
     const [participants, total, totalAll] = await Promise.all([
       prisma.userEvents.findMany({
@@ -1150,13 +1255,13 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
         skip: (page - 1) * limit,
         orderBy: { joinedAt: 'desc' },
         select: {
-          joinedAt: true, uniquePassId: true, checkedInAt: true,
+          joinedAt: true, uniquePassId: true, checkedInAt: true, approvalStatus: true,
           ...(isPaid ? { paymentStatus: true, paymentScreenshotUrl: true } : {}),
           user: { select: { id: true, name: true, email: true, collegeName: true, course: true, year: true } },
         },
       }),
       prisma.userEvents.count({ where }),
-      q ? prisma.userEvents.count({ where: { eventId } }) : Promise.resolve(null),
+      filtered ? prisma.userEvents.count({ where: { eventId } }) : Promise.resolve(null),
     ]);
     const answers = await prisma.registrationAnswer.findMany({
       where: { eventId, userId: { in: participants.map((p: any) => p.user?.id).filter(Boolean) } },
@@ -1171,12 +1276,13 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
         joinedAt: p.joinedAt,
         passId: p.uniquePassId,
         checkedInAt: p.checkedInAt,
+        approvalStatus: p.approvalStatus ?? null,
         ...(isPaid ? { paymentStatus: p.paymentStatus ?? 'CONFIRMED', paymentScreenshotUrl: p.paymentScreenshotUrl ?? null } : {}),
         user: p.user,
         customAnswers: (p.user?.id && answersByUser[p.user.id]) || [],
       })),
-      // Event-level info so the web table can match the CSV's columns on
-      // every page: payment columns only for paid events, and every custom
+      // Event-level info so clients can match the CSV's columns on every
+      // page: payment columns only for paid events, and every custom
       // question in its configured order.
       isPaid,
       questions: customQuestions.map((qq: any) => qq.label),
@@ -1325,6 +1431,42 @@ const passIdFromScan = (raw: string): string => {
   try { return decodeURIComponent(last); } catch { return last; }
 };
 
+type CheckInResult = {
+  httpStatus: 200 | 400 | 404 | 409;
+  body: { status: string; msg: string; checkedInAt?: Date | null; attendee?: unknown };
+};
+
+/**
+ * One pass, the same rules for a live scan, a manual check-in from the
+ * attendee list, and an offline scan synced later. `at` is when the scan
+ * happened (offline scans); it defaults to now.
+ */
+async function checkInPass(prisma: any, eventId: string, passId: string, byUserId: string, at?: Date): Promise<CheckInResult> {
+  const reg = await prisma.userEvents.findFirst({
+    where: { eventId, uniquePassId: passId },
+    select: {
+      userId: true, checkedInAt: true, approvalStatus: true, paymentStatus: true,
+      user: { select: { id: true, name: true, profileAvatar: true, collegeName: true } },
+    },
+  });
+  if (!reg) return { httpStatus: 404, body: { status: 'invalid', msg: 'This pass is not for this event.' } };
+  if (reg.approvalStatus !== 'approved') {
+    return { httpStatus: 409, body: { status: 'not_approved', msg: 'This registration has not been approved.', attendee: reg.user } };
+  }
+  if (['PENDING', 'REJECTED'].includes(String(reg.paymentStatus).toUpperCase())) {
+    return { httpStatus: 409, body: { status: 'payment_pending', msg: 'Payment for this pass is not confirmed.', attendee: reg.user } };
+  }
+  if (reg.checkedInAt) {
+    return { httpStatus: 200, body: { status: 'already', msg: 'Already checked in.', checkedInAt: reg.checkedInAt, attendee: reg.user } };
+  }
+  const updated = await prisma.userEvents.update({
+    where: { userId_eventId: { userId: reg.userId, eventId } },
+    data: { checkedInAt: at ?? new Date(), checkedInById: byUserId },
+    select: { checkedInAt: true },
+  });
+  return { httpStatus: 200, body: { status: 'checked_in', msg: 'Checked in.', checkedInAt: updated.checkedInAt, attendee: reg.user } };
+}
+
 router.post('/:eventId/check-in', authMiddleware, async (c) => {
   const requestId = generateRequestId();
   const eventId = c.req.param('eventId');
@@ -1337,33 +1479,84 @@ router.post('/:eventId/check-in', authMiddleware, async (c) => {
   try {
     const denied = await canManageSchedule(prisma, eventId, userId);
     if (denied) return c.json({ msg: denied.msg }, denied.status);
-
-    const reg = await prisma.userEvents.findFirst({
-      where: { eventId, uniquePassId: passId },
-      select: {
-        userId: true, checkedInAt: true, approvalStatus: true, paymentStatus: true,
-        user: { select: { id: true, name: true, profileAvatar: true, collegeName: true } },
-      },
-    });
-    if (!reg) return c.json({ status: 'invalid', msg: 'This pass is not for this event.' }, 404);
-    if (reg.approvalStatus !== 'approved') {
-      return c.json({ status: 'not_approved', msg: 'This registration has not been approved.', attendee: reg.user }, 409);
-    }
-    if (['PENDING', 'REJECTED'].includes(String(reg.paymentStatus).toUpperCase())) {
-      return c.json({ status: 'payment_pending', msg: 'Payment for this pass is not confirmed.', attendee: reg.user }, 409);
-    }
-    if (reg.checkedInAt) {
-      return c.json({ status: 'already', msg: 'Already checked in.', checkedInAt: reg.checkedInAt, attendee: reg.user }, 200);
-    }
-
-    const updated = await prisma.userEvents.update({
-      where: { userId_eventId: { userId: reg.userId, eventId } },
-      data: { checkedInAt: new Date(), checkedInById: userId },
-      select: { checkedInAt: true },
-    });
-    return c.json({ status: 'checked_in', msg: 'Checked in.', checkedInAt: updated.checkedInAt, attendee: reg.user }, 200);
+    const result = await checkInPass(prisma, eventId, passId, userId);
+    return c.json(result.body, result.httpStatus);
   } catch (err: any) {
     logger.error(`[${requestId}] check-in error`, { error: err.message, eventId });
+    return jsonError(c, requestId, 'Internal server error', 500);
+  }
+});
+
+// ── Offline check-in ──────────────────────────────────────────
+// Before doors open the scanner downloads the roster, validates scans on the
+// device without network, and posts the queued scans when back online.
+
+router.get('/:eventId/check-in/roster', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const prisma = c.get('prisma');
+  try {
+    const denied = await canManageSchedule(prisma, eventId, c.get('userId'));
+    if (denied) return c.json({ msg: denied.msg }, denied.status);
+    const rows = await prisma.userEvents.findMany({
+      where: { eventId },
+      take: 10000,
+      select: {
+        uniquePassId: true, approvalStatus: true, paymentStatus: true, checkedInAt: true,
+        user: { select: { name: true, collegeName: true } },
+      },
+    });
+    return c.json({
+      generatedAt: new Date().toISOString(),
+      roster: rows.map((r: any) => ({
+        passId: r.uniquePassId,
+        name: r.user?.name ?? null,
+        collegeName: r.user?.collegeName ?? null,
+        approvalStatus: r.approvalStatus ?? null,
+        paymentStatus: r.paymentStatus ?? null,
+        checkedInAt: r.checkedInAt,
+      })),
+    }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] check-in roster error`, { error: err.message, eventId });
+    return jsonError(c, requestId, 'Internal server error', 500);
+  }
+});
+
+const MAX_OFFLINE_SKEW_MS = 3 * 24 * 60 * 60 * 1000;
+
+router.post('/:eventId/check-in/batch', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const body = await readJson(c);
+  const items: any[] = Array.isArray(body?.items) ? body.items.slice(0, 500) : [];
+  if (items.length === 0) return c.json({ msg: 'items is required' }, 400);
+
+  const prisma = c.get('prisma');
+  const userId = c.get('userId');
+  try {
+    const denied = await canManageSchedule(prisma, eventId, userId);
+    if (denied) return c.json({ msg: denied.msg }, denied.status);
+
+    const now = Date.now();
+    const results = [];
+    for (const item of items) {
+      const passId = typeof item?.passId === 'string' ? passIdFromScan(item.passId) : '';
+      if (!passId) {
+        results.push({ passId: item?.passId ?? null, status: 'invalid', msg: 'No pass id.' });
+        continue;
+      }
+      // Keep the real scan time, but never a future or implausibly old one.
+      const scanned = item?.scannedAt ? new Date(item.scannedAt) : null;
+      const at = scanned && !Number.isNaN(scanned.getTime()) && scanned.getTime() <= now && now - scanned.getTime() < MAX_OFFLINE_SKEW_MS
+        ? scanned
+        : undefined;
+      const result = await checkInPass(prisma, eventId, passId, userId, at);
+      results.push({ passId, ...result.body });
+    }
+    return c.json({ results }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] check-in batch error`, { error: err.message, eventId });
     return jsonError(c, requestId, 'Internal server error', 500);
   }
 });
@@ -1382,6 +1575,50 @@ router.get('/:eventId/check-in/stats', authMiddleware, async (c) => {
     return c.json({ registered, checkedIn }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] check-in stats error`, { error: err.message, eventId });
+    return jsonError(c, requestId, 'Internal server error', 500);
+  }
+});
+
+// ── PUT /:eventId/payment — organiser confirms or rejects a payment ──
+// Registrations with a screenshot are stored as CONFIRMED immediately; this
+// lets organisers reject a bad screenshot (or confirm a pending one) from the
+// attendee list. The attendee gets an in-app + push notification.
+
+router.put('/:eventId/payment', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
+  const eventId = c.req.param('eventId');
+  const body = await readJson(c);
+  const attendeeId = typeof body?.userId === 'string' ? body.userId : '';
+  const status = typeof body?.status === 'string' ? body.status.toUpperCase() : '';
+  if (!attendeeId) return c.json({ msg: 'userId is required' }, 400);
+  if (!['CONFIRMED', 'REJECTED'].includes(status)) return c.json({ msg: 'status must be CONFIRMED or REJECTED' }, 400);
+
+  const prisma = c.get('prisma');
+  try {
+    const denied = await canManageSchedule(prisma, eventId, c.get('userId'));
+    if (denied) return c.json({ msg: denied.msg }, denied.status);
+    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { isPaid: true, EventName: true } });
+    if (!event?.isPaid) return c.json({ msg: 'This event is free.' }, 400);
+
+    const updated = await prisma.userEvents.updateMany({
+      where: { eventId, userId: attendeeId },
+      data: { paymentStatus: status, paymentVerifiedAt: new Date() },
+    });
+    if (updated.count === 0) return c.json({ msg: 'This person is not registered for this event.' }, 404);
+
+    c.executionCtx.waitUntil(createNotification(prisma as any, getFcmCfg(c), {
+      userId: attendeeId,
+      type: 'event_payment',
+      title: status === 'CONFIRMED' ? 'Payment confirmed' : 'Payment not accepted',
+      body: status === 'CONFIRMED'
+        ? `Your payment for ${event.EventName} is confirmed. See you there!`
+        : `The organisers couldn't verify your payment for ${event.EventName}. Please contact them.`,
+      data: { eventId },
+      push: true,
+    }));
+    return c.json({ msg: status === 'CONFIRMED' ? 'Payment confirmed' : 'Payment rejected', paymentStatus: status }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] payment decision error`, { error: err.message, eventId });
     return jsonError(c, requestId, 'Internal server error', 500);
   }
 });
