@@ -66,7 +66,8 @@ async function notifyOrganisersOfRegistration(
       message: {
         title: input.needsApproval || input.paymentToReview ? `Action needed: ${event.EventName}` : `New registration: ${event.EventName}`,
         body: `${who} registered${action}.`,
-        data: { eventId: input.eventId, tab: 'manage' },
+        // `route` is the app/inbox navigation contract (resolveNotificationRoute).
+        data: { eventId: input.eventId, route: `/events/${input.eventId}?tab=manage` },
       },
       push: input.needsApproval || input.paymentToReview,
     });
@@ -1613,7 +1614,7 @@ router.put('/:eventId/payment', authMiddleware, async (c) => {
       body: status === 'CONFIRMED'
         ? `Your payment for ${event.EventName} is confirmed. See you there!`
         : `The organisers couldn't verify your payment for ${event.EventName}. Please contact them.`,
-      data: { eventId },
+      data: { eventId, route: `/events/${eventId}` },
       push: true,
     }));
     return c.json({ msg: status === 'CONFIRMED' ? 'Payment confirmed' : 'Payment rejected', paymentStatus: status }, 200);
