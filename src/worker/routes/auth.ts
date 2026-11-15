@@ -10,7 +10,7 @@ import { logger } from '../logger';
 import { sendMail } from '../mail';
 import { getResendVerificationEmailHTML, getSignupVerificationEmailHTML } from '../emails/verification';
 import { generateResetLinkEmailHtml } from '../emails/password';
-import { verifyClerkSession, isClerkConfigured, setClerkPassword, type ClerkSession } from '../clerk';
+import { verifyClerkSession, isClerkConfigured, setClerkPassword, ensureClerkUserForEmail, type ClerkSession } from '../clerk';
 import { convertPendingCoreInvites } from '../coreInvites';
 import { cleanCollegeName, isPlaceholderCollege } from '../utils/college';
 
@@ -386,6 +386,95 @@ router.post('/reset-password/confirm', rateLimiter(10), async (c) => {
     return c.json({ msg: 'Password updated. You can sign in now.' }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] reset confirm error`, { error: err.message });
+    return jsonError(c, requestId, 'internal server error', 500);
+  }
+});
+
+// ── Clerk-based password reset (no SendGrid) ──────────────────
+// 1. POST /reset-password/prepare { email }: makes sure a Clerk user exists for
+//    a registered email, so the web can start Clerk's reset_password_email_code
+//    flow (Clerk sends the code).
+// 2. The user enters Clerk's code + new password; Clerk updates its copy and
+//    signs them in.
+// 3. POST /reset-password/clerk { clerkToken, password }: the email comes only
+//    from the verified Clerk session; the backend hash is set to match, since
+//    web email sign-in checks the backend hash.
+
+router.post('/reset-password/prepare', rateLimiter(5), async (c) => {
+  const requestId = generateRequestId();
+  let body: any;
+  try { body = await c.req.json(); } catch { return jsonError(c, requestId, 'Invalid JSON', 400); }
+  const email = typeof body?.email === 'string' ? body.email.trim() : '';
+  if (!email) return jsonError(c, requestId, 'Email is required', 400);
+
+  // Same answer whether or not the account exists, so this can't be used to
+  // probe for registered emails.
+  const generic = { msg: 'If an account exists for this email, you will get a reset code.' };
+  const prisma = c.get('prisma');
+  try {
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true, email: true, name: true, clerkId: true },
+    });
+    if (!user) return c.json(generic, 200);
+    if (!isClerkConfigured(c.env)) {
+      logger.error(`[${requestId}] password reset: CLERK_SECRET_KEY not set`, { notify: true });
+      return jsonError(c, requestId, 'Password reset is temporarily unavailable. Please try again later.', 503);
+    }
+    const clerkId = await ensureClerkUserForEmail(c.env, user.email, user.name);
+    if (!clerkId) {
+      logger.error(`[${requestId}] password reset: could not find/create Clerk user`, { userId: user.id, notify: true });
+      return jsonError(c, requestId, 'Password reset is temporarily unavailable. Please try again later.', 503);
+    }
+    if (!user.clerkId) await prisma.user.update({ where: { id: user.id }, data: { clerkId } });
+    return c.json(generic, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] reset prepare error`, { error: err.message });
+    return jsonError(c, requestId, 'internal server error', 500);
+  }
+});
+
+router.post('/reset-password/clerk', rateLimiter(10), async (c) => {
+  const requestId = generateRequestId();
+  let body: any;
+  try { body = await c.req.json(); } catch { return jsonError(c, requestId, 'Invalid JSON', 400); }
+  const clerkToken = typeof body?.clerkToken === 'string' ? body.clerkToken : '';
+  const password = typeof body?.password === 'string' ? body.password : '';
+  if (!clerkToken) return jsonError(c, requestId, 'Your reset session expired. Please start again.', 401);
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return jsonError(c, requestId, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`, 400);
+  }
+
+  const result = await verifyClerkSession(c.env, clerkToken);
+  if (!result.ok) {
+    logger.warn(`[${requestId}] reset: clerk session rejected`, { reason: result.reason, detail: result.detail });
+    if (result.reason === 'unavailable') {
+      return jsonError(c, requestId, 'Password reset is temporarily unavailable. Please try again.', 503);
+    }
+    return jsonError(c, requestId, 'Your reset session expired. Please start again.', 401);
+  }
+  const { clerkId, emails } = result.session;
+  if (emails.length === 0) return jsonError(c, requestId, 'No verified email on this account.', 403);
+
+  const prisma = c.get('prisma');
+  try {
+    const user = await prisma.user.findFirst({
+      where: { OR: emails.map((e) => ({ email: { equals: e, mode: 'insensitive' as const } })) },
+      select: { id: true, clerkId: true },
+    });
+    if (!user) return jsonError(c, requestId, 'No Zynvo account found for this email. Please sign up.', 404);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: bcrypt.hashSync(password, 10),
+        resetTokenHash: null,
+        resetTokenExpiry: null,
+        ...(user.clerkId ? {} : { clerkId }),
+      },
+    });
+    return c.json({ msg: 'Password updated. You can sign in now.' }, 200);
+  } catch (err: any) {
+    logger.error(`[${requestId}] reset via clerk error`, { error: err.message });
     return jsonError(c, requestId, 'internal server error', 500);
   }
 });
