@@ -1051,14 +1051,19 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
         since = new Date(sinceParam);
         if (Number.isNaN(since.getTime())) return c.json({ message: 'Invalid since timestamp' }, 400);
       }
-      const event = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true } });
+      const event = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true, isPaid: true } });
       if (!event) return c.json({ message: 'Event not found' }, 404);
+      // Payment columns only mean something for paid events; free events
+      // would show "CONFIRMED" and an empty screenshot on every row.
+      const includePayment = Boolean(event.isPaid);
 
       const [latest, total] = await Promise.all([
         prisma.userEvents.findFirst({ where: { eventId }, orderBy: { joinedAt: 'desc' }, select: { joinedAt: true } }),
         prisma.userEvents.count({ where: { eventId } }),
       ]);
-      const etag = latest ? `${total}-${latest.joinedAt.getTime()}` : `0-${total}`;
+      // Columns depend on isPaid, so it is part of the ETag: switching an event
+      // between free and paid must not serve a cached CSV with the old columns.
+      const etag = `${latest ? `${total}-${latest.joinedAt.getTime()}` : `0-${total}`}-${includePayment ? 'p' : 'f'}`;
       if (c.req.header('if-none-match') === etag) {
         return new Response(null, { status: 304, headers: { ETag: etag, 'Cache-Control': 'no-cache' } });
       }
@@ -1078,7 +1083,8 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
       for (const a of answers) (byUser[a.userId] ??= {})[a.questionId] = a.answer;
 
       const header = [
-        'User ID', 'Name', 'Email', 'College', 'Joined At', 'Pass ID', 'Payment Status', 'Payment Screenshot URL',
+        'User ID', 'Name', 'Email', 'College', 'Joined At', 'Pass ID',
+        ...(includePayment ? ['Payment Status', 'Payment Screenshot URL'] : []),
         'Checked In At',
         ...customQuestions.map((q: any) => q.label),
       ];
@@ -1088,7 +1094,8 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
         const ua = (u.id && byUser[u.id]) || {};
         lines.push([
           u.id ?? '', u.name ?? '', u.email ?? '', u.collegeName ?? '', r.joinedAt.toISOString(),
-          r.uniquePassId ?? '', r.paymentStatus ?? 'CONFIRMED', r.paymentScreenshotUrl ?? '',
+          r.uniquePassId ?? '',
+          ...(includePayment ? [r.paymentStatus ?? 'CONFIRMED', r.paymentScreenshotUrl ?? ''] : []),
           r.checkedInAt ? r.checkedInAt.toISOString() : '',
           ...customQuestions.map((q: any) => ua[q.id] || ''),
         ].map(csvCell).join(','));
