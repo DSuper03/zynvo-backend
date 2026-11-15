@@ -1113,18 +1113,50 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
 
     const page = Math.max(parseInt(c.req.query('page') ?? '1') || 1, 1);
     const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '50') || 50, 1), 100);
-    const [participants, total] = await Promise.all([
+    const q = (c.req.query('q') ?? '').trim().slice(0, 100);
+
+    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { isPaid: true } });
+    if (!event) return jsonError(c, requestId, 'Event not found', 404);
+    const isPaid = Boolean(event.isPaid);
+
+    // ?q= searches every attendee of the event (not just one page): name,
+    // email, college, course, pass ID, or any registration answer.
+    let where: any = { eventId };
+    if (q) {
+      const contains = { contains: q, mode: 'insensitive' as const };
+      const answerMatches = await prisma.registrationAnswer.findMany({
+        where: { eventId, answer: contains },
+        select: { userId: true },
+        distinct: ['userId'],
+        take: 1000,
+      });
+      where = {
+        eventId,
+        OR: [
+          { user: { name: contains } },
+          { user: { email: contains } },
+          { user: { collegeName: contains } },
+          { user: { course: contains } },
+          { uniquePassId: contains },
+          ...(answerMatches.length ? [{ userId: { in: answerMatches.map((a: any) => a.userId) } }] : []),
+        ],
+      };
+    }
+
+    const [participants, total, totalAll] = await Promise.all([
       prisma.userEvents.findMany({
-        where: { eventId },
+        where,
         take: limit,
         skip: (page - 1) * limit,
         orderBy: { joinedAt: 'desc' },
         select: {
           joinedAt: true, uniquePassId: true, checkedInAt: true,
+          ...(isPaid ? { paymentStatus: true, paymentScreenshotUrl: true } : {}),
           user: { select: { id: true, name: true, email: true, collegeName: true, course: true, year: true } },
         },
       }),
-      prisma.userEvents.count({ where: { eventId } }),
+      prisma.userEvents.count({ where }),
+      q ? prisma.userEvents.count({ where: { eventId } }) : Promise.resolve(null),
     ]);
     const answers = await prisma.registrationAnswer.findMany({
       where: { eventId, userId: { in: participants.map((p: any) => p.user?.id).filter(Boolean) } },
@@ -1139,10 +1171,19 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
         joinedAt: p.joinedAt,
         passId: p.uniquePassId,
         checkedInAt: p.checkedInAt,
+        ...(isPaid ? { paymentStatus: p.paymentStatus ?? 'CONFIRMED', paymentScreenshotUrl: p.paymentScreenshotUrl ?? null } : {}),
         user: p.user,
         customAnswers: (p.user?.id && answersByUser[p.user.id]) || [],
       })),
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      // Event-level info so the web table can match the CSV's columns on
+      // every page: payment columns only for paid events, and every custom
+      // question in its configured order.
+      isPaid,
+      questions: customQuestions.map((qq: any) => qq.label),
+      pagination: {
+        page, limit, total, totalPages: Math.ceil(total / limit),
+        totalAll: totalAll ?? total,
+      },
     }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] participants error`, { error: err.message, eventId });
