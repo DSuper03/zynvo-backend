@@ -251,17 +251,28 @@ router.get('/isFounder', authMiddleware, async (c) => {
     if (!user) return jsonError(c, requestId, 'No user Found', 404);
     const event = await prisma.event.findUnique({ where: { id: eventId }, select: { clubId: true, createdById: true } });
     if (!event) return c.json({ msg: 'you are not a founder' }, 200);
-    const isAttender = await prisma.userEvents.findUnique({
-      where: { userId_eventId: { userId, eventId } },
-    });
-    if (isAttender) return c.json({ msg: 'identified as attendee' }, 200);
+    // Organizer checks run before the attendee check: a founder/core member who
+    // registers for their own event must keep organizer access.
+    if (event.createdById && event.createdById === userId) {
+      return c.json({ msg: 'identified as founder' }, 200);
+    }
     const club = await prisma.clubs.findUnique({
       where: { id: event.clubId },
       select: { founderEmail: true, coremember1: true, coremember2: true, coremember3: true },
     });
-    if (club && [club.founderEmail, club.coremember1, club.coremember2, club.coremember3].includes(user.email)) {
+    const email = user.email?.toLowerCase();
+    const managers = club
+      ? [club.founderEmail, club.coremember1, club.coremember2, club.coremember3]
+          .filter((e): e is string => !!e)
+          .map((e) => e.toLowerCase())
+      : [];
+    if (email && managers.includes(email)) {
       return c.json({ msg: 'identified as founder' }, 200);
     }
+    const isAttender = await prisma.userEvents.findUnique({
+      where: { userId_eventId: { userId, eventId } },
+    });
+    if (isAttender) return c.json({ msg: 'identified as attendee' }, 200);
     return c.json({ msg: 'you are not a founder' }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'internal server error', 500, err);
