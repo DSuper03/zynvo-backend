@@ -6,7 +6,7 @@ import { logger } from '../logger';
 import { rateLimiter } from '../middleware/ratelimit';
 import { founderClub } from '../utils/clubAuth';
 import { sameCollege } from '../utils/college';
-import { addCoreMembersByEmail, parseEmails } from '../coreInvites';
+import { addCoreMembersByEmail, parseEmails, settleLegacyClubInvites } from '../coreInvites';
 
 const router = new Hono<HonoEnv>();
 
@@ -261,7 +261,7 @@ router.post('/:clubId/core-members/by-email', authMiddleware, rateLimiter(10), a
   }
 });
 
-// ── GET /:clubId/core-invites — live pending invites ──────────
+// ── GET /:clubId/core-invites — head check; settles old invites ─
 
 router.get('/:clubId/core-invites', authMiddleware, async (c) => {
   const requestId = generateRequestId();
@@ -270,12 +270,10 @@ router.get('/:clubId/core-invites', authMiddleware, async (c) => {
   try {
     const club = await founderClub(prisma, c.get('userId'), clubId);
     if (!club) return jsonError(c, requestId, 'Only the club head can view core invites', 403);
-    const invites = await prisma.clubCoreInvite.findMany({
-      where: { clubId, status: 'PENDING', expiresAt: { gt: new Date() } },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, email: true, status: true, expiresAt: true, createdAt: true },
-    });
-    return c.json({ invites }, 200);
+    // Invites were replaced by direct adding: settle any left over (people
+    // with an account join the core team, the rest are revoked).
+    const added = await settleLegacyClubInvites(prisma, c.env, clubId);
+    return c.json({ invites: [], added }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'Internal server error', 500, err);
   }
