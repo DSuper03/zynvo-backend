@@ -76,7 +76,7 @@ export async function createNotification(
         data: input.data ?? undefined,
       },
     });
-    if (input.push) void pushToUser(prisma, fcmCfg, input);
+    if (input.push) await pushToUser(prisma, fcmCfg, input);
   } catch (err: any) {
     logger.error('createNotification failed', { error: err.message, userId: input.userId });
   }
@@ -109,14 +109,14 @@ export async function sendToMany(
     logger.error('sendToMany persist failed', { error: err.message });
   }
   if (input.push) {
-    for (const userId of input.userIds) {
-      void pushToUser(prisma, fcmCfg, {
+    for (let offset = 0; offset < input.userIds.length; offset += 50) {
+      await Promise.all(input.userIds.slice(offset, offset + 50).map((userId) => pushToUser(prisma, fcmCfg, {
         userId,
         type: input.type ?? 'direct',
         title: input.message.title,
         body: input.message.body,
         data: input.message.data ?? null,
-      });
+      })));
     }
   }
 }
