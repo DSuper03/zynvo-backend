@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { HonoEnv } from '../types';
-import { authMiddleware, optionalUserId } from '../middleware/auth';
+import { authMiddleware, optionalUserId, isAdminEmail } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
 import { createNotification, sendToMany, notifyFollowersOfNewPost } from '../utils/notification';
@@ -68,7 +68,7 @@ router.post('/create', authMiddleware, async (c) => {
       : [];
 
     if (validMentions.length > 0) {
-      void sendToMany(prisma, fcmCfg, {
+      c.executionCtx.waitUntil(sendToMany(prisma, fcmCfg, {
         userIds: validMentions, type: 'mention',
         message: {
           title: 'You were mentioned in a post',
@@ -76,14 +76,14 @@ router.post('/create', authMiddleware, async (c) => {
           data: { postId: post.id, route: `/post/${post.id}` },
         },
         push: true,
-      });
+      }));
     }
 
-    void notifyFollowersOfNewPost(prisma, fcmCfg, {
+    c.executionCtx.waitUntil(notifyFollowersOfNewPost(prisma, fcmCfg, {
       authorId: userId, postId: post.id,
       title: parsed.data.title, description: parsed.data.description,
       authorName: user.name, image: image ?? null,
-    });
+    }));
 
     moderateInBackground(c, {
       kind: 'post', id: post.id, authorId: userId,
@@ -107,6 +107,11 @@ router.put('/edit/:id', authMiddleware, async (c) => {
   const parsed = postSchema.safeParse(body);
   if (!parsed.success) return jsonError(c, requestId, 'incorrect format', 400);
   const prisma = c.get('prisma') as any;
+  const userId = c.get('userId');
+  // Only the author may edit a post.
+  const existing = await prisma.createPost.findUnique({ where: { id: postId }, select: { authorId: true } });
+  if (!existing) return jsonError(c, requestId, 'no such post found', 404);
+  if (existing.authorId !== userId) return jsonError(c, requestId, 'you can only edit your own posts', 403);
   await prisma.createPost.update({
     where: { id: postId },
     data: {
@@ -116,7 +121,7 @@ router.put('/edit/:id', authMiddleware, async (c) => {
     select: { id: true },
   });
   moderateInBackground(c, {
-    kind: 'post', id: postId, authorId: c.get('userId'),
+    kind: 'post', id: postId, authorId: userId,
     text: `${parsed.data.title}\n${parsed.data.description}`,
   });
   return c.json({ msg: 'post updated, changes will reflect shortly' }, 200);
@@ -173,7 +178,15 @@ router.delete('/delete/:id', authMiddleware, async (c) => {
   const requestId = generateRequestId();
   const postId = c.req.param('id');
   const prisma = c.get('prisma') as any;
+  const userId = c.get('userId');
   try {
+    // The author, or an admin, may delete a post.
+    const existing = await prisma.createPost.findUnique({ where: { id: postId }, select: { authorId: true } });
+    if (!existing) return jsonError(c, requestId, 'no such post found', 404);
+    if (existing.authorId !== userId) {
+      const me = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+      if (!isAdminEmail(c.env, me?.email)) return jsonError(c, requestId, 'you can only delete your own posts', 403);
+    }
     await prisma.createPost.delete({ where: { id: postId }, select: { id: true } });
     return c.json({ msg: 'post deleted' }, 200);
   } catch (err: any) {
@@ -318,12 +331,12 @@ router.post('/:postId/comments', authMiddleware, async (c) => {
     const snippet = content.length > 120 ? `${content.slice(0, 117)}...` : content;
     const commenterName = user?.name?.trim() || 'Someone';
     if (post.authorId !== userId) {
-      void createNotification(prisma, fcmCfg, {
+      c.executionCtx.waitUntil(createNotification(prisma, fcmCfg, {
         userId: post.authorId, type: 'comment',
         title: 'New comment on your post',
         body: `${commenterName} commented on "${post.title}": "${snippet}"`,
         data: { postId, commentId: comment.id, route: `/post/${postId}` }, push: true,
-      });
+      }));
     }
     moderateInBackground(c, { kind: 'comment', id: comment.id, authorId: userId, text: content });
     return c.json({ msg: 'comment added', comment }, 201);

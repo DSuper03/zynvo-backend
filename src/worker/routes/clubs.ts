@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { HonoEnv } from '../types';
 import { authMiddleware } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
+import { cached } from '../cache';
 import { logger } from '../logger';
 import { rateLimiter } from '../middleware/ratelimit';
 import { founderClub } from '../utils/clubAuth';
@@ -57,8 +58,8 @@ router.get('/getAll', async (c) => {
   const prisma = c.get('prisma');
   try {
     const [resp, totalData] = await Promise.all([
-      prisma.clubs.findMany({ skip, take: limit, select: clubSelectWithMembers, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }),
-      prisma.clubs.count(),
+      prisma.clubs.findMany(cached({ skip, take: limit, select: clubSelectWithMembers, orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }] }, { ttl: 60, tags: ['clubs'] })),
+      prisma.clubs.count(cached({}, { ttl: 60, tags: ['clubs'] })),
     ]);
     return c.json({ resp: resp.map(withAllMembers), totalPages: Math.ceil(totalData / limit) }, 200);
   } catch (err: any) {
@@ -79,8 +80,8 @@ router.get('/public', async (c) => {
   const where = collegeName ? { collegeName: { contains: collegeName, mode: 'insensitive' as const } } : undefined;
   try {
     const [clubs, totalData] = await Promise.all([
-      prisma.clubs.findMany({ where, skip, take: limit, select: publicClubSelect, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }),
-      prisma.clubs.count({ where }),
+      prisma.clubs.findMany(cached({ where, skip, take: limit, select: publicClubSelect, orderBy: [{ createdAt: 'desc' as const }, { id: 'asc' as const }] }, { ttl: 60, tags: ['clubs'] })),
+      prisma.clubs.count(cached({ where }, { ttl: 60, tags: ['clubs'] })),
     ]);
     return c.json({ clubs, totalPages: Math.ceil(totalData / limit), page, requestId }, 200);
   } catch (err: any) {
@@ -136,10 +137,10 @@ router.get('/getClubs/:college', async (c) => {
   const collegeName = decodeURIComponent(c.req.param('college') ?? '');
   if (!collegeName.trim()) return jsonError(c, requestId, 'College name is required', 400);
   const prisma = c.get('prisma');
-  const clubs = (await prisma.clubs.findMany({
-    where: { collegeName: { contains: collegeName, mode: 'insensitive' } },
-    select: clubSelectWithMembers, orderBy: { createdAt: 'desc' },
-  })).map(withAllMembers);
+  const clubs = (await prisma.clubs.findMany(cached({
+    where: { collegeName: { contains: collegeName, mode: 'insensitive' as const } },
+    select: clubSelectWithMembers, orderBy: { createdAt: 'desc' as const },
+  }, { ttl: 60, tags: ['clubs'] }))).map(withAllMembers);
   return c.json({ msg: `Clubs for ${collegeName} found`, clubs, count: clubs.length, requestId }, 200);
 });
 
@@ -151,7 +152,7 @@ router.get('/:id', async (c) => {
   if (!clubId?.trim()) return jsonError(c, requestId, 'Club ID is required', 400);
   const prisma = c.get('prisma');
   try {
-    const club = await prisma.clubs.findUnique({
+    const club = await prisma.clubs.findUnique(cached({
       where: { id: clubId },
       select: {
         ...clubSelectBase, founderEmail: true, clubContact: true, requirements: true,
@@ -167,7 +168,7 @@ router.get('/:id', async (c) => {
         members: { select: memberDetailSelect },
         memberships: { select: { user: { select: memberDetailSelect } } },
       },
-    });
+    }, { ttl: 60, tags: ['clubs', 'events'] }));
     if (!club) return jsonError(c, requestId, 'Club not found', 404);
     return c.json({ msg: 'Club details retrieved successfully', club: withAllMembers(club), requestId }, 200);
   } catch (err: any) {
