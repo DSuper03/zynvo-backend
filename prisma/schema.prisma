@@ -201,6 +201,7 @@ model event {
   eventHeaderImage     String?             @default("none")
   prizes               String              @default("no prizes given")
   acceptanceBased      Boolean?             @default(false)
+  coreTeamOnly         Boolean              @default(false)
   EventMode            String              @default("Hybrid")
   EventType            String              @default("general")
   EventUrl             String?             @default("")

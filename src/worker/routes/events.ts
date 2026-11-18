@@ -6,6 +6,7 @@ import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
 import { sameCollege } from '../utils/college';
 import { createNotification, sendToMany } from '../utils/notification';
+import { notifyCoreTeamOfEvent, notifyEventChanges, notifyEventDecision } from '../utils/event-notifications';
 import type { FcmConfig } from '../fcm';
 
 const router = new Hono<HonoEnv>();
@@ -86,6 +87,7 @@ const EventSchema = z.object({
   tagline: z.string().optional(), applicationStartDate: z.string().optional(),
   applicationEndDate: z.string().optional(),
   maxParticipants: z.union([z.number(), z.string()]).optional().nullable(),
+  coreTeamOnly: z.boolean().optional(),
   customQuestions: z.array(z.object({
     label: z.string().trim().min(1),
     type: z.enum(['text', 'url', 'select']),
@@ -104,7 +106,7 @@ const eventSelectBase = {
   collegeStudentsOnly: true, contactEmail: true, contactPhone: true,
   participationFee: true, posterUrl: true, createdAt: true,
   link1: true, link2: true, link3: true, whatsappLink: true,
-  isPaid: true, qrCodeUrl: true, Fees: true, maxParticipants: true, acceptanceBased: true, desiredSponsors: true,
+  isPaid: true, qrCodeUrl: true, Fees: true, maxParticipants: true, acceptanceBased: true, coreTeamOnly: true, desiredSponsors: true,
   _count: { select: { attendees: true } },
   customQuestions: { orderBy: { sortOrder: 'asc' as const } },
 } as const;
@@ -188,6 +190,7 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
         Fees: String(parsedData.data.paymentAmount || parsedData.data.fees || 'none'),
         maxParticipants: capacity,
         acceptanceBased: !!body.acceptanceBased,
+        coreTeamOnly: parsedData.data.coreTeamOnly ?? false,
         customQuestions: parsedData.data.customQuestions ? {
           create: parsedData.data.customQuestions.map((q, index) => ({
             label: q.label, type: q.type,
@@ -202,6 +205,9 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
       },
       select: { id: true },
     });
+    if (parsedData.data.coreTeamOnly) {
+      c.executionCtx.waitUntil(notifyCoreTeamOfEvent(prisma, getFcmCfg(c), { id: response.id, name: parsedData.data.eventName, clubId, creatorId: userId }));
+    }
     return c.json({ msg: 'event created', id: response.id }, 201);
   } catch (err: any) {
     logger.error(`[${requestId}] createEvent error`, { error: err.message });
@@ -303,9 +309,13 @@ router.post('/register/:id', authMiddleware, async (c) => {
   try {
     const event = await prisma.event.findUnique({
       where: { id: eventId },
-      select: { id: true, maxParticipants: true, collegeStudentsOnly: true, university: true, customQuestions: true },
+      select: { id: true, clubId: true, coreTeamOnly: true, maxParticipants: true, collegeStudentsOnly: true, university: true, customQuestions: true },
     });
     if (!event) return jsonError(c, requestId, 'Event not found', 404);
+
+    if (event.coreTeamOnly && !(await isEventClubCoreMember(prisma, event.clubId, userId))) {
+      return jsonError(c, requestId, 'This event is restricted to the hosting club’s core team', 403);
+    }
 
     const existing = await prisma.userEvents.findUnique({ where: { userId_eventId: { userId, eventId } } });
     if (existing) return jsonError(c, requestId, 'You are already registered', 409);
@@ -370,11 +380,21 @@ const readJson = async (c: any): Promise<any> => {
   try { return await c.req.json(); } catch { return {}; }
 };
 
+async function isEventClubCoreMember(prisma: any, clubId: string, userId: string): Promise<boolean> {
+  const [user, club] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
+    prisma.clubs.findUnique({ where: { id: clubId }, select: { founderEmail: true, coremember1: true, coremember2: true, coremember3: true } }),
+  ]);
+  const email = user?.email?.trim().toLowerCase();
+  return !!email && !!club && [club.founderEmail, club.coremember1, club.coremember2, club.coremember3]
+    .some((member: string | null) => member?.trim().toLowerCase() === email);
+}
+
 // Whether the user is the founder or a core member of the event's club.
 const managesEventClub = async (prisma: any, eventId: string, userId: string) => {
   const [user, event] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
-    prisma.event.findUnique({ where: { id: eventId }, select: { clubId: true } }),
+    prisma.event.findUnique({ where: { id: eventId }, select: { clubId: true, EventName: true } }),
   ]);
   if (!user || !event) return { user, event, allowed: false };
   const club = await prisma.clubs.findUnique({
@@ -542,13 +562,17 @@ router.post('/registerEvent', authMiddleware, async (c) => {
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       select: {
-        isPaid: true, collegeStudentsOnly: true, university: true, maxParticipants: true,
+        isPaid: true, clubId: true, coreTeamOnly: true, collegeStudentsOnly: true, university: true, maxParticipants: true,
         _count: { select: { attendees: true } },
         acceptanceBased: true, applicationStatus: true, applicationEndDate: true,
         customQuestions: { where: { required: true }, select: { id: true, label: true } },
       },
     });
     if (!event) return jsonError(c, requestId, 'Event not found', 404);
+
+    if (event.coreTeamOnly && !(await isEventClubCoreMember(prisma, event.clubId, userId))) {
+      return jsonError(c, requestId, 'This event is restricted to the hosting club’s core team', 403);
+    }
 
     if (event.applicationStatus && event.applicationStatus.toLowerCase() !== 'open') {
       return jsonError(c, requestId, 'Registration is closed for this event', 400);
@@ -991,17 +1015,23 @@ const UPDATABLE_EVENT_FIELDS = [
   'applicationStartDate', 'applicationEndDate', 'collegeStudentsOnly',
   'contactEmail', 'contactPhone', 'participationFee', 'posterUrl',
   'link1', 'link2', 'link3', 'whatsappLink', 'qrCodeUrl', 'maxParticipants',
-  'eventHeaderImage', 'Form', 'Fees', 'desiredSponsors', 'acceptanceBased', 'isPaid',
+  'eventHeaderImage', 'Form', 'Fees', 'desiredSponsors', 'acceptanceBased', 'isPaid', 'coreTeamOnly',
 ];
 
 router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
   const requestId = generateRequestId();
   const eventId = c.req.param('id');
   const body = await readJson(c);
+  if ('coreTeamOnly' in body && typeof body.coreTeamOnly !== 'boolean') {
+    return jsonError(c, requestId, 'coreTeamOnly must be a boolean', 400);
+  }
   const updateData: Record<string, any> = {};
   for (const field of UPDATABLE_EVENT_FIELDS) {
     if (field in body) updateData[field] = body[field];
   }
+  // The website edit form sends the same date names used for creation.
+  if ('eventStartDate' in body && !('startDate' in body)) updateData.startDate = body.eventStartDate;
+  if ('eventEndDate' in body && !('endDate' in body)) updateData.endDate = body.eventEndDate;
   if (Object.keys(updateData).length === 0 && !('customQuestions' in body)) {
     return c.json({ msg: 'No valid fields provided for update' }, 400);
   }
@@ -1016,7 +1046,15 @@ router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (
   }
   const prisma = c.get('prisma');
   try {
+    const previous = await prisma.event.findUnique({ where: { id: eventId }, select: { startDate: true, endDate: true, Venue: true, EventMode: true, coreTeamOnly: true, collegeStudentsOnly: true, acceptanceBased: true } });
+    if (!previous) return c.json({ msg: 'Event not found' }, 404);
     const updated = await prisma.event.update({ where: { id: eventId }, data: updateData, select: eventSelectBase });
+    const changed = [
+      (previous.startDate !== updated.startDate || previous.endDate !== updated.endDate) && 'date',
+      (previous.Venue !== updated.Venue || previous.EventMode !== updated.EventMode) && 'venue or mode',
+      (previous.coreTeamOnly !== updated.coreTeamOnly || previous.collegeStudentsOnly !== updated.collegeStudentsOnly || previous.acceptanceBased !== updated.acceptanceBased) && 'registration access',
+    ].filter((value): value is string => !!value);
+    if (changed.length) c.executionCtx.waitUntil(notifyEventChanges(prisma, getFcmCfg(c), eventId, updated.EventName, changed));
     return c.json({ msg: 'Event updated successfully', response: mapEventFees(updated) }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] updateEvent error`, { error: err.message });
@@ -1098,6 +1136,7 @@ router.put('/eventQueue/:eventId/approve', authMiddleware, async (c) => {
   const eventId = c.req.param('eventId');
   const { userId, accepted } = await readJson(c);
   if (!userId) return c.json({ msg: 'User ID is required' }, 400);
+  if (typeof accepted !== 'boolean') return c.json({ msg: 'A valid approval decision is required' }, 400);
   const prisma = c.get('prisma');
   try {
     // Express had no ownership check here; only the event's club managers may approve.
@@ -1105,11 +1144,13 @@ router.put('/eventQueue/:eventId/approve', authMiddleware, async (c) => {
     if (!event) return c.json({ msg: 'Event not found' }, 404);
     if (!allowed) return c.json({ msg: 'Access denied. Only club heads or core members can approve registrations' }, 403);
 
-    await prisma.userEvents.updateMany({
-      where: { eventId, userId },
+    const decision = await prisma.userEvents.updateMany({
+      where: { eventId, userId, approvalStatus: 'pending' },
       data: { approvalStatus: accepted ? 'approved' : 'rejected' },
     });
+    if (!decision.count) return c.json({ msg: 'No pending registration found' }, 404);
     await prisma.eventQueue.deleteMany({ where: { eventId, userId } });
+    c.executionCtx.waitUntil(notifyEventDecision(prisma, getFcmCfg(c), eventId, event.EventName, userId, accepted));
     return c.json({ msg: 'User accepted successfully' }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] approve queue error`, { error: err.message });
