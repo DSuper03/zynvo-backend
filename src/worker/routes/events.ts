@@ -79,13 +79,21 @@ async function notifyOrganisersOfRegistration(
 const EventSchema = z.object({
   eventName: z.string(), description: z.string().optional(), whatsappLink: z.string().optional(),
   form: z.string().optional(), link1: z.string().optional(), link2: z.string().optional(),
-  link3: z.string().optional(), fees: z.string().optional(), paymentAmount: z.string().optional(),
+  link3: z.string().optional(), fees: z.string().optional(), paymentAmount: z.union([z.string(), z.number()]).optional(),
   image: z.string().optional(), contactPhone: z.string().optional(),
   isPaid: z.boolean().optional(), isPaidEvent: z.boolean().optional(),
   qrCodeUrl: z.string().optional(), paymentQRCode: z.string().optional(),
   tagline: z.string().optional(), applicationStartDate: z.string().optional(),
   applicationEndDate: z.string().optional(),
   maxParticipants: z.union([z.number(), z.string()]).optional().nullable(),
+  customQuestions: z.array(z.object({
+    label: z.string().trim().min(1),
+    type: z.enum(['text', 'url', 'select']),
+    options: z.array(z.string()).optional(),
+    required: z.boolean().optional(),
+  }).refine((q) => q.type !== 'select' || q.options?.some((option) => option.trim()), {
+    message: 'Dropdown questions need an option',
+  })).max(10).optional(),
 });
 
 const eventSelectBase = {
@@ -96,7 +104,7 @@ const eventSelectBase = {
   collegeStudentsOnly: true, contactEmail: true, contactPhone: true,
   participationFee: true, posterUrl: true, createdAt: true,
   link1: true, link2: true, link3: true, whatsappLink: true,
-  isPaid: true, qrCodeUrl: true, Fees: true, maxParticipants: true, desiredSponsors: true,
+  isPaid: true, qrCodeUrl: true, Fees: true, maxParticipants: true, acceptanceBased: true, desiredSponsors: true,
   _count: { select: { attendees: true } },
   customQuestions: { orderBy: { sortOrder: 'asc' as const } },
 } as const;
@@ -154,8 +162,10 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
   const clubName = c.get('clubName')!;
   const clubCollege = c.get('clubCollege')!;
 
-  if (body.university !== clubCollege) {
-    return jsonError(c, requestId, 'College mismatch, select your correct college', 400);
+  const rawCapacity = parsedData.data.maxParticipants;
+  const capacity = rawCapacity == null || rawCapacity === '' ? null : Number(rawCapacity);
+  if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1)) {
+    return jsonError(c, requestId, 'Max participants must be a positive whole number', 400);
   }
 
   const prisma = c.get('prisma');
@@ -175,7 +185,15 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
         participationFee: body.noParticipationFee,
         posterUrl: parsedData.data.image, eventHeaderImage: parsedData.data.image,
         Form: parsedData.data.form || 'none',
-        Fees: parsedData.data.paymentAmount || parsedData.data.fees || 'none',
+        Fees: String(parsedData.data.paymentAmount || parsedData.data.fees || 'none'),
+        maxParticipants: capacity,
+        acceptanceBased: !!body.acceptanceBased,
+        customQuestions: parsedData.data.customQuestions ? {
+          create: parsedData.data.customQuestions.map((q, index) => ({
+            label: q.label, type: q.type,
+            options: q.type === 'select' ? (q.options || []).map((option) => option.trim()).filter(Boolean) : [], required: !!q.required, sortOrder: index,
+          })),
+        } : undefined,
         link1: parsedData.data.link1 ?? null, link2: parsedData.data.link2 ?? null, link3: parsedData.data.link3 ?? null,
         whatsappLink: parsedData.data.whatsappLink || '',
         isPaid: parsedData.data.isPaidEvent ?? parsedData.data.isPaid ?? false,
@@ -387,7 +405,7 @@ router.post('/checkEventDates', async (c) => {
     const appEndDate = applicationEndDate ? new Date(applicationEndDate) : null;
 
     if (startDate && endDate) {
-      if (startDate >= endDate) {
+      if (startDate > endDate) {
         result.isValid = false;
         result.errors.push('Event start date must be before event end date');
       }
@@ -414,7 +432,7 @@ router.post('/checkEventDates', async (c) => {
     }
 
     if (appStartDate && appEndDate) {
-      if (appStartDate >= appEndDate) {
+      if (appStartDate > appEndDate) {
         result.isValid = false;
         result.errors.push('Application start date must be before application end date');
       }
@@ -973,7 +991,7 @@ const UPDATABLE_EVENT_FIELDS = [
   'applicationStartDate', 'applicationEndDate', 'collegeStudentsOnly',
   'contactEmail', 'contactPhone', 'participationFee', 'posterUrl',
   'link1', 'link2', 'link3', 'whatsappLink', 'qrCodeUrl', 'maxParticipants',
-  'eventHeaderImage', 'Form', 'Fees', 'desiredSponsors',
+  'eventHeaderImage', 'Form', 'Fees', 'desiredSponsors', 'acceptanceBased', 'isPaid',
 ];
 
 router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (c) => {
