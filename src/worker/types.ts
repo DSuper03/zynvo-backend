@@ -26,6 +26,8 @@ export type CFEnv = {
   TELEGRAM_CHAT_ID?: string;
   /** Alert dedup + 48h alert history for the digest (wrangler.toml [[kv_namespaces]]). */
   ALERTS_KV?: KVNamespace;
+  /** Workers AI (wrangler.toml [ai]); summarises alerts no rule explains. */
+  AI?: Ai;
   RL_5?: RateLimitBinding;
   RL_10?: RateLimitBinding;
   RL_20?: RateLimitBinding;
