@@ -1,0 +1,1 @@
+ALTER TABLE "event" ADD COLUMN "coreTeamOnly" BOOLEAN NOT NULL DEFAULT false;
