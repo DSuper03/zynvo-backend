@@ -6,6 +6,7 @@ import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
 import { createNotification, sendToMany, notifyFollowersOfNewPost } from '../utils/notification';
 import type { FcmConfig } from '../fcm';
+import { moderateInBackground } from '../moderation';
 
 const router = new Hono<HonoEnv>();
 
@@ -84,6 +85,11 @@ router.post('/create', authMiddleware, async (c) => {
       authorName: user.name, image: image ?? null,
     });
 
+    moderateInBackground(c, {
+      kind: 'post', id: post.id, authorId: userId,
+      text: `${parsed.data.title}\n${parsed.data.description}`,
+    });
+
     return c.json({ msg: 'post created', id: post.id }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] createPost error`, { error: err.message });
@@ -108,6 +114,10 @@ router.put('/edit/:id', authMiddleware, async (c) => {
       ...(Array.isArray(body.mentionedUserIds) ? { mentionedUserIds: body.mentionedUserIds } : {}),
     },
     select: { id: true },
+  });
+  moderateInBackground(c, {
+    kind: 'post', id: postId, authorId: c.get('userId'),
+    text: `${parsed.data.title}\n${parsed.data.description}`,
   });
   return c.json({ msg: 'post updated, changes will reflect shortly' }, 200);
 });
@@ -315,6 +325,7 @@ router.post('/:postId/comments', authMiddleware, async (c) => {
         data: { postId, commentId: comment.id, route: `/post/${postId}` }, push: true,
       });
     }
+    moderateInBackground(c, { kind: 'comment', id: comment.id, authorId: userId, text: content });
     return c.json({ msg: 'comment added', comment }, 201);
   } catch (err: any) {
     return jsonError(c, requestId, 'error adding comment', 500, err);

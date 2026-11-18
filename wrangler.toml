@@ -46,6 +46,17 @@ simple = { limit = 100, period = 60 }
 NODE_ENV = "production"
 FE_URL = "https://www.zynvosocial.com"
 
+# ── Smart Placement (free) ────────────────────────────────────
+# Runs the worker near the database (Prisma Accelerate / Postgres) instead of
+# near each user, since most requests make several sequential DB calls.
+[placement]
+mode = "smart"
+
+# ── Workers AI (free: 10,000 neurons/day) ─────────────────────
+# Content moderation for posts, comments and reports (src/worker/moderation.ts).
+[ai]
+binding = "AI"
+
 # ── Alerts ────────────────────────────────────────────────────
 # Telegram alerts (src/worker/alerts.ts). TELEGRAM_BOT_TOKEN and
 # TELEGRAM_CHAT_ID are secrets: npx wrangler secret put <KEY>

@@ -1,0 +1,111 @@
+name: Nightly database backup to R2
+
+# Dumps the production Postgres database and stores it in Cloudflare R2
+# (free tier: 10 GB). Keeps the last 30 days. Runs from the default branch.
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   DIRECT_DATABASE_URL    postgres://… direct connection (not prisma+postgres://)
+#   R2_ACCOUNT_ID          Cloudflare account id
+#   R2_ACCESS_KEY_ID       R2 API token (Object Read & Write on the bucket)
+#   R2_SECRET_ACCESS_KEY
+#   R2_BUCKET              e.g. zynvo-db-backups
+# Optional, for a Telegram alert when a backup fails:
+#   BACKEND_URL            https://zynvo-backend-worker.anirbanghosh060.workers.dev
+#   INTERNAL_PROXY_SECRET  same value as on the worker
+
+on:
+  schedule:
+    - cron: '0 21 * * *' # 02:30 IST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      # R2 doesn't support the AWS CLI's newer default checksum headers.
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+      RETENTION_DAYS: '30'
+
+    steps:
+      - name: Check configuration
+        id: config
+        run: |
+          missing=""
+          for v in DIRECT_DATABASE_URL R2_ACCOUNT_ID R2_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            [ -z "${!v}" ] && missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning::Backup skipped, missing secrets:$missing"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install pg_dump (PostgreSQL 18 client dumps 18 and older servers)
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          /usr/lib/postgresql/18/bin/pg_dump --version
+
+      - name: Dump database
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          FILE="zynvo-$(date -u +%Y-%m-%dT%H%M%SZ).dump"
+          /usr/lib/postgresql/18/bin/pg_dump "$DIRECT_DATABASE_URL" \
+            --format=custom --compress=9 --no-owner --no-privileges --file="$FILE"
+          ls -lh "$FILE"
+          [ -s "$FILE" ] || { echo "::error::dump is empty"; exit 1; }
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
+
+      - name: Upload to R2
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          aws s3 cp "$FILE" "s3://$R2_BUCKET/daily/$FILE" \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" --only-show-errors
+          echo "Uploaded s3://$R2_BUCKET/daily/$FILE"
+
+      - name: Delete backups older than retention
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          cutoff=$(date -u -d "-$RETENTION_DAYS days" +%Y-%m-%dT%H:%M:%S)
+          aws s3api list-objects-v2 --bucket "$R2_BUCKET" --prefix daily/ \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --query "Contents[?LastModified<'$cutoff'].Key" --output text \
+          | tr '\t' '\n' | grep -v '^None$' | grep -v '^$' | while read -r key; do
+              aws s3 rm "s3://$R2_BUCKET/$key" \
+                --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" --only-show-errors
+              echo "deleted $key"
+            done
+
+      - name: Alert on failure
+        if: failure() && steps.config.outputs.ready == 'true'
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          INTERNAL_PROXY_SECRET: ${{ secrets.INTERNAL_PROXY_SECRET }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -n "$BACKEND_URL" ] && [ -n "$INTERNAL_PROXY_SECRET" ] || exit 0
+          curl -fsS -X POST "$BACKEND_URL/api/v1/ops/report" \
+            -H "content-type: application/json" \
+            -H "x-internal-proxy-secret: $INTERNAL_PROXY_SECRET" \
+            -d "{\"key\":\"db-backup-failed\",\"title\":\"Nightly database backup failed\",\"detail\":\"$RUN_URL\",\"source\":\"github\"}" || true

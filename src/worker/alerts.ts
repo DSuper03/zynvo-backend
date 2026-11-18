@@ -93,8 +93,10 @@ export async function raiseAlert(env: CFEnv, input: AlertInput): Promise<void> {
   const count = (record?.c ?? 0) + seenHere;
   const next: AlertRecord = { t: input.title.slice(0, 200), s: source, c: count, f: record?.f ?? now, l: now };
 
+  // Titles that bring their own emoji (🛡️ moderation, 🚩 reports) keep it alone.
+  const icon = /^\p{Extended_Pictographic}/u.test(input.title) ? '' : '🚨 ';
   const lines = [
-    `🚨 ${input.title}`,
+    `${icon}${input.title}`,
     `source: ${source} · ${ist(now)} IST`,
     count > 1 ? `seen ${count}× since ${ist(next.f)} IST` : '',
     input.detail ? `\n${redact(input.detail)}` : '',
