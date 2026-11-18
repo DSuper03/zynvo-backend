@@ -6,6 +6,7 @@ import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
 import { sameCollege } from '../utils/college';
 import { createNotification, sendToMany } from '../utils/notification';
+import { notifyCoreTeamOfEvent, notifyEventChanges, notifyEventDecision } from '../utils/event-notifications';
 import type { FcmConfig } from '../fcm';
 
 const router = new Hono<HonoEnv>();
@@ -204,6 +205,9 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
       },
       select: { id: true },
     });
+    if (parsedData.data.coreTeamOnly) {
+      c.executionCtx.waitUntil(notifyCoreTeamOfEvent(prisma, getFcmCfg(c), { id: response.id, name: parsedData.data.eventName, clubId, creatorId: userId }));
+    }
     return c.json({ msg: 'event created', id: response.id }, 201);
   } catch (err: any) {
     logger.error(`[${requestId}] createEvent error`, { error: err.message });
@@ -390,7 +394,7 @@ async function isEventClubCoreMember(prisma: any, clubId: string, userId: string
 const managesEventClub = async (prisma: any, eventId: string, userId: string) => {
   const [user, event] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
-    prisma.event.findUnique({ where: { id: eventId }, select: { clubId: true } }),
+    prisma.event.findUnique({ where: { id: eventId }, select: { clubId: true, EventName: true } }),
   ]);
   if (!user || !event) return { user, event, allowed: false };
   const club = await prisma.clubs.findUnique({
@@ -1025,6 +1029,9 @@ router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (
   for (const field of UPDATABLE_EVENT_FIELDS) {
     if (field in body) updateData[field] = body[field];
   }
+  // The website edit form sends the same date names used for creation.
+  if ('eventStartDate' in body && !('startDate' in body)) updateData.startDate = body.eventStartDate;
+  if ('eventEndDate' in body && !('endDate' in body)) updateData.endDate = body.eventEndDate;
   if (Object.keys(updateData).length === 0 && !('customQuestions' in body)) {
     return c.json({ msg: 'No valid fields provided for update' }, 400);
   }
@@ -1039,7 +1046,15 @@ router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (
   }
   const prisma = c.get('prisma');
   try {
+    const previous = await prisma.event.findUnique({ where: { id: eventId }, select: { startDate: true, endDate: true, Venue: true, EventMode: true, coreTeamOnly: true, collegeStudentsOnly: true, acceptanceBased: true } });
+    if (!previous) return c.json({ msg: 'Event not found' }, 404);
     const updated = await prisma.event.update({ where: { id: eventId }, data: updateData, select: eventSelectBase });
+    const changed = [
+      (previous.startDate !== updated.startDate || previous.endDate !== updated.endDate) && 'date',
+      (previous.Venue !== updated.Venue || previous.EventMode !== updated.EventMode) && 'venue or mode',
+      (previous.coreTeamOnly !== updated.coreTeamOnly || previous.collegeStudentsOnly !== updated.collegeStudentsOnly || previous.acceptanceBased !== updated.acceptanceBased) && 'registration access',
+    ].filter((value): value is string => !!value);
+    if (changed.length) c.executionCtx.waitUntil(notifyEventChanges(prisma, getFcmCfg(c), eventId, updated.EventName, changed));
     return c.json({ msg: 'Event updated successfully', response: mapEventFees(updated) }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] updateEvent error`, { error: err.message });
@@ -1121,6 +1136,7 @@ router.put('/eventQueue/:eventId/approve', authMiddleware, async (c) => {
   const eventId = c.req.param('eventId');
   const { userId, accepted } = await readJson(c);
   if (!userId) return c.json({ msg: 'User ID is required' }, 400);
+  if (typeof accepted !== 'boolean') return c.json({ msg: 'A valid approval decision is required' }, 400);
   const prisma = c.get('prisma');
   try {
     // Express had no ownership check here; only the event's club managers may approve.
@@ -1128,11 +1144,13 @@ router.put('/eventQueue/:eventId/approve', authMiddleware, async (c) => {
     if (!event) return c.json({ msg: 'Event not found' }, 404);
     if (!allowed) return c.json({ msg: 'Access denied. Only club heads or core members can approve registrations' }, 403);
 
-    await prisma.userEvents.updateMany({
-      where: { eventId, userId },
+    const decision = await prisma.userEvents.updateMany({
+      where: { eventId, userId, approvalStatus: 'pending' },
       data: { approvalStatus: accepted ? 'approved' : 'rejected' },
     });
+    if (!decision.count) return c.json({ msg: 'No pending registration found' }, 404);
     await prisma.eventQueue.deleteMany({ where: { eventId, userId } });
+    c.executionCtx.waitUntil(notifyEventDecision(prisma, getFcmCfg(c), eventId, event.EventName, userId, accepted));
     return c.json({ msg: 'User accepted successfully' }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] approve queue error`, { error: err.message });
