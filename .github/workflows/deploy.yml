@@ -1,9 +1,9 @@
 name: Deploy ZynvoSocial to GCP
 
+# Disabled: production runs on Cloudflare Workers (cf-workers-migration).
+# Manual runs only; restore the push trigger to re-enable.
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   id-token: write
