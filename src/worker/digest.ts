@@ -7,7 +7,7 @@
  * - Alerts raised over the last 24h.
  */
 import type { CFEnv } from './types';
-import { getPrismaClient } from './db';
+import { createPrismaClient } from './db';
 import { recentAlerts, sendTelegram } from './alerts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -56,7 +56,8 @@ export async function buildDailyDigest(env: CFEnv): Promise<string> {
   const since = now - DAY_MS;
   const lines: string[] = ['📊 Zynvo daily report (last 24h)'];
 
-  const prisma = getPrismaClient(env.DATABASE_URL);
+  // The cron run is its own invocation: a dedicated client, nothing shared.
+  const prisma = createPrismaClient(env.DATABASE_URL);
   let newUsers: { email: string; clerkId: string | null }[] = [];
   try {
     newUsers = await prisma.user.findMany({

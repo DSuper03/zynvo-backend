@@ -22,6 +22,18 @@ const RULES: Rule[] = [
     fixable: 'yes',
   },
   {
+    test: /never generate a response|code had hung|different request context/i,
+    what: 'A request got stuck waiting on work that belonged to another visitor’s request (shared database client), so Cloudflare cut it off.',
+    fix: 'Yes — give each simultaneous request its own database client (pool in src/worker/db.ts).',
+    fixable: 'yes',
+  },
+  {
+    test: /non-Error thrown/i,
+    what: 'Something threw an unusual error value that the normal error handler couldn’t catch; the visitor got a plain 500.',
+    fix: 'Yes — the details below show what was thrown and where.',
+    fixable: 'yes',
+  },
+  {
     test: /P2023|Error creating UUID|invalid input syntax for type uuid|Inconsistent column data/i,
     what: 'Someone asked for an ID that isn’t valid (bad link or an old login token), and the server crashed on it instead of saying “not found”.',
     fix: 'Yes — validate IDs and return 400/404 instead of 500 on this route.',
