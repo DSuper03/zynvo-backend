@@ -708,7 +708,7 @@ router.post('/addSpeakers', authMiddleware, specificClubHeadAuthMiddleware, asyn
 router.get('/ver-event', async (c) => {
   const requestId = generateRequestId();
   const id = c.req.query('id') ?? '';
-  if (!id.startsWith('Z')) return c.json({ status: 'invalid' }, 502);
+  if (!id.startsWith('Z')) return c.json({ status: 'invalid' }, 400);
   const prisma = c.get('prisma');
   try {
     const found = await prisma.userEvents.findFirst({ where: { uniquePassId: id }, select: { uniquePassId: true } });
@@ -723,7 +723,7 @@ router.get('/ver-event', async (c) => {
 router.get('/event-details', async (c) => {
   const requestId = generateRequestId();
   const id = c.req.query('id') ?? '';
-  if (!id.startsWith('Z')) return c.json({ status: 'invalid' }, 502);
+  if (!id.startsWith('Z')) return c.json({ status: 'invalid' }, 400);
   const prisma = c.get('prisma');
   try {
     const found = await prisma.userEvents.findFirst({

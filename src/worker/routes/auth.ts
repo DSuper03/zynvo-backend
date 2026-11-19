@@ -205,6 +205,8 @@ const loginHandler: Handler<HonoEnv> = async (c) => {
     if (user) {
       const updateData: Record<string, unknown> = {};
       if (user.clerkId !== verifiedClerkId) updateData.clerkId = verifiedClerkId;
+      // A verified Clerk session proves this email; older rows stayed false.
+      if (session && !user.isVerified) updateData.isVerified = true;
       if (collegeName && !isPlaceholderCollege(collegeName)) updateData.collegeName = cleanCollegeName(collegeName);
       if (name && name !== user.name) updateData.name = name;
       const pfp = avatarUrl || imgUrl;

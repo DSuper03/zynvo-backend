@@ -3,8 +3,15 @@ import type { HonoEnv } from '../types';
 import { authMiddleware, specificClubHeadAuthMiddleware } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { founderClub, ensureMembership } from '../utils/clubAuth';
+import { findUsersByEmails } from '../coreInvites';
 
 const router = new Hono<HonoEnv>();
+
+/** Lowercased email in a core slot, or null for blank / 'none' placeholders. */
+const cleanSlotEmail = (v: unknown): string | null => {
+  const s = typeof v === 'string' ? v.trim().toLowerCase() : '';
+  return s && s !== 'none' ? s : null;
+};
 
 // ── Inline admin check (re-used locally) ─────────────────────
 
@@ -278,25 +285,31 @@ router.post('/addCoreMembers/:clubId', authMiddleware, async (c) => {
     const club = await founderClub(prisma, c.get('userId'), clubId);
     if (!club) return c.json({ msg: "You're not the club president" }, 403);
 
-    const coreMembers: string[] = [coremember1, coremember2, coremember3].filter(Boolean);
-    const users = await prisma.user.findMany({ where: { email: { in: coreMembers } }, select: { id: true, email: true } });
-    const missingMembers = coreMembers.filter((email) => !users.some((u: any) => u.email === email));
+    // Blank slots and the legacy 'none' placeholder mean "leave this slot as is".
+    const slots = [coremember1, coremember2, coremember3].map(cleanSlotEmail);
+    const coreMembers = [...new Set(slots.filter((e): e is string => !!e))];
+    const users = await findUsersByEmails(prisma, coreMembers);
+    const byLower = new Map(users.map((u) => [u.email.toLowerCase(), u]));
+    const missingMembers = coreMembers.filter((email) => !byLower.has(email));
     if (missingMembers.length > 0) {
       return c.json({ msg: 'Some members are not on Zynvo Social', missingMembers }, 400);
     }
 
+    // Store each user's own email (exact casing) so every core check matches.
+    const value = (picked: string | null, current: string | null) =>
+      picked ? byLower.get(picked)!.email : current;
     await prisma.$transaction([
       prisma.clubs.update({
         where: { id: clubId },
         data: {
-          coremember1: coremember1 || club.coremember1,
-          coremember2: coremember2 || club.coremember2,
-          coremember3: coremember3 || club.coremember3,
+          coremember1: value(slots[0], club.coremember1),
+          coremember2: value(slots[1], club.coremember2),
+          coremember3: value(slots[2], club.coremember3),
         },
       }),
-      ...users.map((u: any) => ensureMembership(prisma, u.id, clubId)),
+      ...users.map((u) => ensureMembership(prisma, u.id, clubId)),
     ]);
-    return c.json({ msg: 'Core members added successfully', added: coreMembers }, 200);
+    return c.json({ msg: 'Core members added successfully', added: users.map((u) => u.email) }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'Internal server error', 500, err);
   }
@@ -314,16 +327,21 @@ router.post('/removeCoremembers/:clubId', authMiddleware, async (c) => {
     const club = await founderClub(prisma, c.get('userId'), clubId);
     if (!club) return c.json({ msg: "You're not the club president" }, 403);
 
-    const toRemove: string[] = [coremember1, coremember2, coremember3].filter(Boolean);
+    const toRemove = [coremember1, coremember2, coremember3]
+      .map(cleanSlotEmail)
+      .filter((e): e is string => !!e);
     if (toRemove.length === 0) return c.json({ msg: 'No core members provided to remove' }, 400);
 
-    const current = [club.coremember1, club.coremember2, club.coremember3];
+    const current = [club.coremember1, club.coremember2, club.coremember3].map(cleanSlotEmail);
     const invalidMembers = toRemove.filter((email) => !current.includes(email));
     if (invalidMembers.length > 0) {
       return c.json({ msg: 'Some users are not core members of this club', invalidMembers }, 400);
     }
 
-    const keep = (email: string | null) => (email && toRemove.includes(email) ? null : email);
+    const keep = (email: string | null) => {
+      const e = cleanSlotEmail(email);
+      return e && toRemove.includes(e) ? null : email;
+    };
     await prisma.clubs.update({
       where: { id: clubId },
       data: {

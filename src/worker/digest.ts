@@ -56,6 +56,7 @@ export async function buildDailyDigest(env: CFEnv): Promise<string> {
   const since = now - DAY_MS;
   const lines: string[] = ['📊 Zynvo daily report (last 24h)'];
 
+  // The cron run is its own invocation: a dedicated client, nothing shared.
   const prisma = createPrismaClient(env.DATABASE_URL);
   let newUsers: { email: string; clerkId: string | null }[] = [];
   try {
