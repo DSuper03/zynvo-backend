@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import type { HonoEnv } from '../types';
 import { authMiddleware } from '../middleware/auth';
 import { rateLimiter } from '../middleware/ratelimit';
+import { turnstileGuard } from '../turnstile';
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
 import { sendMail } from '../mail';
@@ -38,7 +39,7 @@ const newPWschema = z.object({ password: z.string().min(1) });
 
 // ── POST /signup ──────────────────────────────────────────────
 
-router.post('/signup', rateLimiter(20), async (c) => {
+router.post('/signup', rateLimiter(20), turnstileGuard, async (c) => {
   const requestId = generateRequestId();
   let body: any;
   try { body = await c.req.json(); } catch { return jsonError(c, requestId, 'Invalid JSON', 400); }
@@ -311,7 +312,7 @@ const sha256Hex = async (value: string): Promise<string> => {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 };
 
-router.post('/forgot', rateLimiter(5), async (c) => {
+router.post('/forgot', rateLimiter(5), turnstileGuard, async (c) => {
   const requestId = generateRequestId();
   let body: any;
   try { body = await c.req.json(); } catch { return jsonError(c, requestId, 'Invalid JSON', 400); }
@@ -483,7 +484,7 @@ router.post('/reset-password/clerk', rateLimiter(10), async (c) => {
 
 // ── POST /ResendEmail?email= ──────────────────────────────────
 
-router.post('/ResendEmail', rateLimiter(5), async (c) => {
+router.post('/ResendEmail', rateLimiter(5), turnstileGuard, async (c) => {
   const requestId = generateRequestId();
   const email = c.req.query('email');
   if (!email) return jsonError(c, requestId, 'Email is required', 400);

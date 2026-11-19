@@ -26,8 +26,12 @@ export type CFEnv = {
   TELEGRAM_CHAT_ID?: string;
   /** Alert dedup + 48h alert history for the digest (wrangler.toml [[kv_namespaces]]). */
   ALERTS_KV?: KVNamespace;
-  /** Workers AI (wrangler.toml [ai]); summarises alerts no rule explains. */
+  /** Workers AI (wrangler.toml [ai]); moderates content and summarises alerts no rule explains. */
   AI?: Ai;
+  /** Cloudflare Turnstile secret; without it bot checks are skipped. */
+  TURNSTILE_SECRET_KEY?: string;
+  /** 'true' once every client sends a Turnstile token; until then missing tokens are allowed. */
+  TURNSTILE_ENFORCE?: string;
   RL_5?: RateLimitBinding;
   RL_10?: RateLimitBinding;
   RL_20?: RateLimitBinding;

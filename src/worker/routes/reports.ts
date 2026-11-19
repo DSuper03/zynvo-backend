@@ -3,6 +3,7 @@ import type { HonoEnv } from '../types';
 import { authMiddleware } from '../middleware/auth';
 import { rateLimiter } from '../middleware/ratelimit';
 import { generateRequestId, jsonError } from '../utils/response';
+import { alertOnReport } from '../moderation';
 
 const router = new Hono<HonoEnv>();
 
@@ -30,7 +31,7 @@ router.post('/', authMiddleware, rateLimiter(20), async (c) => {
   const prisma = c.get('prisma');
   try {
     const exists = targetType === 'post'
-      ? await prisma.createPost.findUnique({ where: { id: targetId }, select: { id: true } })
+      ? await prisma.createPost.findUnique({ where: { id: targetId }, select: { id: true, title: true, description: true } })
       : await prisma.user.findUnique({ where: { id: targetId }, select: { id: true } });
     if (!exists) return jsonError(c, requestId, `${targetType} not found`, 404);
 
@@ -42,6 +43,15 @@ router.post('/', authMiddleware, rateLimiter(20), async (c) => {
         reason,
         details: typeof details === 'string' ? details.slice(0, 1000) : null,
       },
+    });
+    // Reported post's text, for the AI check in the alert.
+    const postText = targetType === 'post'
+      ? `${(exists as any).title ?? ''}\n${(exists as any).description ?? ''}`.trim()
+      : null;
+    alertOnReport(c, {
+      targetType, targetId, reason,
+      details: typeof details === 'string' ? details : null,
+      text: postText,
     });
     return c.json({ msg: 'Report submitted' }, 201);
   } catch (err: any) {

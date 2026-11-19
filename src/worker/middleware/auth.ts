@@ -7,6 +7,19 @@ import { logger } from '../logger';
 const toStatus = (code: number): ContentfulStatusCode =>
   code >= 200 && code < 600 && code !== 204 ? (code as ContentfulStatusCode) : 500;
 
+// ── Admins ─────────────────────────────────────────────────────
+// Built-in admins plus ADMIN_EMAILS (comma-separated).
+
+export const isAdminEmail = (env: { ADMIN_EMAILS?: string }, email: string | null | undefined): boolean => {
+  if (!email) return false;
+  const admins = [
+    'zynvosocial@gmail.com',
+    'rishirajnatj@gmail.com',
+    ...(env.ADMIN_EMAILS ?? '').split(',').map((e) => e.trim()).filter(Boolean),
+  ].map((e) => e.toLowerCase());
+  return admins.includes(email.toLowerCase());
+};
+
 // ── authMiddleware ─────────────────────────────────────────────
 // Verifies Bearer JWT, sets userId + isVerified on context variables.
 
@@ -62,13 +75,8 @@ export const adminAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) =
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
   if (!user) return c.json({ message: 'User not found' }, toStatus(404));
 
-  const adminEmails = [
-    'zynvosocial@gmail.com',
-    'rishirajnatj@gmail.com',
-    ...(c.env.ADMIN_EMAILS ?? '').split(',').map((e) => e.trim()).filter(Boolean),
-  ].map((e) => e.toLowerCase());
 
-  if (!adminEmails.includes(user.email.toLowerCase())) {
+  if (!isAdminEmail(c.env, user.email)) {
     return c.json({ message: 'Access denied. Administrator privileges required.' }, toStatus(403));
   }
   await next();
@@ -216,13 +224,8 @@ export const adminCoreAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, nex
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
   if (!user) return c.json({ message: 'User not found' }, toStatus(404));
 
-  const adminEmails = [
-    'zynvosocial@gmail.com',
-    'rishirajnatj@gmail.com',
-    ...(c.env.ADMIN_EMAILS ?? '').split(',').map((e) => e.trim()).filter(Boolean),
-  ].map((e) => e.toLowerCase());
 
-  if (adminEmails.includes(user.email.toLowerCase())) {
+  if (isAdminEmail(c.env, user.email)) {
     await next();
     return;
   }

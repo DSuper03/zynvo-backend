@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { HonoEnv } from '../types';
 import { authMiddleware, optionalUserId } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
+import { cached, memo } from '../cache';
 import { logger } from '../logger';
 import { rateLimiter } from '../middleware/ratelimit';
 import { cleanCollegeName, collegeKey, isPlaceholderCollege, sameCollege } from '../utils/college';
@@ -213,26 +214,30 @@ router.get('/colleges', rateLimiter(30), async (c) => {
   if (q.length < 2) return c.json({ colleges: [] }, 200);
   const prisma = c.get('prisma') as any;
   try {
-    const rows: { collegeName: string; _count: { collegeName: number } }[] = await prisma.user.groupBy({
-      by: ['collegeName'],
-      where: { collegeName: { contains: q, mode: 'insensitive' } },
-      _count: { collegeName: true },
-      orderBy: { _count: { collegeName: 'desc' } },
-      take: 50,
-    });
-    const byKey = new Map<string, { name: string; count: number; best: number }>();
-    for (const r of rows) {
-      if (isPlaceholderCollege(r.collegeName)) continue;
-      const n = r._count.collegeName;
-      const k = collegeKey(r.collegeName);
-      const entry = byKey.get(k);
-      if (!entry) byKey.set(k, { name: cleanCollegeName(r.collegeName), count: n, best: n });
-      else {
-        entry.count += n;
-        if (n > entry.best) { entry.best = n; entry.name = cleanCollegeName(r.collegeName); }
+    // Signup suggestions change slowly: memo per isolate (no Prisma work at
+    // all on a hit), backed by Accelerate's shared cache.
+    const colleges = await memo(`colleges:${q.toLowerCase()}`, 5 * 60 * 1000, async () => {
+      const rows: { collegeName: string; _count: { collegeName: number } }[] = await prisma.user.groupBy(cached({
+        by: ['collegeName'],
+        where: { collegeName: { contains: q, mode: 'insensitive' } },
+        _count: { collegeName: true },
+        orderBy: { _count: { collegeName: 'desc' } },
+        take: 50,
+      }, { ttl: 300, tags: ['colleges'] }));
+      const byKey = new Map<string, { name: string; count: number; best: number }>();
+      for (const r of rows) {
+        if (isPlaceholderCollege(r.collegeName)) continue;
+        const n = r._count.collegeName;
+        const k = collegeKey(r.collegeName);
+        const entry = byKey.get(k);
+        if (!entry) byKey.set(k, { name: cleanCollegeName(r.collegeName), count: n, best: n });
+        else {
+          entry.count += n;
+          if (n > entry.best) { entry.best = n; entry.name = cleanCollegeName(r.collegeName); }
+        }
       }
-    }
-    const colleges = [...byKey.values()].sort((a, b) => b.count - a.count).slice(0, 8).map((e) => e.name);
+      return [...byKey.values()].sort((a, b) => b.count - a.count).slice(0, 8).map((e) => e.name);
+    });
     return c.json({ colleges }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'internal server error', 500, err);

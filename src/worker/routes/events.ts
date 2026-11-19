@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { HonoEnv } from '../types';
 import { authMiddleware, clubHeadAuthMiddleware, adminCoreAuthMiddleware, specificClubHeadAuthMiddleware } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
+import { cached } from '../cache';
 import { logger } from '../logger';
 import { sameCollege } from '../utils/college';
 import { createNotification, sendToMany } from '../utils/notification';
@@ -121,11 +122,11 @@ router.get('/all', async (c) => {
   const prisma = c.get('prisma');
   try {
     const [response, totalData] = await Promise.all([
-      prisma.event.findMany({
-        take: limit, skip, orderBy: { createdAt: 'desc' },
+      prisma.event.findMany(cached({
+        take: limit, skip, orderBy: { createdAt: 'desc' as const },
         select: { ...eventSelectBase, attendees: { select: { user: { select: { name: true } } } } },
-      }),
-      prisma.event.count(),
+      }, { ttl: 60, tags: ['events'] })),
+      prisma.event.count(cached({}, { ttl: 60, tags: ['events'] })),
     ]);
     // An empty page is a normal answer (no events yet / past the last page), not a 404.
     return c.json({ msg: response.length ? 'found' : 'No events found', response, totalPages: Math.ceil(totalData / limit) }, 200);
@@ -141,7 +142,9 @@ router.get('/event/:id', async (c) => {
   const eventId = c.req.param('id');
   const prisma = c.get('prisma');
   try {
-    const response = await prisma.event.findUnique({ where: { id: eventId }, select: eventSelectBase });
+    const response = await prisma.event.findUnique(
+      cached({ where: { id: eventId }, select: eventSelectBase }, { ttl: 60, tags: ['events'] }),
+    );
     if (!response) return jsonError(c, requestId, 'no such event', 404);
     return c.json({ msg: 'event found', response }, 200);
   } catch (err: any) {
@@ -1374,11 +1377,11 @@ router.get('/schedule/:eventId', async (c) => {
   const eventId = c.req.param('eventId');
   const prisma = c.get('prisma');
   try {
-    const days = await prisma.scheduleDay.findMany({
+    const days = await prisma.scheduleDay.findMany(cached({
       where: { eventId },
       include: { sessions: true },
-      orderBy: { day: 'asc' },
-    });
+      orderBy: { day: 'asc' as const },
+    }, { ttl: 60, tags: ['events'] }));
     if (days.length === 0) {
       return c.json({ response: [{ id: 'default-day-1', day: 1, date: 'Day 1', name: 'Day 1', sessions: [] }] }, 200);
     }

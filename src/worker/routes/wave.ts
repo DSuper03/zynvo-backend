@@ -70,11 +70,11 @@ const waveHandler: Handler<HonoEnv> = async (c) => {
     const fcmCfg = getFcmCfg(c);
 
     // Persist in-app notification (fire-and-forget)
-    void createNotification(prisma, fcmCfg, {
+    c.executionCtx.waitUntil(createNotification(prisma, fcmCfg, {
       userId: receiverId, type: 'wave',
       title: '👋 Someone waved at you!', body: `${senderName} waved at you.`,
       data: { senderId, receiverId, route: `/profile/${senderId}` },
-    });
+    }));
 
     const tokens = recipient.deviceTokens.map((dt: any) => dt.token);
     if (tokens.length === 0) {
