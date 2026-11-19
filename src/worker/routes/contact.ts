@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { HonoEnv } from '../types';
 import { authMiddleware } from '../middleware/auth';
 import { rateLimiter } from '../middleware/ratelimit';
+import { turnstileGuard } from '../turnstile';
 import { generateRequestId, jsonError } from '../utils/response';
 import { sendMail, escapeHtml, CONTACT_INBOX, DEFAULT_CONTACT_FROM } from '../mail';
 import { logger } from '../logger';
@@ -10,7 +11,7 @@ const router = new Hono<HonoEnv>();
 
 // ── POST /contact — public contact form ───────────────────────
 
-router.post('/contact', rateLimiter(5), async (c) => {
+router.post('/contact', rateLimiter(5), turnstileGuard, async (c) => {
   const requestId = generateRequestId();
   let body: any;
   try { body = await c.req.json(); } catch { return jsonError(c, requestId, 'Invalid JSON', 400); }

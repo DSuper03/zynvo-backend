@@ -10,6 +10,7 @@ import { logger as honoLogger } from 'hono/logger';
 import type { CFEnv, HonoEnv } from './types';
 import { prismaMiddleware } from './middleware/prisma';
 import { alertingMiddleware, normalizePath } from './middleware/alerting';
+import { invalidateOnWrite } from './cache';
 import { logger } from './logger';
 import { raiseAlert } from './alerts';
 import { sendDailyDigest } from './digest';
@@ -56,8 +57,18 @@ app.use('*', honoLogger());
 // ── Telegram alerts for 5xx / logged errors ───────────────────
 app.use('*', alertingMiddleware);
 
-// ── Prisma client (per-request) ───────────────────────────────
+// ── Prisma client (shared per isolate) ────────────────────────
 app.use('*', prismaMiddleware);
+
+// ── Cache invalidation ────────────────────────────────────────
+// Successful writes clear the Accelerate cache tags their data feeds
+// (see cache.ts). Coarse on purpose: no write route can be missed.
+app.use('/api/v1/events/*', invalidateOnWrite(['events']));
+app.use('/api/v1/clubs/*', invalidateOnWrite(['clubs', 'events']));
+app.use('/api/v2/admin/*', invalidateOnWrite(['clubs', 'events']));
+app.use('/api/v1/user/joinClub/*', invalidateOnWrite(['clubs']));
+app.use('/api/v1/user/leaveClub/*', invalidateOnWrite(['clubs']));
+app.use('/api/v1/user/deleteAccount', invalidateOnWrite(['clubs', 'events']));
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/health', (c) => c.json({ msg: 'good health', runtime: 'cloudflare-workers' }));
