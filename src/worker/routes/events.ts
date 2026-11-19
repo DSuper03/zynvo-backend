@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { HonoEnv } from '../types';
-import { authMiddleware, clubHeadAuthMiddleware, adminCoreAuthMiddleware, specificClubHeadAuthMiddleware } from '../middleware/auth';
+import { authMiddleware, clubHeadAuthMiddleware, adminCoreAuthMiddleware, specificClubHeadAuthMiddleware, optionalUserId } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { cached } from '../cache';
 import { logger } from '../logger';
-import { sameCollege } from '../utils/college';
+import { sameCollege, isPlaceholderCollege } from '../utils/college';
 import { createNotification, sendToMany } from '../utils/notification';
 import { notifyCoreTeamOfEvent, notifyEventChanges, notifyEventDecision } from '../utils/event-notifications';
 import type { FcmConfig } from '../fcm';
@@ -121,6 +121,33 @@ router.get('/all', async (c) => {
   const skip = (page - 1) * limit;
   const prisma = c.get('prisma');
   try {
+    const userId = await optionalUserId(c);
+    const user = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { collegeName: true } }) : null;
+    if (user && !isPlaceholderCollege(user.collegeName)) {
+      // Match the free-text spellings used by signup and event creation before
+      // paginating, so a college event on a later page is still promoted.
+      const colleges = await prisma.event.findMany(cached(
+        { distinct: ['university'], select: { university: true } },
+        { ttl: 60, tags: ['events'] },
+      ));
+      const matchingNames = colleges.map((event) => event.university).filter((name) => sameCollege(name, user.collegeName));
+      if (matchingNames.length) {
+        const ownCollege = { university: { in: matchingNames } };
+        const otherColleges = { university: { notIn: matchingNames } };
+        const [ownCount, totalData] = await Promise.all([
+          prisma.event.count({ where: ownCollege }),
+          prisma.event.count(cached({}, { ttl: 60, tags: ['events'] })),
+        ]);
+        const ownTake = Math.max(0, Math.min(limit, ownCount - skip));
+        const otherSkip = Math.max(0, skip - ownCount);
+        const [own, other] = await Promise.all([
+          ownTake ? prisma.event.findMany({ where: ownCollege, take: ownTake, skip, orderBy: { createdAt: 'desc' }, select: { ...eventSelectBase, attendees: { select: { user: { select: { name: true } } } } } }) : Promise.resolve([]),
+          ownTake < limit ? prisma.event.findMany({ where: otherColleges, take: limit - ownTake, skip: otherSkip, orderBy: { createdAt: 'desc' }, select: { ...eventSelectBase, attendees: { select: { user: { select: { name: true } } } } } }) : Promise.resolve([]),
+        ]);
+        const response = [...own, ...other];
+        return c.json({ msg: response.length ? 'found' : 'No events found', response, totalPages: Math.ceil(totalData / limit) }, 200);
+      }
+    }
     const [response, totalData] = await Promise.all([
       prisma.event.findMany(cached({
         take: limit, skip, orderBy: { createdAt: 'desc' as const },
