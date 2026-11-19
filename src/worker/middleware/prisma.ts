@@ -7,13 +7,27 @@
 import type { MiddlewareHandler } from 'hono';
 import type { HonoEnv } from '../types';
 import { acquirePrismaClient } from '../db';
+import { requestLogMatches } from '../logger';
+
+// What Workers throws when a request waits on a promise another, finished,
+// request created. A client that produced it is broken: never reuse it.
+const DEAD_PROMISE = /created by a request that has since ended|can never settle|handle_cross_request_promise_resolution/i;
 
 export const prismaMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
-  const lease = acquirePrismaClient(c.env.DATABASE_URL);
+  // The health check never touches the database.
+  if (c.req.path === '/health') return next();
+
+  const lease = await acquirePrismaClient(c.env.DATABASE_URL);
   c.set('prisma', lease.client as any);
   try {
     await next();
   } finally {
+    // The error may have reached Hono's onError (c.error) or been caught by a
+    // route and only logged; check both.
+    if (DEAD_PROMISE.test(String(c.error?.message ?? '')) || requestLogMatches(DEAD_PROMISE)) {
+      lease.discard();
+    }
+
     let ctx: { waitUntil(p: Promise<unknown>): void } | undefined;
     try {
       ctx = c.executionCtx;
