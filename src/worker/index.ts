@@ -9,7 +9,7 @@ import { cors } from 'hono/cors';
 import { logger as honoLogger } from 'hono/logger';
 import type { CFEnv, HonoEnv } from './types';
 import { prismaMiddleware } from './middleware/prisma';
-import { alertingMiddleware } from './middleware/alerting';
+import { alertingMiddleware, normalizePath } from './middleware/alerting';
 import { invalidateOnWrite } from './cache';
 import { logger } from './logger';
 import { raiseAlert } from './alerts';
@@ -112,8 +112,59 @@ app.onError((err, c) => {
 });
 
 // ── CF Worker export ──────────────────────────────────────────
+/** Everything we can learn about a thrown value, including non-Error throws. */
+function describeThrown(err: unknown): string {
+  if (err instanceof Error) {
+    const extra = Object.entries(err as any)
+      .filter(([k]) => !['message', 'stack'].includes(k))
+      .map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`)
+      .join(' ')
+      .slice(0, 400);
+    return [
+      `${err.constructor?.name ?? 'Error'}: ${err.message}`,
+      extra && `fields: ${extra}`,
+      String(err.stack ?? '').split('\n').slice(1, 6).join('\n'),
+    ].filter(Boolean).join('\n');
+  }
+  let json = '';
+  try { json = JSON.stringify(err); } catch { /* circular */ }
+  return `non-Error thrown (${typeof err}${err && typeof err === 'object' ? `, ${(err as any).constructor?.name}` : ''}): ${json || String(err)}`.slice(0, 1200);
+}
+
 export default {
-  fetch: app.fetch,
+  // Hono handles errors inside routes (onError → 500 JSON), but anything that
+  // escapes it (e.g. a non-Error throw, which Hono re-throws) used to surface
+  // as Cloudflare's "Error 1101: Worker threw exception" with no details.
+  // Catch it here: the visitor gets a normal 500 and we get the exact cause.
+  async fetch(request: Request, env: CFEnv, ctx: ExecutionContext) {
+    // Records this request's waitUntil() work so its database client is only
+    // handed to another request once that background work is done too.
+    const pendingWork: Promise<unknown>[] = [];
+    const trackedCtx = Object.assign(Object.create(ctx), {
+      waitUntil: (p: Promise<unknown>) => {
+        pendingWork.push(p);
+        ctx.waitUntil(p);
+      },
+      passThroughOnException: () => ctx.passThroughOnException(),
+      pendingWork,
+    }) as ExecutionContext;
+    try {
+      return await app.fetch(request, env, trackedCtx);
+    } catch (err) {
+      const url = new URL(request.url);
+      const detail = describeThrown(err);
+      logger.error(`Uncaught worker exception: ${request.method} ${url.pathname}`, { detail });
+      ctx.waitUntil(
+        raiseAlert(env, {
+          key: `uncaught ${request.method} ${normalizePath(url.pathname)} ${detail.split('\n')[0].slice(0, 120)}`,
+          title: `💥 Crash on ${request.method} ${normalizePath(url.pathname)} (was Error 1101)`,
+          detail,
+          source: 'worker',
+        }).catch(() => {}),
+      );
+      return Response.json({ error: 'Internal server error' }, { status: 500 });
+    }
+  },
   // Daily digest (wrangler.toml [triggers] crons).
   async scheduled(_event: ScheduledController, env: CFEnv, ctx: ExecutionContext) {
     ctx.waitUntil(

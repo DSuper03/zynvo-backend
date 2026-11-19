@@ -26,7 +26,7 @@ export type CFEnv = {
   TELEGRAM_CHAT_ID?: string;
   /** Alert dedup + 48h alert history for the digest (wrangler.toml [[kv_namespaces]]). */
   ALERTS_KV?: KVNamespace;
-  /** Workers AI (wrangler.toml [ai]); used for content moderation. */
+  /** Workers AI (wrangler.toml [ai]); moderates content and summarises alerts no rule explains. */
   AI?: Ai;
   /** Cloudflare Turnstile secret; without it bot checks are skipped. */
   TURNSTILE_SECRET_KEY?: string;

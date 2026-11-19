@@ -3,13 +3,12 @@
  *
  * The core team is still the three `clubs.coremember1..3` slots (holding user
  * emails), so every existing core-member check — event management, participant
- * CSV export, isClubAdmin — keeps working unchanged. This module adds:
- *   - adding verified users straight into a free slot, and
- *   - pending invites (ClubCoreInvite) for emails without a verified account,
- *     converted into a slot when that email signs in verified.
+ * CSV export, isClubAdmin — keeps working unchanged.
  *
- * Slots are reserved: filled slots + live pending invites never exceed 3, so a
- * pending invite always has a slot waiting when it converts.
+ * Adding is direct: anyone with a Zynvo account goes straight into a free
+ * slot (and becomes a club member). There are no invites; an email without an
+ * account is reported as `not_found`. Invites created before this change are
+ * settled by settleLegacyClubInvites().
  */
 import type { Context } from 'hono';
 import type { CFEnv, HonoEnv } from './types';
@@ -17,20 +16,18 @@ import type { FcmConfig } from './fcm';
 import { sendMail } from './mail';
 import { createNotification } from './utils/notification';
 import { ensureMembership } from './utils/clubAuth';
-import { coreTeamAddedEmail, coreTeamInviteEmail } from './emails/coreTeam';
+import { coreTeamAddedEmail } from './emails/coreTeam';
 import { logger } from './logger';
 
 export const CORE_SLOTS = ['coremember1', 'coremember2', 'coremember3'] as const;
 export const MAX_EMAILS_PER_REQUEST = 20;
-export const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export type ByEmailStatus =
   | 'added'
-  | 'invited'
   | 'already_member'
-  | 'already_invited'
+  | 'not_found'
   | 'team_full'
   | 'invalid';
 export type ByEmailResult = { email: string; status: ByEmailStatus };
@@ -109,6 +106,37 @@ async function fillCoreSlot(prisma: any, clubId: string, email: string): Promise
 
 const coreEmailsOf = (club: any) => CORE_SLOTS.map((s) => club[s]).filter(slotFilled).map(lower);
 
+/** Case-insensitive lookup of users by email (one equals filter per address). */
+export async function findUsersByEmails(prisma: any, emails: string[]): Promise<{ id: string; email: string }[]> {
+  if (emails.length === 0) return [];
+  return prisma.user.findMany({
+    where: { OR: emails.map((email) => ({ email: { equals: email, mode: 'insensitive' } })) },
+    select: { id: true, email: true },
+  });
+}
+
+/**
+ * Invites were removed in favour of direct adding. Settles this club's
+ * leftover pending invites: people who now have an account are added to the
+ * core team (as their invite promised); the rest are revoked so they can't
+ * take a seat later. Runs when the head opens the core team section.
+ * Returns how many were added.
+ */
+export async function settleLegacyClubInvites(prisma: any, env: CFEnv, clubId: string): Promise<number> {
+  const pending: { email: string }[] = await prisma.clubCoreInvite.findMany({
+    where: { clubId, status: 'PENDING' },
+    select: { email: true },
+  });
+  if (pending.length === 0) return 0;
+  let added = 0;
+  for (const user of await findUsersByEmails(prisma, pending.map((p) => p.email))) {
+    const joined = await convertPendingCoreInvites(prisma, env, user);
+    if (joined.includes(clubId)) added++;
+  }
+  await prisma.clubCoreInvite.updateMany({ where: { clubId, status: 'PENDING' }, data: { status: 'REVOKED' } });
+  return added;
+}
+
 // ── Add by email ──────────────────────────────────────────────
 
 export async function addCoreMembersByEmail(
@@ -119,28 +147,14 @@ export async function addCoreMembersByEmail(
 ): Promise<ByEmailResult[]> {
   const prisma = c.get('prisma') as any;
   const env = c.env;
-  const now = new Date();
   const inviterName = inviter.name?.trim() || 'Your club head';
 
   const core = new Set(coreEmailsOf(club));
   const founder = lower(club.founderEmail);
-
-  const pending: { id: string; email: string; expiresAt: Date }[] = await prisma.clubCoreInvite.findMany({
-    where: { clubId: club.id, status: 'PENDING' },
-    select: { id: true, email: true, expiresAt: true },
-  });
-  const livePending = new Set(pending.filter((i) => i.expiresAt > now).map((i) => i.email));
-  const expiredPending = new Map(pending.filter((i) => i.expiresAt <= now).map((i) => [i.email, i.id]));
-
-  let free = CORE_SLOTS.length - core.size - livePending.size;
+  let free = CORE_SLOTS.length - core.size;
 
   const validEmails = entries.map((e) => e.email).filter((e): e is string => !!e);
-  const users: { id: string; email: string; isVerified: boolean | null }[] = validEmails.length
-    ? await prisma.user.findMany({
-        where: { email: { in: validEmails, mode: 'insensitive' } },
-        select: { id: true, email: true, isVerified: true },
-      })
-    : [];
+  const users = await findUsersByEmails(prisma, validEmails);
   const userByEmail = new Map(users.map((u) => [lower(u.email), u]));
 
   const results: ByEmailResult[] = [];
@@ -148,66 +162,34 @@ export async function addCoreMembersByEmail(
     const email = entry.email;
     if (!email) { results.push({ email: entry.raw, status: 'invalid' }); continue; }
     if (email === founder || core.has(email)) { results.push({ email, status: 'already_member' }); continue; }
-    if (livePending.has(email)) { results.push({ email, status: 'already_invited' }); continue; }
+
+    // Direct add only: there are no invites. Someone without a Zynvo account
+    // is reported back so the head can ask them to sign up first.
+    const user = userByEmail.get(email);
+    if (!user) { results.push({ email, status: 'not_found' }); continue; }
     if (free <= 0) { results.push({ email, status: 'team_full' }); continue; }
 
-    const user = userByEmail.get(email);
-
-    // Verified account → straight onto the core team (same slots + membership
-    // as the existing addCoreMembers flow).
-    if (user && user.isVerified) {
-      if (!(await fillCoreSlot(prisma, club.id, user.email))) {
-        free = 0;
-        results.push({ email, status: 'team_full' });
-        continue;
-      }
-      await ensureMembership(prisma, user.id, club.id);
-      core.add(email);
-      free--;
-      results.push({ email, status: 'added' });
-
-      const url = `${appOrigin(env)}/clubs/${club.id}`;
-      await createNotification(prisma, fcmCfg(env), {
-        userId: user.id,
-        type: 'core_team_added',
-        title: `You're on the ${club.name} core team`,
-        body: `${inviterName} added you to the core team.`,
-        data: { clubId: club.id, route: `/clubs/${club.id}` },
-        push: true,
-      });
-      const mail = coreTeamAddedEmail({ clubName: club.name, inviterName, url });
-      deferTask(c, sendMail(env, { to: user.email, ...mail }));
+    if (!(await fillCoreSlot(prisma, club.id, user.email))) {
+      free = 0;
+      results.push({ email, status: 'team_full' });
       continue;
     }
-
-    // No (verified) account → pending invite. An expired pending row for the
-    // same email is refreshed instead of inserting (unique while pending).
-    const expiresAt = new Date(now.getTime() + INVITE_TTL_MS);
-    try {
-      const expiredId = expiredPending.get(email);
-      if (expiredId) {
-        await prisma.clubCoreInvite.update({
-          where: { id: expiredId },
-          data: { expiresAt, invitedById: inviter.id, createdAt: now },
-        });
-      } else {
-        await prisma.clubCoreInvite.create({
-          data: { clubId: club.id, email, invitedById: inviter.id, expiresAt },
-        });
-      }
-    } catch (err: any) {
-      // Unique (clubId, email) while pending: a concurrent request invited it.
-      if (err?.code === 'P2002') { results.push({ email, status: 'already_invited' }); continue; }
-      throw err;
-    }
-    livePending.add(email);
+    await ensureMembership(prisma, user.id, club.id);
+    core.add(email);
     free--;
-    results.push({ email, status: 'invited' });
+    results.push({ email, status: 'added' });
 
-    const qs = new URLSearchParams({ email, returnTo: `/clubs/${club.id}` });
-    const url = `${appOrigin(env)}/auth/signup?${qs.toString()}`;
-    const mail = coreTeamInviteEmail({ clubName: club.name, inviterName, url, expiresAt });
-    deferTask(c, sendMail(env, { to: email, ...mail }));
+    const url = `${appOrigin(env)}/clubs/${club.id}`;
+    await createNotification(prisma, fcmCfg(env), {
+      userId: user.id,
+      type: 'core_team_added',
+      title: `You're on the ${club.name} core team`,
+      body: `${inviterName} added you to the core team.`,
+      data: { clubId: club.id, route: `/clubs/${club.id}` },
+      push: true,
+    });
+    const mail = coreTeamAddedEmail({ clubName: club.name, inviterName, url });
+    deferTask(c, sendMail(env, { to: user.email, ...mail }));
   }
   return results;
 }

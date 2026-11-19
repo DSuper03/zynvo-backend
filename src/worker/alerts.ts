@@ -8,6 +8,7 @@
  * - Without TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID it only logs.
  */
 import type { CFEnv } from './types';
+import { explainAlert } from './alertExplain';
 
 export type AlertInput = {
   /** Stable identity of the problem; alerts with the same key are deduplicated. */
@@ -40,15 +41,39 @@ export function redact(text: string): string {
     .replace(/(api_key|password|secret|token)=([^&\s"]+)/gi, '$1=<redacted>');
 }
 
-export async function sendTelegram(env: CFEnv, text: string): Promise<boolean> {
+/** Escapes text for Telegram's HTML parse mode. */
+export const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const stripHtml = (s: string) =>
+  s.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+async function postTelegram(env: CFEnv, text: string, html: boolean): Promise<Response> {
+  return fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: env.TELEGRAM_CHAT_ID,
+      text,
+      disable_web_page_preview: true,
+      ...(html ? { parse_mode: 'HTML' } : {}),
+    }),
+  });
+}
+
+/**
+ * Sends a message. With `html`, the text uses Telegram's HTML formatting; if
+ * Telegram rejects the markup it is re-sent as plain text, so no alert is lost.
+ */
+export async function sendTelegram(env: CFEnv, text: string, opts: { html?: boolean } = {}): Promise<boolean> {
   if (!isTelegramConfigured(env)) return false;
+  const html = !!opts.html;
   const body = text.length > TELEGRAM_LIMIT ? `${text.slice(0, TELEGRAM_LIMIT)}\n…(truncated)` : text;
   try {
-    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: body, disable_web_page_preview: true }),
-    });
+    let res = await postTelegram(env, body, html);
+    if (!res.ok && html && res.status === 400) {
+      const plain = stripHtml(text);
+      res = await postTelegram(env, plain.length > TELEGRAM_LIMIT ? `${plain.slice(0, TELEGRAM_LIMIT)}\n…(truncated)` : plain, false);
+    }
     if (!res.ok) console.error(`[alerts] telegram ${res.status}: ${(await res.text()).slice(0, 200)}`);
     return res.ok;
   } catch (err: any) {
@@ -93,15 +118,21 @@ export async function raiseAlert(env: CFEnv, input: AlertInput): Promise<void> {
   const count = (record?.c ?? 0) + seenHere;
   const next: AlertRecord = { t: input.title.slice(0, 200), s: source, c: count, f: record?.f ?? now, l: now };
 
-  // Titles that bring their own emoji (🛡️ moderation, 🚩 reports) keep it alone.
+  const detail = input.detail ? redact(input.detail) : '';
+  const why = await explainAlert(env, input.title, detail);
+  const fixIcon = why.fixable === 'yes' ? '🔧' : why.fixable === 'no' ? '✅' : '🤔';
+  // Titles that bring their own emoji (moderation, reports) keep it alone.
   const icon = /^\p{Extended_Pictographic}/u.test(input.title) ? '' : '🚨 ';
   const lines = [
-    `${icon}${input.title}`,
-    `source: ${source} · ${ist(now)} IST`,
-    count > 1 ? `seen ${count}× since ${ist(next.f)} IST` : '',
-    input.detail ? `\n${redact(input.detail)}` : '',
-  ].filter(Boolean);
-  const sent = await sendTelegram(env, lines.join('\n'));
+    `${icon}<b>${escapeHtml(input.title)}</b>`,
+    '',
+    escapeHtml(why.what),
+    `${fixIcon} <b>Can we fix it?</b> ${escapeHtml(why.fix)}`,
+    '',
+    `<i>${escapeHtml(source)} · ${ist(now)} IST${count > 1 ? ` · seen ${count}× since ${ist(next.f)}` : ''}</i>`,
+    detail ? `<blockquote expandable>${escapeHtml(detail.slice(0, 2500))}</blockquote>` : '',
+  ].filter((l, i, all) => l !== '' || (i > 0 && all[i - 1] !== ''));
+  const sent = await sendTelegram(env, lines.join('\n').trim(), { html: true });
   if (!sent) console.error(`[alerts] ${input.title}${input.detail ? ` — ${redact(input.detail)}` : ''}`);
 
   if (env.ALERTS_KV) {
