@@ -37,6 +37,10 @@ const log = (level: LogLevel, message: string, meta?: Record<string, unknown>) =
   }
 };
 
+/** True if this request has logged a warning/error line matching `re`. */
+export const requestLogMatches = (re: RegExp): boolean =>
+  requestLogs.getStore()?.logs.some((l) => re.test(l.entry)) ?? false;
+
 export const logger = {
   info:  (message: string, meta?: Record<string, unknown>) => log('info',  message, meta),
   warn:  (message: string, meta?: Record<string, unknown>) => log('warn',  message, meta),
