@@ -43,7 +43,7 @@ describe('event lifecycle notifications', () => {
   });
 
   it('notifies only after a pending approval changes and avoids duplicates', async () => {
-    const prisma = { user: { findUnique: vi.fn().mockResolvedValue({ email: 'founder@x.test' }) }, clubs: { findUnique: vi.fn().mockResolvedValue({ founderEmail: 'founder@x.test' }) }, event: { findUnique: vi.fn().mockResolvedValue({ clubId: 'club', EventName: 'Event' }) }, userEvents: { updateMany: vi.fn().mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 }) }, eventQueue: { deleteMany: vi.fn() } };
+    const prisma = { user: { findUnique: vi.fn().mockResolvedValue({ email: 'founder@x.test', name: 'Ada' }) }, follow: { findMany: vi.fn().mockResolvedValue([]) }, clubs: { findUnique: vi.fn().mockResolvedValue({ founderEmail: 'founder@x.test' }) }, event: { findUnique: vi.fn().mockResolvedValue({ clubId: 'club', EventName: 'Event' }) }, userEvents: { updateMany: vi.fn().mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 }) }, eventQueue: { deleteMany: vi.fn() } };
     const { app, ctx, tasks } = setup(prisma);
     expect((await app.request('/eventQueue/e1/approve', put({ userId: 'attendee', accepted: true }), env, ctx)).status).toBe(200);
     await Promise.all(tasks);
