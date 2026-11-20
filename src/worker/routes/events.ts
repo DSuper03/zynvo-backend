@@ -7,7 +7,7 @@ import { cached } from '../cache';
 import { logger } from '../logger';
 import { sameCollege, isPlaceholderCollege } from '../utils/college';
 import { createNotification, sendToMany } from '../utils/notification';
-import { notifyCoreTeamOfEvent, notifyEventChanges, notifyEventDecision } from '../utils/event-notifications';
+import { notifyClubMembersOfEvent, notifyCoreTeamOfEvent, notifyEventCancelled, notifyEventChanges, notifyEventDecision } from '../utils/event-notifications';
 import type { FcmConfig } from '../fcm';
 
 const router = new Hono<HonoEnv>();
@@ -237,6 +237,10 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
     });
     if (parsedData.data.coreTeamOnly) {
       c.executionCtx.waitUntil(notifyCoreTeamOfEvent(prisma, getFcmCfg(c), { id: response.id, name: parsedData.data.eventName, clubId, creatorId: userId }));
+    } else {
+      c.executionCtx.waitUntil(notifyClubMembersOfEvent(prisma, getFcmCfg(c), {
+        id: response.id, name: parsedData.data.eventName, clubId, clubName, creatorId: userId,
+      }));
     }
     return c.json({ msg: 'event created', id: response.id }, 201);
   } catch (err: any) {
@@ -1079,12 +1083,21 @@ router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (
     const previous = await prisma.event.findUnique({ where: { id: eventId }, select: { startDate: true, endDate: true, Venue: true, EventMode: true, coreTeamOnly: true, collegeStudentsOnly: true, acceptanceBased: true } });
     if (!previous) return c.json({ msg: 'Event not found' }, 404);
     const updated = await prisma.event.update({ where: { id: eventId }, data: updateData, select: eventSelectBase });
-    const changed = [
-      (previous.startDate !== updated.startDate || previous.endDate !== updated.endDate) && 'date',
-      (previous.Venue !== updated.Venue || previous.EventMode !== updated.EventMode) && 'venue or mode',
-      (previous.coreTeamOnly !== updated.coreTeamOnly || previous.collegeStudentsOnly !== updated.collegeStudentsOnly || previous.acceptanceBased !== updated.acceptanceBased) && 'registration access',
-    ].filter((value): value is string => !!value);
-    if (changed.length) c.executionCtx.waitUntil(notifyEventChanges(prisma, getFcmCfg(c), eventId, updated.EventName, changed));
+    const same = (left: unknown, right: unknown) => String(left ?? '') === String(right ?? '');
+    const change = {
+      startChanged: !same(previous.startDate, updated.startDate),
+      endChanged: !same(previous.endDate, updated.endDate),
+      venueChanged: !same(previous.Venue, updated.Venue),
+      modeChanged: !same(previous.EventMode, updated.EventMode),
+      accessChanged: previous.coreTeamOnly !== updated.coreTeamOnly || previous.collegeStudentsOnly !== updated.collegeStudentsOnly || previous.acceptanceBased !== updated.acceptanceBased,
+      startDate: updated.startDate,
+      endDate: updated.endDate,
+      venue: updated.Venue,
+      mode: updated.EventMode,
+    };
+    if (change.startChanged || change.endChanged || change.venueChanged || change.modeChanged || change.accessChanged) {
+      c.executionCtx.waitUntil(notifyEventChanges(prisma, getFcmCfg(c), eventId, updated.EventName, change));
+    }
     return c.json({ msg: 'Event updated successfully', response: mapEventFees(updated) }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] updateEvent error`, { error: err.message });
@@ -1099,6 +1112,10 @@ router.delete('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, asyn
   const eventId = c.req.param('id');
   const prisma = c.get('prisma');
   try {
+    const existing = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { EventName: true, attendees: { select: { userId: true } } },
+    });
     await prisma.$transaction([
       prisma.registrationAnswer.deleteMany({ where: { eventId } }),
       prisma.eventCustomQuestion.deleteMany({ where: { eventId } }),
@@ -1113,6 +1130,13 @@ router.delete('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, asyn
       prisma.scheduleDay.deleteMany({ where: { eventId } }),
       prisma.event.delete({ where: { id: eventId } }),
     ]);
+    if (existing) {
+      c.executionCtx.waitUntil(notifyEventCancelled(prisma, getFcmCfg(c), {
+        id: eventId,
+        name: existing.EventName,
+        userIds: existing.attendees.map((row: { userId: string }) => row.userId),
+      }));
+    }
     return c.json({ msg: 'Event deleted successfully' }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] deleteEvent error`, { error: err.message });
