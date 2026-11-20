@@ -283,12 +283,19 @@ router.get('/getSpeakers', async (c) => {
   const eventId = c.req.query('id') ?? '';
   if (!eventId) return jsonError(c, requestId, 'Event ID is required', 400);
   const prisma = c.get('prisma');
-  const speakers = await prisma.speakers.findMany({
-    where: { eventId },
-    select: { id: true, profilePic: true, about: true, name: true, email: true, eventId: true },
-  });
-  // No speakers yet is a normal state: 200 with an empty list (callers use `speakers || []`).
-  return c.json({ msg: speakers.length ? 'speakers are there' : 'No speakers added for the event', speakers }, 200);
+  try {
+    // Served from Accelerate's shared cache (cleared by any event write), so a
+    // busy events page doesn't hit the database — or Accelerate's own Worker,
+    // which answered "error code: 1102" (resource limits) under load — on every view.
+    const speakers = await prisma.speakers.findMany(cached({
+      where: { eventId },
+      select: { id: true, profilePic: true, about: true, name: true, email: true, eventId: true },
+    }, { ttl: 60, tags: ['events'] }));
+    // No speakers yet is a normal state: 200 with an empty list (callers use `speakers || []`).
+    return c.json({ msg: speakers.length ? 'speakers are there' : 'No speakers added for the event', speakers }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
 });
 
 // ── GET /attendees/:id ────────────────────────────────────────
