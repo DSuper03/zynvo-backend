@@ -23,6 +23,7 @@ describe('event lifecycle notifications', () => {
   }
   const post = (body: unknown) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const put = (body: unknown) => ({ ...post(body), method: 'PUT' });
+  const del = { method: 'DELETE' };
 
   it('alerts the other core members only for a core-team event', async () => {
     const prisma = { event: { create: vi.fn().mockResolvedValue({ id: 'e1' }) }, clubs: { findUnique: vi.fn().mockResolvedValue({ founderEmail: 'founder@x.test', coremember1: 'core@x.test', coremember2: null, coremember3: null }) }, user: { findMany: vi.fn().mockResolvedValue([{ id: 'organizer' }, { id: 'core' }, { id: 'core' }]) } };
@@ -31,16 +32,22 @@ describe('event lifecycle notifications', () => {
     await Promise.all(tasks);
     expect(notification.sendToMany).toHaveBeenCalledWith(prisma, expect.anything(), expect.objectContaining({ userIds: ['core'], push: true, message: expect.objectContaining({ data: { eventId: 'e1', route: '/events/e1' } }) }));
     tasks.length = 0; vi.clearAllMocks();
+    prisma.userClubMembership = { findMany: vi.fn().mockResolvedValue([{ userId: 'organizer' }, { userId: 'member' }]) };
     await app.request('/event', post({ eventName: 'Public', coreTeamOnly: false, maxTeamSize: 1 }), env, ctx);
-    expect(tasks).toHaveLength(0);
+    await Promise.all(tasks);
+    expect(notification.sendToMany).toHaveBeenCalledWith(prisma, expect.anything(), expect.objectContaining({
+      userIds: ['member'],
+      type: 'club_event',
+      message: expect.objectContaining({ title: 'New from Club', body: 'Club is hosting Public.' }),
+    }));
   });
 
   it('notifies only after a pending approval changes and avoids duplicates', async () => {
-    const prisma = { user: { findUnique: vi.fn().mockResolvedValue({ email: 'founder@x.test' }) }, clubs: { findUnique: vi.fn().mockResolvedValue({ founderEmail: 'founder@x.test' }) }, event: { findUnique: vi.fn().mockResolvedValue({ clubId: 'club', EventName: 'Event' }) }, userEvents: { updateMany: vi.fn().mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 }) }, eventQueue: { deleteMany: vi.fn() } };
+    const prisma = { user: { findUnique: vi.fn().mockResolvedValue({ email: 'founder@x.test', name: 'Ada' }) }, follow: { findMany: vi.fn().mockResolvedValue([]) }, clubs: { findUnique: vi.fn().mockResolvedValue({ founderEmail: 'founder@x.test' }) }, event: { findUnique: vi.fn().mockResolvedValue({ clubId: 'club', EventName: 'Event' }) }, userEvents: { updateMany: vi.fn().mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 }) }, eventQueue: { deleteMany: vi.fn() } };
     const { app, ctx, tasks } = setup(prisma);
     expect((await app.request('/eventQueue/e1/approve', put({ userId: 'attendee', accepted: true }), env, ctx)).status).toBe(200);
     await Promise.all(tasks);
-    expect(notification.createNotification).toHaveBeenCalledWith(prisma, expect.anything(), expect.objectContaining({ userId: 'attendee', title: 'Registration approved', push: true }));
+    expect(notification.createNotification).toHaveBeenCalledWith(prisma, expect.anything(), expect.objectContaining({ userId: 'attendee', title: "You're in!", push: true, data: { eventId: 'e1', route: '/ticket/e1' } }));
     expect((await app.request('/eventQueue/e1/approve', put({ userId: 'attendee', accepted: true }), env, ctx)).status).toBe(404);
     expect(notification.createNotification).toHaveBeenCalledTimes(1);
   });
@@ -61,11 +68,40 @@ describe('event lifecycle notifications', () => {
     expect(tasks).toHaveLength(0);
     await app.request('/event/e1', put({ Venue: 'New hall' }), env, ctx);
     await Promise.all(tasks);
-    expect(notification.sendToMany).toHaveBeenCalledWith(prisma, expect.anything(), expect.objectContaining({ userIds: ['a', 'b'], message: expect.objectContaining({ body: expect.stringContaining('venue or mode') }) }));
+    expect(notification.sendToMany).toHaveBeenCalledWith(prisma, expect.anything(), expect.objectContaining({ userIds: ['a', 'b'], message: expect.objectContaining({ title: 'Event update', body: expect.stringContaining('New hall') }) }));
     notification.sendToMany.mockClear(); tasks.length = 0;
     await app.request('/event/e1', put({ eventStartDate: '2026-12-03' }), env, ctx);
     await Promise.all(tasks);
     expect(prisma.event.update).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ startDate: '2026-12-03' }) }));
-    expect(notification.sendToMany).toHaveBeenCalledWith(prisma, expect.anything(), expect.objectContaining({ message: expect.objectContaining({ body: expect.stringContaining('date') }) }));
+    expect(notification.sendToMany).toHaveBeenCalledWith(prisma, expect.anything(), expect.objectContaining({ message: expect.objectContaining({ body: expect.stringContaining('now starts') }) }));
+  });
+
+  it('tells registered people when the event is deleted', async () => {
+    const prisma = {
+      event: {
+        findUnique: vi.fn().mockResolvedValue({ EventName: 'Design Meetup', attendees: [{ userId: 'a' }, { userId: 'a' }, { userId: 'b' }] }),
+        delete: vi.fn(),
+      },
+      registrationAnswer: { deleteMany: vi.fn() },
+      eventCustomQuestion: { deleteMany: vi.fn() },
+      eventAnnouncement: { deleteMany: vi.fn() },
+      eventGallery: { deleteMany: vi.fn() },
+      judges: { deleteMany: vi.fn() },
+      speakers: { deleteMany: vi.fn() },
+      userEvents: { deleteMany: vi.fn() },
+      teamMember: { deleteMany: vi.fn() },
+      team: { deleteMany: vi.fn() },
+      scheduleSession: { deleteMany: vi.fn() },
+      scheduleDay: { deleteMany: vi.fn() },
+      $transaction: vi.fn().mockResolvedValue([]),
+    };
+    const { app, ctx, tasks } = setup(prisma);
+    expect((await app.request('/event/e1', del, env, ctx)).status).toBe(200);
+    await Promise.all(tasks);
+    expect(notification.sendToMany).toHaveBeenCalledWith(prisma, expect.anything(), expect.objectContaining({
+      userIds: ['a', 'b'],
+      type: 'event_cancelled',
+      message: expect.objectContaining({ title: 'Event cancelled', body: '"Design Meetup" has been cancelled. Tap for details.' }),
+    }));
   });
 });

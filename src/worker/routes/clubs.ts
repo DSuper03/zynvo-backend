@@ -8,6 +8,8 @@ import { rateLimiter } from '../middleware/ratelimit';
 import { founderClub } from '../utils/clubAuth';
 import { sameCollege } from '../utils/college';
 import { addCoreMembersByEmail, parseEmails, settleLegacyClubInvites } from '../coreInvites';
+import { notifyClubDeleted } from '../utils/event-notifications';
+import type { FcmConfig } from '../fcm';
 
 const router = new Hono<HonoEnv>();
 
@@ -306,12 +308,29 @@ router.post('/:clubId/delete', authMiddleware, rateLimiter(5), async (c) => {
       return jsonError(c, requestId, 'Type the club name exactly to confirm deletion', 400);
     }
 
+    const [memberships, legacy, events] = await Promise.all([
+      prisma.userClubMembership.findMany({ where: { clubId }, select: { userId: true } }),
+      prisma.user.findMany({ where: { clubId }, select: { id: true } }),
+      prisma.event.findMany({ where: { clubId }, select: { attendees: { select: { userId: true } } } }),
+    ]);
+    const recipientIds = new Set<string>();
+    for (const row of memberships) recipientIds.add(row.userId);
+    for (const row of legacy) recipientIds.add(row.id);
+    for (const event of events) for (const attendee of event.attendees) recipientIds.add(attendee.userId);
+    recipientIds.delete(c.get('userId'));
+
     await prisma.$transaction([
       prisma.user.updateMany({ where: { clubId }, data: { clubId: null, clubName: null } }),
       prisma.event.deleteMany({ where: { clubId } }),
       prisma.clubs.delete({ where: { id: clubId } }),
     ]);
     logger.info('club deleted', { clubId, by: c.get('userId') });
+    const fcm: FcmConfig = {
+      projectId: c.env.FIREBASE_PROJECT_ID,
+      clientEmail: c.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: c.env.FIREBASE_PRIVATE_KEY,
+    };
+    c.executionCtx.waitUntil(notifyClubDeleted(prisma, fcm, { clubName: club.name, userIds: [...recipientIds] }));
     return c.json({ msg: 'Club deleted' }, 200);
   } catch (err: any) {
     if (err?.code === 'P2025') return jsonError(c, requestId, 'Club not found', 404);

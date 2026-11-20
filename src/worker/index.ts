@@ -14,6 +14,7 @@ import { invalidateOnWrite } from './cache';
 import { logger } from './logger';
 import { raiseAlert } from './alerts';
 import { sendDailyDigest } from './digest';
+import { remindOrganizersOfPendingApprovals } from './pending-registrations';
 
 // ── Route imports ─────────────────────────────────────────────
 import authRouter from './routes/auth';
@@ -165,16 +166,23 @@ export default {
       return Response.json({ error: 'Internal server error' }, { status: 500 });
     }
   },
-  // Daily digest (wrangler.toml [triggers] crons).
-  async scheduled(_event: ScheduledController, env: CFEnv, ctx: ExecutionContext) {
+  // Daily digest stays on its 03:30 UTC cron. The hourly cron only reminds organizers.
+  async scheduled(event: ScheduledController, env: CFEnv, ctx: ExecutionContext) {
+    if (event.cron === '30 3 * * *') {
+      ctx.waitUntil(
+        sendDailyDigest(env).catch((err: any) =>
+          raiseAlert(env, {
+            key: 'daily-digest-failed',
+            title: 'Daily digest failed',
+            detail: String(err?.message ?? err),
+            source: 'cron',
+          }),
+        ),
+      );
+    }
     ctx.waitUntil(
-      sendDailyDigest(env).catch((err: any) =>
-        raiseAlert(env, {
-          key: 'daily-digest-failed',
-          title: 'Daily digest failed',
-          detail: String(err?.message ?? err),
-          source: 'cron',
-        }),
+      remindOrganizersOfPendingApprovals(env).catch((err: any) =>
+        logger.error('Pending registration reminder failed', { error: String(err?.message ?? err) }),
       ),
     );
   },

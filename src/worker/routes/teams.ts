@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
 import { createNotification } from '../utils/notification';
+import { notifyTeammatesJoined } from '../utils/event-notifications';
 import type { FcmConfig } from '../fcm';
 
 const router = new Hono<HonoEnv>();
@@ -304,7 +305,7 @@ router.post('/:teamId/requests', authMiddleware, async (c) => {
         type: 'team_join_request',
         title: `${requester?.name ?? 'Someone'} wants to join ${team.teamName}`,
         body: message ?? `For ${team.event.EventName}. Open the team tab to respond.`,
-        data: { teamId, eventId: team.eventId },
+        data: { teamId, eventId: team.eventId, route: `/events/${team.eventId}` },
         push: true,
       }));
     }
@@ -352,7 +353,7 @@ router.put('/:teamId/requests/:requestId', authMiddleware, async (c) => {
     if (!(await isTeamLeader(prisma, teamId, c.get('userId')))) return jsonError(c, requestId, 'Only the team leader can do this', 403);
     const jr = await prisma.teamJoinRequest.findFirst({
       where: { id: joinRequestId, teamId, status: 'pending' },
-      select: { id: true, userId: true, eventId: true, team: { select: { teamName: true, event: { select: { TeamSize: true } }, _count: { select: { members: true } } } } },
+      select: { id: true, userId: true, eventId: true, team: { select: { teamName: true, event: { select: { TeamSize: true, EventName: true } }, _count: { select: { members: true } } } } },
     });
     if (!jr) return jsonError(c, requestId, 'Request not found', 404);
 
@@ -381,9 +382,27 @@ router.put('/:teamId/requests/:requestId', authMiddleware, async (c) => {
       type: 'team_join_response',
       title: action === 'accept' ? `You're in ${jr.team.teamName}!` : `${jr.team.teamName} didn't accept your request`,
       body: action === 'accept' ? 'Open the event to meet your team.' : 'Other teams are still looking. Have a look.',
-      data: { teamId, eventId: jr.eventId },
+      data: { teamId, eventId: jr.eventId, route: `/events/${jr.eventId}` },
       push: true,
     }));
+    if (action === 'accept') {
+      const leaderId = c.get('userId');
+      c.executionCtx.waitUntil((async () => {
+        const [person, members] = await Promise.all([
+          prisma.user.findUnique({ where: { id: jr.userId }, select: { name: true } }),
+          prisma.teamMember.findMany({ where: { teamId }, select: { userId: true } }),
+        ]);
+        await notifyTeammatesJoined(prisma, getFcmCfg(c), {
+          teamName: jr.team.teamName,
+          eventId: jr.eventId,
+          eventName: jr.team.event.EventName,
+          memberName: person?.name?.trim() || 'Someone',
+          count: members.length,
+          size: jr.team.event.TeamSize ?? 0,
+          userIds: members.map((member: { userId: string }) => member.userId).filter((id: string) => id !== jr.userId && id !== leaderId),
+        });
+      })());
+    }
     return c.json({ msg: action === 'accept' ? 'Member added' : 'Request declined' }, 200);
   } catch (err: any) {
     if (err?.code === 'P2002') return jsonError(c, requestId, 'They already joined another team', 409);

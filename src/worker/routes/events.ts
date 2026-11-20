@@ -7,7 +7,7 @@ import { cached } from '../cache';
 import { logger } from '../logger';
 import { sameCollege, isPlaceholderCollege } from '../utils/college';
 import { createNotification, sendToMany } from '../utils/notification';
-import { notifyCoreTeamOfEvent, notifyEventChanges, notifyEventDecision } from '../utils/event-notifications';
+import { notifyCheckedIn, notifyClubMembersOfEvent, notifyCoreTeamOfEvent, notifyEventAnnouncement, notifyEventCancelled, notifyEventChanges, notifyEventDecision, notifyFollowersOfRegistration } from '../utils/event-notifications';
 import type { FcmConfig } from '../fcm';
 
 const router = new Hono<HonoEnv>();
@@ -237,6 +237,10 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
     });
     if (parsedData.data.coreTeamOnly) {
       c.executionCtx.waitUntil(notifyCoreTeamOfEvent(prisma, getFcmCfg(c), { id: response.id, name: parsedData.data.eventName, clubId, creatorId: userId }));
+    } else {
+      c.executionCtx.waitUntil(notifyClubMembersOfEvent(prisma, getFcmCfg(c), {
+        id: response.id, name: parsedData.data.eventName, clubId, clubName, creatorId: userId,
+      }));
     }
     return c.json({ msg: 'event created', id: response.id }, 201);
   } catch (err: any) {
@@ -592,7 +596,7 @@ router.post('/registerEvent', authMiddleware, async (c) => {
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       select: {
-        isPaid: true, clubId: true, coreTeamOnly: true, collegeStudentsOnly: true, university: true, maxParticipants: true,
+        isPaid: true, EventName: true, clubId: true, coreTeamOnly: true, collegeStudentsOnly: true, university: true, maxParticipants: true,
         _count: { select: { attendees: true } },
         acceptanceBased: true, applicationStatus: true, applicationEndDate: true,
         customQuestions: { where: { required: true }, select: { id: true, label: true } },
@@ -698,6 +702,7 @@ router.post('/registerEvent', authMiddleware, async (c) => {
     c.executionCtx.waitUntil(notifyOrganisersOfRegistration(prisma, getFcmCfg(c), {
       eventId, attendeeId: userId, needsApproval: false, paymentToReview: Boolean(event.isPaid && paymentScreenshot),
     }));
+    c.executionCtx.waitUntil(notifyFollowersOfRegistration(prisma, getFcmCfg(c), { userId, eventId, eventName: event.EventName }));
 
     return c.json({
       msg: 'registered successfully',
@@ -856,6 +861,20 @@ router.post('/announcement/:eventId', authMiddleware, specificClubHeadAuthMiddle
   const prisma = c.get('prisma');
   try {
     const data = await prisma.eventAnnouncement.create({ data: { Title, Description, eventId } });
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { EventName: true, attendees: { select: { userId: true } } },
+    });
+    if (event) {
+      c.executionCtx.waitUntil(notifyEventAnnouncement(prisma, getFcmCfg(c), {
+        eventId,
+        eventName: event.EventName,
+        title: String(Title ?? ''),
+        body: String(Description ?? ''),
+        authorId: c.get('userId'),
+        userIds: event.attendees.map((row: { userId: string }) => row.userId),
+      }));
+    }
     return c.json({ msg: 'Announcement published', data }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'internal server error', 500, err);
@@ -1079,12 +1098,21 @@ router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (
     const previous = await prisma.event.findUnique({ where: { id: eventId }, select: { startDate: true, endDate: true, Venue: true, EventMode: true, coreTeamOnly: true, collegeStudentsOnly: true, acceptanceBased: true } });
     if (!previous) return c.json({ msg: 'Event not found' }, 404);
     const updated = await prisma.event.update({ where: { id: eventId }, data: updateData, select: eventSelectBase });
-    const changed = [
-      (previous.startDate !== updated.startDate || previous.endDate !== updated.endDate) && 'date',
-      (previous.Venue !== updated.Venue || previous.EventMode !== updated.EventMode) && 'venue or mode',
-      (previous.coreTeamOnly !== updated.coreTeamOnly || previous.collegeStudentsOnly !== updated.collegeStudentsOnly || previous.acceptanceBased !== updated.acceptanceBased) && 'registration access',
-    ].filter((value): value is string => !!value);
-    if (changed.length) c.executionCtx.waitUntil(notifyEventChanges(prisma, getFcmCfg(c), eventId, updated.EventName, changed));
+    const same = (left: unknown, right: unknown) => String(left ?? '') === String(right ?? '');
+    const change = {
+      startChanged: !same(previous.startDate, updated.startDate),
+      endChanged: !same(previous.endDate, updated.endDate),
+      venueChanged: !same(previous.Venue, updated.Venue),
+      modeChanged: !same(previous.EventMode, updated.EventMode),
+      accessChanged: previous.coreTeamOnly !== updated.coreTeamOnly || previous.collegeStudentsOnly !== updated.collegeStudentsOnly || previous.acceptanceBased !== updated.acceptanceBased,
+      startDate: updated.startDate,
+      endDate: updated.endDate,
+      venue: updated.Venue,
+      mode: updated.EventMode,
+    };
+    if (change.startChanged || change.endChanged || change.venueChanged || change.modeChanged || change.accessChanged) {
+      c.executionCtx.waitUntil(notifyEventChanges(prisma, getFcmCfg(c), eventId, updated.EventName, change));
+    }
     return c.json({ msg: 'Event updated successfully', response: mapEventFees(updated) }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] updateEvent error`, { error: err.message });
@@ -1099,6 +1127,10 @@ router.delete('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, asyn
   const eventId = c.req.param('id');
   const prisma = c.get('prisma');
   try {
+    const existing = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { EventName: true, attendees: { select: { userId: true } } },
+    });
     await prisma.$transaction([
       prisma.registrationAnswer.deleteMany({ where: { eventId } }),
       prisma.eventCustomQuestion.deleteMany({ where: { eventId } }),
@@ -1113,6 +1145,13 @@ router.delete('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, asyn
       prisma.scheduleDay.deleteMany({ where: { eventId } }),
       prisma.event.delete({ where: { id: eventId } }),
     ]);
+    if (existing) {
+      c.executionCtx.waitUntil(notifyEventCancelled(prisma, getFcmCfg(c), {
+        id: eventId,
+        name: existing.EventName,
+        userIds: existing.attendees.map((row: { userId: string }) => row.userId),
+      }));
+    }
     return c.json({ msg: 'Event deleted successfully' }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] deleteEvent error`, { error: err.message });
@@ -1181,6 +1220,9 @@ router.put('/eventQueue/:eventId/approve', authMiddleware, async (c) => {
     if (!decision.count) return c.json({ msg: 'No pending registration found' }, 404);
     await prisma.eventQueue.deleteMany({ where: { eventId, userId } });
     c.executionCtx.waitUntil(notifyEventDecision(prisma, getFcmCfg(c), eventId, event.EventName, userId, accepted));
+    if (accepted) {
+      c.executionCtx.waitUntil(notifyFollowersOfRegistration(prisma, getFcmCfg(c), { userId, eventId, eventName: event.EventName }));
+    }
     return c.json({ msg: 'User accepted successfully' }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] approve queue error`, { error: err.message });
@@ -1523,6 +1565,8 @@ const passIdFromScan = (raw: string): string => {
 
 type CheckInResult = {
   httpStatus: 200 | 400 | 404 | 409;
+  /** Set only when this call newly checked the pass in. */
+  userId?: string;
   body: { status: string; msg: string; checkedInAt?: Date | null; attendee?: unknown };
 };
 
@@ -1554,7 +1598,7 @@ async function checkInPass(prisma: any, eventId: string, passId: string, byUserI
     data: { checkedInAt: at ?? new Date(), checkedInById: byUserId },
     select: { checkedInAt: true },
   });
-  return { httpStatus: 200, body: { status: 'checked_in', msg: 'Checked in.', checkedInAt: updated.checkedInAt, attendee: reg.user } };
+  return { httpStatus: 200, userId: reg.userId, body: { status: 'checked_in', msg: 'Checked in.', checkedInAt: updated.checkedInAt, attendee: reg.user } };
 }
 
 router.post('/:eventId/check-in', authMiddleware, async (c) => {
@@ -1570,6 +1614,12 @@ router.post('/:eventId/check-in', authMiddleware, async (c) => {
     const denied = await canManageSchedule(prisma, eventId, userId);
     if (denied) return c.json({ msg: denied.msg }, denied.status);
     const result = await checkInPass(prisma, eventId, passId, userId);
+    if (result.userId) {
+      const event = await prisma.event.findUnique({ where: { id: eventId }, select: { EventName: true } });
+      if (event?.EventName) {
+        c.executionCtx.waitUntil(notifyCheckedIn(prisma, getFcmCfg(c), { userId: result.userId, eventId, eventName: event.EventName }));
+      }
+    }
     return c.json(result.body, result.httpStatus);
   } catch (err: any) {
     logger.error(`[${requestId}] check-in error`, { error: err.message, eventId });
@@ -1630,6 +1680,7 @@ router.post('/:eventId/check-in/batch', authMiddleware, async (c) => {
 
     const now = Date.now();
     const results = [];
+    const checkedInIds: string[] = [];
     for (const item of items) {
       const passId = typeof item?.passId === 'string' ? passIdFromScan(item.passId) : '';
       if (!passId) {
@@ -1642,7 +1693,15 @@ router.post('/:eventId/check-in/batch', authMiddleware, async (c) => {
         ? scanned
         : undefined;
       const result = await checkInPass(prisma, eventId, passId, userId, at);
+      if (result.userId) checkedInIds.push(result.userId);
       results.push({ passId, ...result.body });
+    }
+    if (checkedInIds.length > 0) {
+      const event = await prisma.event.findUnique({ where: { id: eventId }, select: { EventName: true } });
+      if (event?.EventName) {
+        const fcm = getFcmCfg(c);
+        c.executionCtx.waitUntil(Promise.all(checkedInIds.map((attendeeId) => notifyCheckedIn(prisma, fcm, { userId: attendeeId, eventId, eventName: event.EventName }))));
+      }
     }
     return c.json({ results }, 200);
   } catch (err: any) {
