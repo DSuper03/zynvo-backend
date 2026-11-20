@@ -4,6 +4,8 @@ import { authMiddleware, specificClubHeadAuthMiddleware } from '../middleware/au
 import { generateRequestId, jsonError } from '../utils/response';
 import { founderClub, ensureMembership } from '../utils/clubAuth';
 import { findUsersByEmails } from '../coreInvites';
+import { notifyEventCancelled } from '../utils/event-notifications';
+import type { FcmConfig } from '../fcm';
 
 const router = new Hono<HonoEnv>();
 
@@ -372,6 +374,10 @@ router.post('/deleteEvent/:eventId', authMiddleware, async (c) => {
     const { event, allowed } = await founderOfEventClub(prisma, c.get('userId'), eventId);
     if (!event) return c.json({ msg: 'no such event found' }, 404);
     if (!allowed) return c.json({ msg: 'unauthorized access' }, 403);
+    const doomed = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { EventName: true, attendees: { select: { userId: true } } },
+    });
     // Delete dependents first; several relations don't cascade
     await prisma.$transaction([
       prisma.registrationAnswer.deleteMany({ where: { eventId } }),
@@ -387,6 +393,18 @@ router.post('/deleteEvent/:eventId', authMiddleware, async (c) => {
       prisma.scheduleDay.deleteMany({ where: { eventId } }),
       prisma.event.delete({ where: { id: eventId } }),
     ]);
+    if (doomed) {
+      const fcm: FcmConfig = {
+        projectId: c.env.FIREBASE_PROJECT_ID,
+        clientEmail: c.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: c.env.FIREBASE_PRIVATE_KEY,
+      };
+      c.executionCtx.waitUntil(notifyEventCancelled(prisma, fcm, {
+        id: eventId,
+        name: doomed.EventName,
+        userIds: doomed.attendees.map((row: { userId: string }) => row.userId),
+      }));
+    }
     return c.json({ msg: 'event deleted, refresh page' }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'internal server error', 500, err);
