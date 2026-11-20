@@ -68,7 +68,7 @@ id = "0426a5fbadc74f9abd99e0318c0a025a"
 
 # Daily digest at 09:00 IST (03:30 UTC).
 [triggers]
-crons = ["30 3 * * *"]
+crons = ["30 3 * * *", "0 * * * *"]
 
 # ── Observability ─────────────────────────────────────────────
 # Workers Logs (console output + one log per request, incl. errors and

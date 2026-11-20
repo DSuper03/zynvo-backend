@@ -7,7 +7,7 @@ import { cached } from '../cache';
 import { logger } from '../logger';
 import { sameCollege, isPlaceholderCollege } from '../utils/college';
 import { createNotification, sendToMany } from '../utils/notification';
-import { notifyClubMembersOfEvent, notifyCoreTeamOfEvent, notifyEventCancelled, notifyEventChanges, notifyEventDecision } from '../utils/event-notifications';
+import { notifyCheckedIn, notifyClubMembersOfEvent, notifyCoreTeamOfEvent, notifyEventAnnouncement, notifyEventCancelled, notifyEventChanges, notifyEventDecision, notifyFollowersOfRegistration } from '../utils/event-notifications';
 import type { FcmConfig } from '../fcm';
 
 const router = new Hono<HonoEnv>();
@@ -596,7 +596,7 @@ router.post('/registerEvent', authMiddleware, async (c) => {
     const event = await prisma.event.findUnique({
       where: { id: eventId },
       select: {
-        isPaid: true, clubId: true, coreTeamOnly: true, collegeStudentsOnly: true, university: true, maxParticipants: true,
+        isPaid: true, EventName: true, clubId: true, coreTeamOnly: true, collegeStudentsOnly: true, university: true, maxParticipants: true,
         _count: { select: { attendees: true } },
         acceptanceBased: true, applicationStatus: true, applicationEndDate: true,
         customQuestions: { where: { required: true }, select: { id: true, label: true } },
@@ -702,6 +702,7 @@ router.post('/registerEvent', authMiddleware, async (c) => {
     c.executionCtx.waitUntil(notifyOrganisersOfRegistration(prisma, getFcmCfg(c), {
       eventId, attendeeId: userId, needsApproval: false, paymentToReview: Boolean(event.isPaid && paymentScreenshot),
     }));
+    c.executionCtx.waitUntil(notifyFollowersOfRegistration(prisma, getFcmCfg(c), { userId, eventId, eventName: event.EventName }));
 
     return c.json({
       msg: 'registered successfully',
@@ -860,6 +861,20 @@ router.post('/announcement/:eventId', authMiddleware, specificClubHeadAuthMiddle
   const prisma = c.get('prisma');
   try {
     const data = await prisma.eventAnnouncement.create({ data: { Title, Description, eventId } });
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { EventName: true, attendees: { select: { userId: true } } },
+    });
+    if (event) {
+      c.executionCtx.waitUntil(notifyEventAnnouncement(prisma, getFcmCfg(c), {
+        eventId,
+        eventName: event.EventName,
+        title: String(Title ?? ''),
+        body: String(Description ?? ''),
+        authorId: c.get('userId'),
+        userIds: event.attendees.map((row: { userId: string }) => row.userId),
+      }));
+    }
     return c.json({ msg: 'Announcement published', data }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'internal server error', 500, err);
@@ -1205,6 +1220,9 @@ router.put('/eventQueue/:eventId/approve', authMiddleware, async (c) => {
     if (!decision.count) return c.json({ msg: 'No pending registration found' }, 404);
     await prisma.eventQueue.deleteMany({ where: { eventId, userId } });
     c.executionCtx.waitUntil(notifyEventDecision(prisma, getFcmCfg(c), eventId, event.EventName, userId, accepted));
+    if (accepted) {
+      c.executionCtx.waitUntil(notifyFollowersOfRegistration(prisma, getFcmCfg(c), { userId, eventId, eventName: event.EventName }));
+    }
     return c.json({ msg: 'User accepted successfully' }, 200);
   } catch (err: any) {
     logger.error(`[${requestId}] approve queue error`, { error: err.message });
@@ -1547,6 +1565,8 @@ const passIdFromScan = (raw: string): string => {
 
 type CheckInResult = {
   httpStatus: 200 | 400 | 404 | 409;
+  /** Set only when this call newly checked the pass in. */
+  userId?: string;
   body: { status: string; msg: string; checkedInAt?: Date | null; attendee?: unknown };
 };
 
@@ -1578,7 +1598,7 @@ async function checkInPass(prisma: any, eventId: string, passId: string, byUserI
     data: { checkedInAt: at ?? new Date(), checkedInById: byUserId },
     select: { checkedInAt: true },
   });
-  return { httpStatus: 200, body: { status: 'checked_in', msg: 'Checked in.', checkedInAt: updated.checkedInAt, attendee: reg.user } };
+  return { httpStatus: 200, userId: reg.userId, body: { status: 'checked_in', msg: 'Checked in.', checkedInAt: updated.checkedInAt, attendee: reg.user } };
 }
 
 router.post('/:eventId/check-in', authMiddleware, async (c) => {
@@ -1594,6 +1614,12 @@ router.post('/:eventId/check-in', authMiddleware, async (c) => {
     const denied = await canManageSchedule(prisma, eventId, userId);
     if (denied) return c.json({ msg: denied.msg }, denied.status);
     const result = await checkInPass(prisma, eventId, passId, userId);
+    if (result.userId) {
+      const event = await prisma.event.findUnique({ where: { id: eventId }, select: { EventName: true } });
+      if (event?.EventName) {
+        c.executionCtx.waitUntil(notifyCheckedIn(prisma, getFcmCfg(c), { userId: result.userId, eventId, eventName: event.EventName }));
+      }
+    }
     return c.json(result.body, result.httpStatus);
   } catch (err: any) {
     logger.error(`[${requestId}] check-in error`, { error: err.message, eventId });
@@ -1654,6 +1680,7 @@ router.post('/:eventId/check-in/batch', authMiddleware, async (c) => {
 
     const now = Date.now();
     const results = [];
+    const checkedInIds: string[] = [];
     for (const item of items) {
       const passId = typeof item?.passId === 'string' ? passIdFromScan(item.passId) : '';
       if (!passId) {
@@ -1666,7 +1693,15 @@ router.post('/:eventId/check-in/batch', authMiddleware, async (c) => {
         ? scanned
         : undefined;
       const result = await checkInPass(prisma, eventId, passId, userId, at);
+      if (result.userId) checkedInIds.push(result.userId);
       results.push({ passId, ...result.body });
+    }
+    if (checkedInIds.length > 0) {
+      const event = await prisma.event.findUnique({ where: { id: eventId }, select: { EventName: true } });
+      if (event?.EventName) {
+        const fcm = getFcmCfg(c);
+        c.executionCtx.waitUntil(Promise.all(checkedInIds.map((attendeeId) => notifyCheckedIn(prisma, fcm, { userId: attendeeId, eventId, eventName: event.EventName }))));
+      }
     }
     return c.json({ results }, 200);
   } catch (err: any) {
