@@ -15,6 +15,7 @@ import { logger } from './logger';
 import { raiseAlert } from './alerts';
 import { sendDailyDigest } from './digest';
 import { remindOrganizersOfPendingApprovals } from './pending-registrations';
+import { announceLiveAppUpdate } from './app-update';
 
 // ── Route imports ─────────────────────────────────────────────
 import authRouter from './routes/auth';
@@ -183,6 +184,11 @@ export default {
     ctx.waitUntil(
       remindOrganizersOfPendingApprovals(env).catch((err: any) =>
         logger.error('Pending registration reminder failed', { error: String(err?.message ?? err) }),
+      ),
+    );
+    ctx.waitUntil(
+      announceLiveAppUpdate(env).catch((err: any) =>
+        logger.error('App update announcement failed', { error: String(err?.message ?? err) }),
       ),
     );
   },
