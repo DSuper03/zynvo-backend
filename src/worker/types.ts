@@ -28,6 +28,10 @@ export type CFEnv = {
   ALERTS_KV?: KVNamespace;
   /** Workers AI (wrangler.toml [ai]); moderates content and summarises alerts no rule explains. */
   AI?: Ai;
+  /** Production Expo Updates feed. Defaults match the published Zynvo app. */
+  EXPO_UPDATES_URL?: string;
+  EXPO_UPDATE_CHANNEL?: string;
+  EXPO_RUNTIME_VERSION?: string;
   /** Cloudflare Turnstile secret; without it bot checks are skipped. */
   TURNSTILE_SECRET_KEY?: string;
   /** 'true' once every client sends a Turnstile token; until then missing tokens are allowed. */
