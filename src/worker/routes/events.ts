@@ -127,7 +127,7 @@ router.get('/all', async (c) => {
       // Match the free-text spellings used by signup and event creation before
       // paginating, so a college event on a later page is still promoted.
       const colleges = await prisma.event.findMany(cached(
-        { distinct: ['university'], select: { university: true } },
+        { distinct: ['university' as const], select: { university: true } },
         { ttl: 60, tags: ['events'] },
       ));
       const matchingNames = colleges.map((event) => event.university).filter((name) => sameCollege(name, user.collegeName));

@@ -3,16 +3,14 @@ import { logger } from '../utils/logger';
 import { prisma } from '../db/db';
 import { generateRequestId } from '../utils/helper';
 import { z } from 'zod';
-import { createClerkClient } from "@clerk/express";
+import { clerkClient } from "@clerk/express";
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 
-const secretKey = process.env.CLERK_SECRET_KEY;
 
 
-const clerkClient = createClerkClient({ secretKey: secretKey });
 // Normalize query/param values that might be arrays into a single string
 const normalizeParam = (value: string | string[] | undefined): string | undefined =>
     Array.isArray(value) ? value[0] : value;

@@ -9,7 +9,10 @@
     "dev": "tsx watch src/index.ts",
     "build": "prisma generate && tsc -p tsconfig.json",
     "db": "npx prisma generate",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:leaderboard": "vitest run test/leaderboard --maxWorkers=1",
+    "type-check": "tsc --noEmit",
+    "type-check:worker": "tsc --noEmit -p tsconfig.worker.json"
   },
   "keywords": [],
   "author": "",
@@ -65,7 +68,8 @@
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@electric-sql/pglite": "^0.3.15"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
