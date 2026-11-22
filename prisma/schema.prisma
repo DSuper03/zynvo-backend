@@ -297,6 +297,8 @@ model userEvents {
   user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, eventId])
+  @@index([joinedAt, eventId])
+  @@index([eventId])
 }
 
 model PostUpvote {
