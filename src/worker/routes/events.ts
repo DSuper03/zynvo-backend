@@ -4,6 +4,7 @@ import type { HonoEnv } from '../types';
 import { authMiddleware, clubHeadAuthMiddleware, adminCoreAuthMiddleware, specificClubHeadAuthMiddleware, optionalUserId } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { cached } from '../cache';
+import { countTags, normalizeTag, parseTags } from '../eventTags';
 import { logger } from '../logger';
 import { sameCollege, isPlaceholderCollege } from '../utils/college';
 import { createNotification, sendToMany } from '../utils/notification';
@@ -89,6 +90,7 @@ const EventSchema = z.object({
   applicationEndDate: z.string().optional(),
   maxParticipants: z.union([z.number(), z.string()]).optional().nullable(),
   coreTeamOnly: z.boolean().optional(),
+  tags: z.union([z.array(z.string()), z.string()]).optional(),
   customQuestions: z.array(z.object({
     label: z.string().trim().min(1),
     type: z.enum(['text', 'url', 'select']),
@@ -107,7 +109,7 @@ const eventSelectBase = {
   collegeStudentsOnly: true, contactEmail: true, contactPhone: true,
   participationFee: true, posterUrl: true, createdAt: true,
   link1: true, link2: true, link3: true, whatsappLink: true,
-  isPaid: true, qrCodeUrl: true, Fees: true, maxParticipants: true, acceptanceBased: true, coreTeamOnly: true, desiredSponsors: true,
+  isPaid: true, qrCodeUrl: true, Fees: true, maxParticipants: true, acceptanceBased: true, coreTeamOnly: true, desiredSponsors: true, tags: true,
   _count: { select: { attendees: true } },
   customQuestions: { orderBy: { sortOrder: 'asc' as const } },
 } as const;
@@ -200,6 +202,9 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
     return jsonError(c, requestId, 'Max participants must be a positive whole number', 400);
   }
 
+  const tagResult = parseTags(parsedData.data.tags);
+  if (!tagResult.ok) return jsonError(c, requestId, tagResult.msg, 400);
+
   const prisma = c.get('prisma');
   try {
     const response = await prisma.event.create({
@@ -221,6 +226,7 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
         maxParticipants: capacity,
         acceptanceBased: !!body.acceptanceBased,
         coreTeamOnly: parsedData.data.coreTeamOnly ?? false,
+        tags: tagResult.tags,
         customQuestions: parsedData.data.customQuestions ? {
           create: parsedData.data.customQuestions.map((q, index) => ({
             label: q.label, type: q.type,
@@ -531,6 +537,29 @@ router.get('/eventByClub/:id', authMiddleware, async (c) => {
 
 // ── GET /search ───────────────────────────────────────────────
 
+// ── GET /tags ─────────────────────────────────────────────────
+// Most used tags, for suggestions in the event form and the tag filter.
+// ?q=ha narrows to tags starting with "ha"; ?limit=20 (max 50).
+
+router.get('/tags', async (c) => {
+  const requestId = generateRequestId();
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '') || 20, 1), 50);
+  const prefix = normalizeTag(c.req.query('q') ?? '');
+  const prisma = c.get('prisma');
+  try {
+    const rows = await prisma.event.findMany(cached(
+      { where: { tags: { isEmpty: false } }, select: { tags: true }, orderBy: { createdAt: 'desc' as const }, take: 1000 },
+      { ttl: 300, tags: ['events'] },
+    ));
+    const tags = countTags(rows, 1000)
+      .filter((entry) => !prefix || entry.tag.startsWith(prefix))
+      .slice(0, limit);
+    return c.json({ tags }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
 router.get('/search', async (c) => {
   const requestId = generateRequestId();
   const q = (k: string) => c.req.query(k)?.trim();
@@ -540,6 +569,7 @@ router.get('/search', async (c) => {
   const university = (q('university') ?? q('college'))?.substring(0, 200);
   const isPaidRaw = q('isPaid')?.toLowerCase();
   const clubId = q('clubId');
+  const tag = normalizeTag(q('tag') ?? '');
   const upcomingRaw = q('upcoming')?.toLowerCase();
 
   const rawPage = parseInt(c.req.query('page') ?? '');
@@ -550,15 +580,19 @@ router.get('/search', async (c) => {
 
   const andFilters: any[] = [];
   if (term) {
+    const termTag = normalizeTag(term);
     andFilters.push({
       OR: [
         { EventName: { contains: term, mode: 'insensitive' } },
         { tagline: { contains: term, mode: 'insensitive' } },
         { description: { contains: term, mode: 'insensitive' } },
         { clubName: { contains: term, mode: 'insensitive' } },
+        // Searching "hackathon" also finds events tagged hackathon.
+        ...(termTag ? [{ tags: { has: termTag } }] : []),
       ],
     });
   }
+  if (tag) andFilters.push({ tags: { has: tag } });
   if (eventType) andFilters.push({ EventType: { equals: eventType, mode: 'insensitive' } });
   if (eventMode) andFilters.push({ EventMode: { equals: eventMode, mode: 'insensitive' } });
   if (university) andFilters.push({ university: { contains: university, mode: 'insensitive' } });
@@ -1084,6 +1118,11 @@ router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (
   const updateData: Record<string, any> = {};
   for (const field of UPDATABLE_EVENT_FIELDS) {
     if (field in body) updateData[field] = body[field];
+  }
+  if ('tags' in body) {
+    const tagResult = parseTags(body.tags);
+    if (!tagResult.ok) return jsonError(c, requestId, tagResult.msg, 400);
+    updateData.tags = tagResult.tags;
   }
   // The website edit form sends the same date names used for creation.
   if ('eventStartDate' in body && !('startDate' in body)) updateData.startDate = body.eventStartDate;
