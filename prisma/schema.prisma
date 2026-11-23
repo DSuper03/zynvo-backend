@@ -242,6 +242,7 @@ model event {
   registrationAnswers  RegistrationAnswer[]
   eventQueue           eventQueue[]
   desiredSponsors      String?
+  tags                 String[]            @default([])
 
   @@index([clubId])
   @@index([EventType])
