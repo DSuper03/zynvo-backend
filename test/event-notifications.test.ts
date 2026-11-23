@@ -3,6 +3,12 @@ import { Hono } from 'hono';
 
 const notification = vi.hoisted(() => ({ createNotification: vi.fn(), sendToMany: vi.fn() }));
 vi.mock('../src/worker/utils/notification', () => notification);
+const sendToTopic = vi.hoisted(() => vi.fn());
+vi.mock('../src/worker/fcm', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/worker/fcm')>()),
+  isFcmConfigured: () => true,
+  sendToTopic,
+}));
 vi.mock('../src/worker/middleware/auth', () => ({
   authMiddleware: async (_c: unknown, next: () => Promise<void>) => next(),
   clubHeadAuthMiddleware: async (_c: unknown, next: () => Promise<void>) => next(),
@@ -31,15 +37,19 @@ describe('event lifecycle notifications', () => {
     expect((await app.request('/event', post({ eventName: 'Private', coreTeamOnly: true, maxTeamSize: 1 }), env, ctx)).status).toBe(201);
     await Promise.all(tasks);
     expect(notification.sendToMany).toHaveBeenCalledWith(prisma, expect.anything(), expect.objectContaining({ userIds: ['core'], push: true, message: expect.objectContaining({ data: { eventId: 'e1', route: '/events/e1' } }) }));
+    expect(sendToTopic).not.toHaveBeenCalled();
     tasks.length = 0; vi.clearAllMocks();
-    prisma.userClubMembership = { findMany: vi.fn().mockResolvedValue([{ userId: 'organizer' }, { userId: 'member' }]) };
+    prisma.user.findMany.mockResolvedValue([{ id: 'organizer' }, { id: 'member' }, { id: 'nonmember' }]);
     await app.request('/event', post({ eventName: 'Public', coreTeamOnly: false, maxTeamSize: 1 }), env, ctx);
     await Promise.all(tasks);
     expect(notification.sendToMany).toHaveBeenCalledWith(prisma, expect.anything(), expect.objectContaining({
-      userIds: ['member'],
+        userIds: ['organizer', 'member', 'nonmember'],
       type: 'club_event',
       message: expect.objectContaining({ title: 'New from Club', body: 'Club is hosting Public.' }),
     }));
+    expect(sendToTopic).toHaveBeenCalledExactlyOnceWith(expect.anything(), 'all_users', {
+      title: 'New from Club', body: 'Club is hosting Public.',
+    }, { type: 'club_event', eventId: 'e1', route: '/events/e1' });
   });
 
   it('notifies only after a pending approval changes and avoids duplicates', async () => {
