@@ -84,7 +84,7 @@ router.get('/getPublicUser', authMiddleware, async (c) => {
         email: true, isVerified: true,
         eventAttended: {
           where: { userId },
-          select: { uniquePassId: true, event: { select: { EventName: true, id: true } } },
+          select: { uniquePassId: true, event: { select: { EventName: true, id: true, startDate: true } } },
         },
         CreatePost: {
           where: { authorId: userId },
