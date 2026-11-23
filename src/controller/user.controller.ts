@@ -531,6 +531,7 @@ export const getPublicUser = async (req: Request, res: Response): Promise<void> 
                             select: {
                                 EventName: true,
                                 id: true,
+                                startDate: true,
                             },
                         },
                     },
