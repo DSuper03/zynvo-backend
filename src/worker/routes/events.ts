@@ -4,6 +4,7 @@ import type { HonoEnv } from '../types';
 import { authMiddleware, clubHeadAuthMiddleware, adminCoreAuthMiddleware, specificClubHeadAuthMiddleware, optionalUserId } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { cached } from '../cache';
+import { withRetry } from '../utils/retry';
 import { countTags, normalizeTag, parseTags } from '../eventTags';
 import { logger } from '../logger';
 import { sameCollege, isPlaceholderCollege } from '../utils/college';
@@ -293,10 +294,10 @@ router.get('/getSpeakers', async (c) => {
     // Served from Accelerate's shared cache (cleared by any event write), so a
     // busy events page doesn't hit the database — or Accelerate's own Worker,
     // which answered "error code: 1102" (resource limits) under load — on every view.
-    const speakers = await prisma.speakers.findMany(cached({
+    const speakers = await withRetry(() => prisma.speakers.findMany(cached({
       where: { eventId },
       select: { id: true, profilePic: true, about: true, name: true, email: true, eventId: true },
-    }, { ttl: 60, tags: ['events'] }));
+    }, { ttl: 60, tags: ['events'] })));
     // No speakers yet is a normal state: 200 with an empty list (callers use `speakers || []`).
     return c.json({ msg: speakers.length ? 'speakers are there' : 'No speakers added for the event', speakers }, 200);
   } catch (err: any) {
@@ -1489,24 +1490,26 @@ const canManageSchedule = async (prisma: any, eventId: string, userId: string) =
 };
 
 router.get('/schedule/:eventId', async (c) => {
+  const requestId = generateRequestId();
   const eventId = c.req.param('eventId');
   const prisma = c.get('prisma');
   try {
-    const days = await prisma.scheduleDay.findMany(cached({
+    const days = await withRetry(() => prisma.scheduleDay.findMany(cached({
       where: { eventId },
       include: { sessions: true },
       orderBy: { day: 'asc' as const },
-    }, { ttl: 60, tags: ['events'] }));
+    }, { ttl: 60, tags: ['events'] })));
     if (days.length === 0) {
       return c.json({ response: [{ id: 'default-day-1', day: 1, date: 'Day 1', name: 'Day 1', sessions: [] }] }, 200);
     }
     return c.json({ response: days }, 200);
-  } catch {
-    return c.json({ msg: 'Internal server error' }, 500);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
   }
 });
 
 router.post('/schedule/:eventId/session', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
   const eventId = c.req.param('eventId');
   const body = await readJson(c);
   const { day, time, title, description, location, speakers } = body ?? {};
@@ -1534,12 +1537,13 @@ router.post('/schedule/:eventId/session', authMiddleware, async (c) => {
       },
     });
     return c.json({ msg: 'Session added', response: session }, 201);
-  } catch {
-    return c.json({ msg: 'Internal server error' }, 500);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
   }
 });
 
 router.delete('/schedule/:eventId/session/:sessionId', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
   const eventId = c.req.param('eventId');
   const sessionId = c.req.param('sessionId');
   const prisma = c.get('prisma');
@@ -1553,8 +1557,8 @@ router.delete('/schedule/:eventId/session/:sessionId', authMiddleware, async (c)
     });
     if (count === 0) return c.json({ msg: 'Session not found' }, 404);
     return c.json({ msg: 'Session deleted' }, 200);
-  } catch {
-    return c.json({ msg: 'Internal server error' }, 500);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
   }
 });
 
@@ -1569,7 +1573,7 @@ router.get('/friends-going', authMiddleware, async (c) => {
 
   const prisma = c.get('prisma');
   try {
-    const follows = await prisma.follow.findMany({ where: { followerId: c.get('userId') }, select: { followingId: true } });
+    const follows = await withRetry(() => prisma.follow.findMany({ where: { followerId: c.get('userId') }, select: { followingId: true } }));
     const followingIds = follows.map((f) => f.followingId);
     const [friendRows, totals] = await Promise.all([
       followingIds.length === 0
@@ -1593,8 +1597,7 @@ router.get('/friends-going', authMiddleware, async (c) => {
     }
     return c.json({ events }, 200);
   } catch (err: any) {
-    logger.error(`[${requestId}] friends-going error`, { error: err.message });
-    return jsonError(c, requestId, 'Internal server error', 500);
+    return jsonError(c, requestId, 'Internal server error', 500, err);
   }
 });
 
