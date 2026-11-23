@@ -9,7 +9,7 @@ import { countTags, normalizeTag, parseTags } from '../eventTags';
 import { logger } from '../logger';
 import { sameCollege, isPlaceholderCollege } from '../utils/college';
 import { createNotification, sendToMany } from '../utils/notification';
-import { notifyCheckedIn, notifyClubMembersOfEvent, notifyCoreTeamOfEvent, notifyEventAnnouncement, notifyEventCancelled, notifyEventChanges, notifyEventDecision, notifyFollowersOfRegistration } from '../utils/event-notifications';
+import { notifyCheckedIn, notifyUsersOfPublicEvent, notifyCoreTeamOfEvent, notifyEventAnnouncement, notifyEventCancelled, notifyEventChanges, notifyEventDecision, notifyFollowersOfRegistration } from '../utils/event-notifications';
 import type { FcmConfig } from '../fcm';
 
 const router = new Hono<HonoEnv>();
@@ -245,8 +245,8 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
     if (parsedData.data.coreTeamOnly) {
       c.executionCtx.waitUntil(notifyCoreTeamOfEvent(prisma, getFcmCfg(c), { id: response.id, name: parsedData.data.eventName, clubId, creatorId: userId }));
     } else {
-      c.executionCtx.waitUntil(notifyClubMembersOfEvent(prisma, getFcmCfg(c), {
-        id: response.id, name: parsedData.data.eventName, clubId, clubName, creatorId: userId,
+      c.executionCtx.waitUntil(notifyUsersOfPublicEvent(prisma, getFcmCfg(c), {
+        id: response.id, name: parsedData.data.eventName, clubName,
       }));
     }
     return c.json({ msg: 'event created', id: response.id }, 201);

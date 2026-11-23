@@ -1,4 +1,5 @@
 import type { FcmConfig } from '../fcm';
+import { isFcmConfigured, sendToTopic } from '../fcm';
 import { logger } from '../logger';
 import { createNotification, sendToMany } from './notification';
 
@@ -58,22 +59,46 @@ export async function notifyCoreTeamOfEvent(prisma: any, fcm: FcmConfig, event: 
   } catch (error: any) { logger.error('Core team event notification failed', { error: error.message, eventId: event.id }); }
 }
 
-/** Members of a club the user already joined, except the person who created the event. */
-export async function notifyClubMembersOfEvent(prisma: any, fcm: FcmConfig, event: { id: string; name: string; clubId: string; clubName: string; creatorId: string }) {
-  try {
-    const rows = await prisma.userClubMembership.findMany({ where: { clubId: event.clubId }, select: { userId: true } });
-    const userIds = [...new Set<string>(rows.map((row: { userId: string }) => row.userId))].filter((id) => id && id !== event.creatorId);
-    await sendToMany(prisma, fcm, {
-      userIds,
-      type: 'club_event',
-      push: true,
-      message: {
-        title: `New from ${event.clubName}`,
-        body: `${event.clubName} is hosting ${event.name}.`,
-        data: eventData(event.id),
-      },
-    });
-  } catch (error: any) { logger.error('Club event notification failed', { error: error.message, eventId: event.id }); }
+export async function notifyUsersOfPublicEvent(prisma: any, fcm: FcmConfig, event: { id: string; name: string; clubName: string }) {
+  const type = 'club_event';
+  const copy = {
+    title: `New from ${event.clubName}`,
+    body: `${event.clubName} is hosting ${event.name}.`,
+  };
+  const data = eventData(event.id);
+  const push = async () => {
+    if (!isFcmConfigured(fcm)) return;
+    await sendToTopic(fcm, 'all_users', copy, { type, ...data });
+  };
+  const inbox = async () => {
+    const batchSize = 500;
+    let afterId: string | undefined;
+    for (;;) {
+      const users: { id: string }[] = await prisma.user.findMany({
+        where: afterId === undefined ? undefined : { id: { gt: afterId } },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+        take: batchSize,
+      });
+      await sendToMany(prisma, fcm, {
+        userIds: users.map(({ id }) => id),
+        type,
+        message: { ...copy, data },
+      });
+      if (users.length < batchSize) return;
+      afterId = users[users.length - 1].id;
+    }
+  };
+  const results = await Promise.allSettled([push(), inbox()]);
+  for (const [index, result] of results.entries()) {
+    if (result.status === 'rejected') {
+      logger.error('Public event notification failed', {
+        eventId: event.id,
+        channel: index === 0 ? 'push' : 'inbox',
+        error: String(result.reason),
+      });
+    }
+  }
 }
 
 export async function notifyEventDecision(prisma: any, fcm: FcmConfig, eventId: string, name: string, userId: string, accepted: boolean) {
