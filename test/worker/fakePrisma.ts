@@ -121,6 +121,19 @@ class Model {
   }
 }
 
+// event.club is a required relation: resolve it when a query selects it, like Prisma does.
+class EventModel extends Model {
+  constructor(private clubs: () => Model) {
+    super(() => ({ attendees: [] }));
+  }
+
+  async findUnique(args: Row) {
+    const row = await super.findUnique(args);
+    if (row && args.select?.club) return { ...row, club: await this.clubs().findUnique({ where: { id: row.clubId } }) };
+    return row;
+  }
+}
+
 export function createFakePrisma() {
   const db = {
     user: new Model(
@@ -140,7 +153,7 @@ export function createFakePrisma() {
     notification: new Model(() => ({ read: false, createdAt: new Date() })),
     deviceToken: new Model(),
     // `attendees` is a relation the fake does not resolve; default it to none.
-    event: new Model(() => ({ attendees: [] })),
+    event: new EventModel(() => db.clubs),
     eventCustomQuestion: new Model(),
     userEvents: new Model(() => ({ joinedAt: new Date() })),
     registrationAnswer: new Model(),
