@@ -13,6 +13,7 @@ import {
   type FcmConfig,
 } from '../fcm';
 import { broadcast } from '../utils/notification';
+import { DROP_TOPIC } from '../campus-drop/tick';
 
 const router = new Hono<HonoEnv>();
 
@@ -60,6 +61,13 @@ router.post('/register', authMiddleware, async (c) => {
     if (isFcmConfigured(fcmCfg)) {
       try { await subscribeTokenToTopic(fcmCfg, token, ALL_USERS_TOPIC); } catch (err: any) {
         logger.error(`[${requestId}] Failed to subscribe to topic`, { error: err.message });
+      }
+      // Campus Drop notifications, unless this user turned them off.
+      try {
+        const optedOut = await prisma.campusDropOptOut.findUnique({ where: { userId }, select: { userId: true } });
+        if (!optedOut) await subscribeTokenToTopic(fcmCfg, token, DROP_TOPIC);
+      } catch (err: any) {
+        logger.warn(`[${requestId}] Failed to subscribe to the Drop topic`, { error: err.message });
       }
     }
 

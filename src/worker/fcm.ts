@@ -250,6 +250,26 @@ export async function subscribeTokenToTopic(
   });
 }
 
+/** Subscribe up to 1000 tokens to a topic in one call (IID batchAdd). */
+export async function subscribeTokensToTopic(
+  cfg: FcmConfig,
+  tokens: string[],
+  topic: string,
+): Promise<void> {
+  if (tokens.length === 0) return;
+  const accessToken = await getAccessToken(cfg);
+  const res = await fetch(`https://iid.googleapis.com/iid/v1:batchAdd`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      access_token_auth: 'true',
+    },
+    body: JSON.stringify({ to: `/topics/${topic}`, registration_tokens: tokens.slice(0, 1000) }),
+  });
+  if (!res.ok) throw new Error(`FCM topic batchAdd failed: ${res.status} ${await res.text()}`);
+}
+
 export async function unsubscribeTokenFromTopic(
   cfg: FcmConfig,
   token: string,
