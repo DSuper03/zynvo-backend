@@ -1142,10 +1142,15 @@ router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (
   }
   const prisma = c.get('prisma');
   try {
-    const previous = await prisma.event.findUnique({ where: { id: eventId }, select: { startDate: true, endDate: true, Venue: true, EventMode: true, coreTeamOnly: true, collegeStudentsOnly: true, acceptanceBased: true } });
+    const previous = await prisma.event.findUnique({ where: { id: eventId }, select: { startDate: true, endDate: true, Venue: true, EventMode: true, whatsappLink: true, coreTeamOnly: true, collegeStudentsOnly: true, acceptanceBased: true } });
     if (!previous) return c.json({ msg: 'Event not found' }, 404);
     const updated = await prisma.event.update({ where: { id: eventId }, data: updateData, select: eventSelectBase });
     const same = (left: unknown, right: unknown) => String(left ?? '') === String(right ?? '');
+    const previousWhatsApp = previous.whatsappLink?.trim() || '';
+    const updatedWhatsApp = updated.whatsappLink?.trim() || '';
+    const whatsappChange = previousWhatsApp === updatedWhatsApp ? undefined
+      : !updatedWhatsApp ? 'removed' as const
+      : previousWhatsApp ? 'changed' as const : 'added' as const;
     const change = {
       startChanged: !same(previous.startDate, updated.startDate),
       endChanged: !same(previous.endDate, updated.endDate),
@@ -1156,8 +1161,9 @@ router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (
       endDate: updated.endDate,
       venue: updated.Venue,
       mode: updated.EventMode,
+      whatsappChange,
     };
-    if (change.startChanged || change.endChanged || change.venueChanged || change.modeChanged || change.accessChanged) {
+    if (change.startChanged || change.endChanged || change.venueChanged || change.modeChanged || change.accessChanged || change.whatsappChange) {
       c.executionCtx.waitUntil(notifyEventChanges(prisma, getFcmCfg(c), eventId, updated.EventName, change));
     }
     return c.json({ msg: 'Event updated successfully', response: mapEventFees(updated) }, 200);
