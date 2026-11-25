@@ -41,6 +41,8 @@ export type CFEnv = {
   RL_20?: RateLimitBinding;
   RL_30?: RateLimitBinding;
   RL_100?: RateLimitBinding;
+  /** 'true' turns on Campus Drop (daily planning, push, topic backfill). */
+  CAMPUS_DROP_ENABLED?: string;
   NODE_ENV: string;
 };
 
