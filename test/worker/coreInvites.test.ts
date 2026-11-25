@@ -192,7 +192,21 @@ describe('existing verified user', () => {
   });
 });
 
-describe('unknown email → pending invite', () => {
+describe('unknown email → not_found (direct add only, no invites)', () => {
+  it('reports not_found and creates no invite row', async () => {
+    const head = await makeUser('head@x.com');
+    const club = await makeClub('Robotics', head.email);
+    const headToken = await tokenFor(head.id);
+
+    const json: any = await (await call('POST', byEmail(club.id), { token: headToken, body: { emails: ['New@Person.com'] } })).json();
+    expect(json.results).toEqual([{ email: 'new@person.com', status: 'not_found' }]);
+    expect(db.clubCoreInvite.rows).toHaveLength(0);
+  });
+});
+
+// Invites were removed in 889a61d ("add core members directly, drop invites").
+// These cover the old invite flow and are skipped until they are rewritten.
+describe.skip('unknown email → pending invite (obsolete: invites removed)', () => {
   it('creates an invite with a deep link email and converts on verified signup', async () => {
     const head = await makeUser('head@x.com');
     const club = await makeClub('Robotics', head.email);
@@ -268,7 +282,7 @@ describe('unknown email → pending invite', () => {
   });
 });
 
-describe('revoked invite', () => {
+describe.skip('revoked invite (obsolete: invites removed)', () => {
   it('does not convert on verified signup', async () => {
     const head = await makeUser('head@x.com');
     const club = await makeClub('Robotics', head.email);
@@ -308,7 +322,7 @@ describe('revoked invite', () => {
   });
 });
 
-describe('slot reservation (3 core slots)', () => {
+describe.skip('slot reservation (obsolete: invites removed)', () => {
   it('counts pending invites against the 3 slots and reports team_full', async () => {
     const head = await makeUser('head@x.com');
     const club = await makeClub('Robotics', head.email);

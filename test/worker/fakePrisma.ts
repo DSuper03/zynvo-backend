@@ -79,6 +79,12 @@ class Model {
     return row;
   }
 
+  async createMany({ data }: Row) {
+    const items = Array.isArray(data) ? data : [data];
+    for (const item of items) await this.create({ data: item });
+    return { count: items.length };
+  }
+
   async update({ where, data }: Row) {
     const row = this.rows.find((r) => matches(r, where));
     if (!row) throw Object.assign(new Error('Record not found'), { code: 'P2025' });
@@ -133,7 +139,8 @@ export function createFakePrisma() {
     userClubMembership: new Model(() => ({ joinedAt: new Date() })),
     notification: new Model(() => ({ read: false, createdAt: new Date() })),
     deviceToken: new Model(),
-    event: new Model(),
+    // `attendees` is a relation the fake does not resolve; default it to none.
+    event: new Model(() => ({ attendees: [] })),
     eventCustomQuestion: new Model(),
     userEvents: new Model(() => ({ joinedAt: new Date() })),
     registrationAnswer: new Model(),

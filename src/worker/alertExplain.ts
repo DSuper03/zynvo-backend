@@ -34,6 +34,14 @@ const RULES: Rule[] = [
     fixable: 'yes',
   },
   {
+    // The worker is deployed from git as soon as a PR merges; the database
+    // migration is a separate step, so the code can briefly run ahead of it.
+    test: /P2022|column [`'"(].*does not exist|does not exist in the current database/i,
+    what: 'The live code expects a database column that isn’t there yet, so every request touching that table fails. A database migration was merged but not applied.',
+    fix: 'Yes — run `npx prisma migrate deploy` against the production database (not a schema or code change).',
+    fixable: 'yes',
+  },
+  {
     test: /P2023|Error creating UUID|invalid input syntax for type uuid|Inconsistent column data/i,
     what: 'Someone asked for an ID that isn’t valid (bad link or an old login token), and the server crashed on it instead of saying “not found”.',
     fix: 'Yes — validate IDs and return 400/404 instead of 500 on this route.',
@@ -50,6 +58,23 @@ const RULES: Rule[] = [
     what: 'Something was updated or deleted that no longer exists.',
     fix: 'Yes — return 404 instead of 500 on this route.',
     fixable: 'yes',
+  },
+  {
+    // Before the Accelerate rules: that alert's text says "fetch failed" too, but
+    // here it is the website → backend hop, not the database.
+    test: /cannot reach the backend|Website cannot reach/i,
+    what: 'The website couldn’t connect to the backend at all.',
+    fix: 'Check that the worker is up; one-offs are usually network blips.',
+    fixable: 'maybe',
+  },
+  {
+    // Prisma Accelerate runs on Cloudflare too; when it is overloaded Prisma wraps
+    // Cloudflare's bare "error code: 1102" (or 1101…) page as an "Invalid
+    // `prisma.x.y()` invocation". It carries no P-code and is not a schema problem.
+    test: /Invalid `prisma[^`]*` invocation:[\s\S]*?error code: 1\d{3}\b/i,
+    what: 'The database service (Prisma Accelerate) ran out of capacity on Cloudflare (error 1102/1101) and refused the query, so this page failed for that visitor.',
+    fix: 'Partly — nothing in the Prisma schema needs changing. Read routes cache and retry once to ride it out; if it repeats across routes, check Prisma Accelerate limits and status.',
+    fixable: 'maybe',
   },
   {
     test: /P60\d\d|Accelerate|ECONNRESET|fetch failed|socket hang up|connection (reset|closed|refused)|ETIMEDOUT/i,
@@ -73,12 +98,6 @@ const RULES: Rule[] = [
     test: /Backend timed out|timed out|timeout/i,
     what: 'The website waited 15 seconds for the backend and gave up; the visitor saw “request timed out”.',
     fix: 'If it’s a one-off: no (network blip). If it repeats: yes — that route or the database is slow.',
-    fixable: 'maybe',
-  },
-  {
-    test: /cannot reach the backend|Website cannot reach/i,
-    what: 'The website couldn’t connect to the backend at all.',
-    fix: 'Check that the worker is up; one-offs are usually network blips.',
     fixable: 'maybe',
   },
   {
@@ -137,6 +156,7 @@ async function byAi(env: CFEnv, title: string, detail: string): Promise<Explanat
     'Reply with exactly two lines and nothing else:',
     'WHAT: <one or two short plain-English sentences: what happened and who was affected>',
     'FIX: <start with "Yes" (we can fix it in our code or config), "No" (outside our control, e.g. a provider outage) or "Maybe", then a dash and the concrete next step>',
+    'Facts: a bare "error code: 1xxx" inside a Prisma "invocation" error is a Cloudflare error from the database provider (Prisma Accelerate), not a schema or code bug. Only suggest schema or query changes when the details name a Prisma P-code or a validation message.',
     '',
     `Alert: ${title}`,
     `Details: ${detail.slice(0, 1500)}`,

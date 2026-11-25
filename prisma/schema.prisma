@@ -63,6 +63,9 @@ model User {
   teamJoinRequests TeamJoinRequest[] @relation("TeamJoinRequester")
   coreInvitesSent  ClubCoreInvite[]  @relation("CoreInviteSender")
 
+  campusDropAnswers CampusDropAnswer[]
+  campusDropOptOut  CampusDropOptOut?
+
   @@index([name])
   @@index([collegeName])
   @@index([clubId])
@@ -242,6 +245,7 @@ model event {
   registrationAnswers  RegistrationAnswer[]
   eventQueue           eventQueue[]
   desiredSponsors      String?
+  tags                 String[]            @default([])
 
   @@index([clubId])
   @@index([EventType])
@@ -297,6 +301,8 @@ model userEvents {
   user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, eventId])
+  @@index([joinedAt, eventId])
+  @@index([eventId])
 }
 
 model PostUpvote {
@@ -654,4 +660,50 @@ model ClubCoreInvite {
   @@unique([clubId, email], map: "ClubCoreInvite_clubId_email_pending_key", where: raw("status = 'PENDING'"))
   @@index([email, status])
   @@index([clubId, status])
+}
+
+// Campus Drop: one surprise question a day, pushed at a random minute between
+// 07:00 and 01:00 IST and open for 10 minutes (src/worker/campus-drop).
+model CampusDrop {
+  id        String    @id @default(uuid())
+  /// IST date of the drop window, e.g. "2026-11-25". One drop per day.
+  day       String    @unique
+  kind      String    @default("poll")
+  question  String
+  options   String[]
+  /// Push notification body.
+  teaser    String
+  sendAt    DateTime
+  sentAt    DateTime?
+  closesAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  answers   CampusDropAnswer[]
+
+  @@index([sentAt])
+}
+
+model CampusDropAnswer {
+  id          String   @id @default(uuid())
+  dropId      String
+  userId      String
+  option      Int
+  /// College at the time of answering, for the campus result.
+  collegeName String   @default("")
+  createdAt   DateTime @default(now())
+
+  drop        CampusDrop @relation(fields: [dropId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([dropId, userId])
+  @@index([dropId, collegeName])
+  @@index([userId])
+}
+
+// Users who turned Drop notifications off.
+model CampusDropOptOut {
+  userId    String   @id
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

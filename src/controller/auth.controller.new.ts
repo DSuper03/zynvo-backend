@@ -4,16 +4,14 @@ import { logger } from "../utils/logger";
 import { prisma } from "../db/db";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import { createClerkClient } from "@clerk/express";
+import { clerkClient } from "@clerk/express";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 
-const secretKey = process.env.CLERK_SECRET_KEY;
 
 
-const clerkClient = createClerkClient({ secretKey: secretKey });
 
 
 // Pre-check: does this email already exist in our DB?

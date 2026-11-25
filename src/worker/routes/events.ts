@@ -4,10 +4,12 @@ import type { HonoEnv } from '../types';
 import { authMiddleware, clubHeadAuthMiddleware, adminCoreAuthMiddleware, specificClubHeadAuthMiddleware, optionalUserId } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { cached } from '../cache';
+import { withRetry } from '../utils/retry';
+import { countTags, normalizeTag, parseTags } from '../eventTags';
 import { logger } from '../logger';
 import { sameCollege, isPlaceholderCollege } from '../utils/college';
 import { createNotification, sendToMany } from '../utils/notification';
-import { notifyCheckedIn, notifyClubMembersOfEvent, notifyCoreTeamOfEvent, notifyEventAnnouncement, notifyEventCancelled, notifyEventChanges, notifyEventDecision, notifyFollowersOfRegistration } from '../utils/event-notifications';
+import { notifyCheckedIn, notifyUsersOfPublicEvent, notifyCoreTeamOfEvent, notifyEventAnnouncement, notifyEventCancelled, notifyEventChanges, notifyEventDecision, notifyFollowersOfRegistration } from '../utils/event-notifications';
 import type { FcmConfig } from '../fcm';
 
 const router = new Hono<HonoEnv>();
@@ -89,6 +91,7 @@ const EventSchema = z.object({
   applicationEndDate: z.string().optional(),
   maxParticipants: z.union([z.number(), z.string()]).optional().nullable(),
   coreTeamOnly: z.boolean().optional(),
+  tags: z.union([z.array(z.string()), z.string()]).optional(),
   customQuestions: z.array(z.object({
     label: z.string().trim().min(1),
     type: z.enum(['text', 'url', 'select']),
@@ -107,7 +110,7 @@ const eventSelectBase = {
   collegeStudentsOnly: true, contactEmail: true, contactPhone: true,
   participationFee: true, posterUrl: true, createdAt: true,
   link1: true, link2: true, link3: true, whatsappLink: true,
-  isPaid: true, qrCodeUrl: true, Fees: true, maxParticipants: true, acceptanceBased: true, coreTeamOnly: true, desiredSponsors: true,
+  isPaid: true, qrCodeUrl: true, Fees: true, maxParticipants: true, acceptanceBased: true, coreTeamOnly: true, desiredSponsors: true, tags: true,
   _count: { select: { attendees: true } },
   customQuestions: { orderBy: { sortOrder: 'asc' as const } },
 } as const;
@@ -127,7 +130,7 @@ router.get('/all', async (c) => {
       // Match the free-text spellings used by signup and event creation before
       // paginating, so a college event on a later page is still promoted.
       const colleges = await prisma.event.findMany(cached(
-        { distinct: ['university'], select: { university: true } },
+        { distinct: ['university' as const], select: { university: true } },
         { ttl: 60, tags: ['events'] },
       ));
       const matchingNames = colleges.map((event) => event.university).filter((name) => sameCollege(name, user.collegeName));
@@ -200,6 +203,9 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
     return jsonError(c, requestId, 'Max participants must be a positive whole number', 400);
   }
 
+  const tagResult = parseTags(parsedData.data.tags);
+  if (!tagResult.ok) return jsonError(c, requestId, tagResult.msg, 400);
+
   const prisma = c.get('prisma');
   try {
     const response = await prisma.event.create({
@@ -221,6 +227,7 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
         maxParticipants: capacity,
         acceptanceBased: !!body.acceptanceBased,
         coreTeamOnly: parsedData.data.coreTeamOnly ?? false,
+        tags: tagResult.tags,
         customQuestions: parsedData.data.customQuestions ? {
           create: parsedData.data.customQuestions.map((q, index) => ({
             label: q.label, type: q.type,
@@ -238,8 +245,8 @@ router.post('/event', authMiddleware, clubHeadAuthMiddleware, async (c) => {
     if (parsedData.data.coreTeamOnly) {
       c.executionCtx.waitUntil(notifyCoreTeamOfEvent(prisma, getFcmCfg(c), { id: response.id, name: parsedData.data.eventName, clubId, creatorId: userId }));
     } else {
-      c.executionCtx.waitUntil(notifyClubMembersOfEvent(prisma, getFcmCfg(c), {
-        id: response.id, name: parsedData.data.eventName, clubId, clubName, creatorId: userId,
+      c.executionCtx.waitUntil(notifyUsersOfPublicEvent(prisma, getFcmCfg(c), {
+        id: response.id, name: parsedData.data.eventName, clubName,
       }));
     }
     return c.json({ msg: 'event created', id: response.id }, 201);
@@ -287,10 +294,10 @@ router.get('/getSpeakers', async (c) => {
     // Served from Accelerate's shared cache (cleared by any event write), so a
     // busy events page doesn't hit the database — or Accelerate's own Worker,
     // which answered "error code: 1102" (resource limits) under load — on every view.
-    const speakers = await prisma.speakers.findMany(cached({
+    const speakers = await withRetry(() => prisma.speakers.findMany(cached({
       where: { eventId },
       select: { id: true, profilePic: true, about: true, name: true, email: true, eventId: true },
-    }, { ttl: 60, tags: ['events'] }));
+    }, { ttl: 60, tags: ['events'] })));
     // No speakers yet is a normal state: 200 with an empty list (callers use `speakers || []`).
     return c.json({ msg: speakers.length ? 'speakers are there' : 'No speakers added for the event', speakers }, 200);
   } catch (err: any) {
@@ -531,6 +538,29 @@ router.get('/eventByClub/:id', authMiddleware, async (c) => {
 
 // ── GET /search ───────────────────────────────────────────────
 
+// ── GET /tags ─────────────────────────────────────────────────
+// Most used tags, for suggestions in the event form and the tag filter.
+// ?q=ha narrows to tags starting with "ha"; ?limit=20 (max 50).
+
+router.get('/tags', async (c) => {
+  const requestId = generateRequestId();
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '') || 20, 1), 50);
+  const prefix = normalizeTag(c.req.query('q') ?? '');
+  const prisma = c.get('prisma');
+  try {
+    const rows = await prisma.event.findMany(cached(
+      { where: { tags: { isEmpty: false } }, select: { tags: true }, orderBy: { createdAt: 'desc' as const }, take: 1000 },
+      { ttl: 300, tags: ['events'] },
+    ));
+    const tags = countTags(rows, 1000)
+      .filter((entry) => !prefix || entry.tag.startsWith(prefix))
+      .slice(0, limit);
+    return c.json({ tags }, 200);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'internal server error', 500, err);
+  }
+});
+
 router.get('/search', async (c) => {
   const requestId = generateRequestId();
   const q = (k: string) => c.req.query(k)?.trim();
@@ -540,6 +570,7 @@ router.get('/search', async (c) => {
   const university = (q('university') ?? q('college'))?.substring(0, 200);
   const isPaidRaw = q('isPaid')?.toLowerCase();
   const clubId = q('clubId');
+  const tag = normalizeTag(q('tag') ?? '');
   const upcomingRaw = q('upcoming')?.toLowerCase();
 
   const rawPage = parseInt(c.req.query('page') ?? '');
@@ -550,15 +581,19 @@ router.get('/search', async (c) => {
 
   const andFilters: any[] = [];
   if (term) {
+    const termTag = normalizeTag(term);
     andFilters.push({
       OR: [
         { EventName: { contains: term, mode: 'insensitive' } },
         { tagline: { contains: term, mode: 'insensitive' } },
         { description: { contains: term, mode: 'insensitive' } },
         { clubName: { contains: term, mode: 'insensitive' } },
+        // Searching "hackathon" also finds events tagged hackathon.
+        ...(termTag ? [{ tags: { has: termTag } }] : []),
       ],
     });
   }
+  if (tag) andFilters.push({ tags: { has: tag } });
   if (eventType) andFilters.push({ EventType: { equals: eventType, mode: 'insensitive' } });
   if (eventMode) andFilters.push({ EventMode: { equals: eventMode, mode: 'insensitive' } });
   if (university) andFilters.push({ university: { contains: university, mode: 'insensitive' } });
@@ -1085,6 +1120,11 @@ router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (
   for (const field of UPDATABLE_EVENT_FIELDS) {
     if (field in body) updateData[field] = body[field];
   }
+  if ('tags' in body) {
+    const tagResult = parseTags(body.tags);
+    if (!tagResult.ok) return jsonError(c, requestId, tagResult.msg, 400);
+    updateData.tags = tagResult.tags;
+  }
   // The website edit form sends the same date names used for creation.
   if ('eventStartDate' in body && !('startDate' in body)) updateData.startDate = body.eventStartDate;
   if ('eventEndDate' in body && !('endDate' in body)) updateData.endDate = body.eventEndDate;
@@ -1450,24 +1490,26 @@ const canManageSchedule = async (prisma: any, eventId: string, userId: string) =
 };
 
 router.get('/schedule/:eventId', async (c) => {
+  const requestId = generateRequestId();
   const eventId = c.req.param('eventId');
   const prisma = c.get('prisma');
   try {
-    const days = await prisma.scheduleDay.findMany(cached({
+    const days = await withRetry(() => prisma.scheduleDay.findMany(cached({
       where: { eventId },
       include: { sessions: true },
       orderBy: { day: 'asc' as const },
-    }, { ttl: 60, tags: ['events'] }));
+    }, { ttl: 60, tags: ['events'] })));
     if (days.length === 0) {
       return c.json({ response: [{ id: 'default-day-1', day: 1, date: 'Day 1', name: 'Day 1', sessions: [] }] }, 200);
     }
     return c.json({ response: days }, 200);
-  } catch {
-    return c.json({ msg: 'Internal server error' }, 500);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
   }
 });
 
 router.post('/schedule/:eventId/session', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
   const eventId = c.req.param('eventId');
   const body = await readJson(c);
   const { day, time, title, description, location, speakers } = body ?? {};
@@ -1495,12 +1537,13 @@ router.post('/schedule/:eventId/session', authMiddleware, async (c) => {
       },
     });
     return c.json({ msg: 'Session added', response: session }, 201);
-  } catch {
-    return c.json({ msg: 'Internal server error' }, 500);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
   }
 });
 
 router.delete('/schedule/:eventId/session/:sessionId', authMiddleware, async (c) => {
+  const requestId = generateRequestId();
   const eventId = c.req.param('eventId');
   const sessionId = c.req.param('sessionId');
   const prisma = c.get('prisma');
@@ -1514,8 +1557,8 @@ router.delete('/schedule/:eventId/session/:sessionId', authMiddleware, async (c)
     });
     if (count === 0) return c.json({ msg: 'Session not found' }, 404);
     return c.json({ msg: 'Session deleted' }, 200);
-  } catch {
-    return c.json({ msg: 'Internal server error' }, 500);
+  } catch (err: any) {
+    return jsonError(c, requestId, 'Internal server error', 500, err);
   }
 });
 
@@ -1530,7 +1573,7 @@ router.get('/friends-going', authMiddleware, async (c) => {
 
   const prisma = c.get('prisma');
   try {
-    const follows = await prisma.follow.findMany({ where: { followerId: c.get('userId') }, select: { followingId: true } });
+    const follows = await withRetry(() => prisma.follow.findMany({ where: { followerId: c.get('userId') }, select: { followingId: true } }));
     const followingIds = follows.map((f) => f.followingId);
     const [friendRows, totals] = await Promise.all([
       followingIds.length === 0
@@ -1554,8 +1597,7 @@ router.get('/friends-going', authMiddleware, async (c) => {
     }
     return c.json({ events }, 200);
   } catch (err: any) {
-    logger.error(`[${requestId}] friends-going error`, { error: err.message });
-    return jsonError(c, requestId, 'Internal server error', 500);
+    return jsonError(c, requestId, 'Internal server error', 500, err);
   }
 });
 

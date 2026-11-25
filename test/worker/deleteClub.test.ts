@@ -23,7 +23,7 @@ const del = async (clubId: string, userId: string, confirmName?: string) => {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'cf-connecting-ip': `10.7.0.${++ip}` },
     body: JSON.stringify({ confirmName }),
-  }, ENV);
+  }, ENV, { waitUntil: () => {}, passThroughOnException() {} } as any);
   return res.status;
 };
 

@@ -15,6 +15,8 @@ import { logger } from './logger';
 import { raiseAlert } from './alerts';
 import { sendDailyDigest } from './digest';
 import { remindOrganizersOfPendingApprovals } from './pending-registrations';
+import { announceLiveAppUpdate } from './app-update';
+import { runCampusDrop } from './campus-drop/run';
 
 // ── Route imports ─────────────────────────────────────────────
 import authRouter from './routes/auth';
@@ -22,6 +24,7 @@ import userRouter from './routes/user';
 import postRouter from './routes/post';
 import eventsRouter from './routes/events';
 import clubsRouter from './routes/clubs';
+import leaderboardRouter from './routes/leaderboard';
 import teamsRouter from './routes/teams';
 import offersRouter from './routes/offers';
 import notificationsRouter from './routes/notifications';
@@ -30,6 +33,7 @@ import adminRouter from './routes/admin';
 import contactRouter from './routes/contact';
 import reportsRouter from './routes/reports';
 import opsRouter from './routes/ops';
+import dropsRouter from './routes/drops';
 
 const app = new Hono<HonoEnv>();
 
@@ -87,11 +91,13 @@ app.route('/api/v2/user/auth', authRouter);
 app.route('/api/v1/post', postRouter);
 app.route('/api/v1/events', eventsRouter);
 app.route('/api/v1/clubs', clubsRouter);
+app.route('/api/v1/leaderboard', leaderboardRouter);
 app.route('/api/v1/teams', teamsRouter);
 app.route('/api/v1/offers', offersRouter);
 app.route('/api/v1/notifications', notificationsRouter);
 app.route('/api/v1/contact', contactRouter);
 app.route('/api/v1/reports', reportsRouter);
+app.route('/api/v1/drops', dropsRouter);
 app.route('/api/v1/users', waveRouter);    // wave: POST /api/v1/users/:userId
 
 // Admin
@@ -166,8 +172,22 @@ export default {
       return Response.json({ error: 'Internal server error' }, { status: 500 });
     }
   },
-  // Daily digest stays on its 03:30 UTC cron. The hourly cron only reminds organizers.
+  // Daily digest stays on its 03:30 UTC cron. The hourly cron reminds organizers
+  // and announces app updates. The every-minute cron only runs Campus Drop.
   async scheduled(event: ScheduledController, env: CFEnv, ctx: ExecutionContext) {
+    if (event.cron === '* * * * *') {
+      ctx.waitUntil(
+        runCampusDrop(env).catch((err: any) =>
+          raiseAlert(env, {
+            key: 'campus-drop-failed',
+            title: 'Campus Drop failed',
+            detail: String(err?.message ?? err),
+            source: 'cron',
+          }),
+        ),
+      );
+      return;
+    }
     if (event.cron === '30 3 * * *') {
       ctx.waitUntil(
         sendDailyDigest(env).catch((err: any) =>
@@ -183,6 +203,11 @@ export default {
     ctx.waitUntil(
       remindOrganizersOfPendingApprovals(env).catch((err: any) =>
         logger.error('Pending registration reminder failed', { error: String(err?.message ?? err) }),
+      ),
+    );
+    ctx.waitUntil(
+      announceLiveAppUpdate(env).catch((err: any) =>
+        logger.error('App update announcement failed', { error: String(err?.message ?? err) }),
       ),
     );
   },

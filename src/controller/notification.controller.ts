@@ -5,6 +5,7 @@ import { generateRequestId, sendErrorResponse } from '../utils/helper';
 import { z } from 'zod';
 import {
   isFcmConfigured,
+  notifyAllUsersNewPost,
   subscribeToAllUsers,
   unsubscribeFromAllUsers,
   sendToDeviceTokens,
