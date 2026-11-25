@@ -27,14 +27,20 @@ async function pushToUser(
   input: NotificationInput,
 ): Promise<void> {
   try {
-    if (!isFcmConfigured(fcmCfg)) return;
+    if (!isFcmConfigured(fcmCfg)) {
+      logger.warn('Push skipped: Firebase credentials missing', { type: input.type });
+      return;
+    }
 
     const rows = await (prisma as any).deviceToken.findMany({
       where: { userId: input.userId },
       select: { token: true },
     });
     const tokens: string[] = [...new Set<string>(rows.map((r: any) => String(r.token)))];
-    if (tokens.length === 0) return;
+    if (tokens.length === 0) {
+      logger.info('Push skipped: no registered device', { type: input.type, userId: input.userId });
+      return;
+    }
 
     const strData: Record<string, string> = { type: input.type };
     for (const [k, v] of Object.entries(input.data ?? {})) {
@@ -48,6 +54,15 @@ async function pushToUser(
       strData,
       { channelId: ANDROID_CHANNEL },
     );
+    if (result.failureCount > 0) {
+      logger.warn('Firebase did not accept all device pushes', {
+        type: input.type,
+        userId: input.userId,
+        accepted: result.successCount,
+        failed: result.failureCount,
+        stale: result.invalidTokens.length,
+      });
+    }
 
     if (result.invalidTokens.length > 0) {
       await (prisma as any).deviceToken.deleteMany({

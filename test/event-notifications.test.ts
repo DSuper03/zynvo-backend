@@ -86,6 +86,38 @@ describe('event lifecycle notifications', () => {
     expect(notification.sendToMany).toHaveBeenCalledWith(prisma, expect.anything(), expect.objectContaining({ message: expect.objectContaining({ body: expect.stringContaining('now starts') }) }));
   });
 
+  it.each([
+    ['', 'https://chat.whatsapp.com/new', 'added'],
+    ['https://chat.whatsapp.com/old', 'https://chat.whatsapp.com/new', 'changed'],
+    ['https://chat.whatsapp.com/old', '', 'removed'],
+    ['https://chat.whatsapp.com/old', ' https://chat.whatsapp.com/old ', null],
+  ])('handles a WhatsApp-only edit from %s to %s', async (before, after, change) => {
+    const prisma = {
+      event: {
+        findUnique: vi.fn().mockResolvedValue({ whatsappLink: before }),
+        update: vi.fn().mockResolvedValue({ EventName: 'Design Meetup', whatsappLink: after }),
+      },
+      userEvents: { findMany: vi.fn().mockResolvedValue([{ userId: 'attendee' }]) },
+    };
+    const { app, ctx, tasks } = setup(prisma);
+    expect((await app.request('/event/e1', put({ whatsappLink: after }), env, ctx)).status).toBe(200);
+    await Promise.all(tasks);
+    if (!change) {
+      expect(notification.sendToMany).not.toHaveBeenCalled();
+      return;
+    }
+    expect(notification.sendToMany).toHaveBeenCalledWith(prisma, expect.anything(), {
+      userIds: ['attendee'],
+      type: 'event_update',
+      push: true,
+      message: {
+        title: 'Event update',
+        body: `The WhatsApp group link for "Design Meetup" was ${change}. Open the event for details.`,
+        data: { eventId: 'e1', route: '/events/e1' },
+      },
+    });
+  });
+
   it('tells registered people when the event is deleted', async () => {
     const prisma = {
       event: {

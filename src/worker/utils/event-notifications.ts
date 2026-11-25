@@ -21,6 +21,7 @@ export type EventChangeNotice = {
   venueChanged: boolean;
   modeChanged: boolean;
   accessChanged: boolean;
+  whatsappChange?: 'added' | 'changed' | 'removed';
   startDate?: string | null;
   endDate?: string | null;
   venue?: string | null;
@@ -43,6 +44,9 @@ function eventUpdateBody(name: string, change: EventChangeNotice): string {
   if (change.venueChanged && venue) return `${quoted} is now at ${venue}.`;
   if (change.venueChanged) return `${quoted} location was updated. Tap for details.`;
   if (change.modeChanged && change.mode) return `${quoted} is now ${change.mode}.`;
+  if (change.whatsappChange) {
+    return `The WhatsApp group link for ${quoted} was ${change.whatsappChange}. Open the event for details.`;
+  }
   return `Registration for ${quoted} changed. Open the event for details.`;
 }
 
