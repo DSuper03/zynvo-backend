@@ -10,6 +10,8 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import type { HonoEnv } from '../types';
 import { raiseAlert, sendTelegram, isTelegramConfigured } from '../alerts';
 import { sendDailyDigest } from '../digest';
+import { announcePlayRelease } from '../play-release';
+import { logger } from '../logger';
 
 const router = new Hono<HonoEnv>();
 
@@ -28,6 +30,23 @@ const requireInternalSecret: MiddlewareHandler<HonoEnv> = async (c, next) => {
 };
 
 router.use('*', requireInternalSecret);
+
+router.post('/play-release', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const { versionCode, versionName, rolloutLive } = body ?? {};
+  if (!Number.isInteger(versionCode) || versionCode < 1 || versionCode > 2100000000 ||
+      typeof versionName !== 'string' || !/^\d+(?:\.\d+){1,3}$/.test(versionName) ||
+      versionName.length > 24 || rolloutLive !== true) {
+    return c.json({ msg: 'Provide versionCode, versionName and rolloutLive: true' }, 400);
+  }
+  try {
+    const sent = await announcePlayRelease(c.env, versionCode, versionName);
+    return c.json({ sent, versionCode });
+  } catch (error) {
+    logger.error('Play release announcement failed', { versionCode, error: String(error) });
+    return c.json({ msg: 'Play release announcement failed' }, 503);
+  }
+});
 
 router.post('/report', async (c) => {
   let body: any;
