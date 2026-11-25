@@ -221,9 +221,22 @@ export const adminCoreAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, nex
   if (!userId) return c.json({ message: 'Please login' }, toStatus(401));
 
   const prisma = c.get('prisma');
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-  if (!user) return c.json({ message: 'User not found' }, toStatus(404));
+  const eventId = c.req.param('id') || c.req.param('eventId');
 
+  // Every query is an HTTP round trip to Accelerate, so the user lookup and the
+  // event + hosting club lookup (they don't depend on each other) run together:
+  // one round trip instead of three in a row. For site admins the event query is
+  // unused but costs no extra time.
+  const [user, event] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
+    eventId
+      ? prisma.event.findUnique({
+        where: { id: eventId },
+        select: { club: { select: { founderEmail: true, coremember1: true, coremember2: true, coremember3: true } } },
+      })
+      : Promise.resolve(null),
+  ]);
+  if (!user) return c.json({ message: 'User not found' }, toStatus(404));
 
   if (isAdminEmail(c.env, user.email)) {
     await next();
@@ -231,16 +244,10 @@ export const adminCoreAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, nex
   }
 
   // Check if user is a core member of the club hosting the event
-  const eventId = c.req.param('id') || c.req.param('eventId');
   if (!eventId) return c.json({ message: 'Event id required' }, toStatus(400));
-
-  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { clubId: true } });
   if (!event) return c.json({ message: 'Event not found' }, toStatus(404));
 
-  const club = await prisma.clubs.findUnique({
-    where: { id: event.clubId },
-    select: { founderEmail: true, coremember1: true, coremember2: true, coremember3: true },
-  });
+  const club = event.club;
   if (!club) return c.json({ message: 'Club not found' }, toStatus(404));
 
   const userEmail = user.email.toLowerCase();

@@ -1142,10 +1142,15 @@ router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (
   }
   const prisma = c.get('prisma');
   try {
-    const previous = await prisma.event.findUnique({ where: { id: eventId }, select: { startDate: true, endDate: true, Venue: true, EventMode: true, coreTeamOnly: true, collegeStudentsOnly: true, acceptanceBased: true } });
+    const previous = await prisma.event.findUnique({ where: { id: eventId }, select: { startDate: true, endDate: true, Venue: true, EventMode: true, whatsappLink: true, coreTeamOnly: true, collegeStudentsOnly: true, acceptanceBased: true } });
     if (!previous) return c.json({ msg: 'Event not found' }, 404);
     const updated = await prisma.event.update({ where: { id: eventId }, data: updateData, select: eventSelectBase });
     const same = (left: unknown, right: unknown) => String(left ?? '') === String(right ?? '');
+    const previousWhatsApp = previous.whatsappLink?.trim() || '';
+    const updatedWhatsApp = updated.whatsappLink?.trim() || '';
+    const whatsappChange = previousWhatsApp === updatedWhatsApp ? undefined
+      : !updatedWhatsApp ? 'removed' as const
+      : previousWhatsApp ? 'changed' as const : 'added' as const;
     const change = {
       startChanged: !same(previous.startDate, updated.startDate),
       endChanged: !same(previous.endDate, updated.endDate),
@@ -1156,8 +1161,9 @@ router.put('/event/:id', authMiddleware, specificClubHeadAuthMiddleware, async (
       endDate: updated.endDate,
       venue: updated.Venue,
       mode: updated.EventMode,
+      whatsappChange,
     };
-    if (change.startChanged || change.endChanged || change.venueChanged || change.modeChanged || change.accessChanged) {
+    if (change.startChanged || change.endChanged || change.venueChanged || change.modeChanged || change.accessChanged || change.whatsappChange) {
       c.executionCtx.waitUntil(notifyEventChanges(prisma, getFcmCfg(c), eventId, updated.EventName, change));
     }
     return c.json({ msg: 'Event updated successfully', response: mapEventFees(updated) }, 200);
@@ -1340,12 +1346,20 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
   const eventId = c.req.param('eventId');
   const prisma = c.get('prisma');
   try {
-    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { id: true, isPaid: true } });
+    const format = c.req.query('format');
+    // Each query is a round trip to Accelerate, so independent ones run together
+    // (these three used to run one after another). The email export needs no questions.
+    const [event, filters, customQuestions] = await Promise.all([
+      prisma.event.findUnique({ where: { id: eventId }, select: { id: true, isPaid: true } }),
+      attendeeFilters(prisma, eventId, (k) => c.req.query(k)),
+      format === 'emails'
+        ? Promise.resolve([] as any[])
+        : prisma.eventCustomQuestion.findMany({ where: { eventId }, orderBy: { sortOrder: 'asc' } }),
+    ]);
     if (!event) return c.json({ message: 'Event not found' }, 404);
     // Payment columns/fields only mean something for paid events.
     const isPaid = Boolean(event.isPaid);
-    const { where, filtered, key } = await attendeeFilters(prisma, eventId, (k) => c.req.query(k));
-    const format = c.req.query('format');
+    const { where, filtered, key } = filters;
 
     if (format === 'emails') {
       // For "Email all": every matching attendee's address, not one page.
@@ -1356,11 +1370,6 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
       const emails = [...new Set(rows.map((r: any) => r.user?.email).filter(Boolean))];
       return c.json({ emails, total: emails.length }, 200);
     }
-
-    const customQuestions = await prisma.eventCustomQuestion.findMany({
-      where: { eventId },
-      orderBy: { sortOrder: 'asc' },
-    });
 
     if (format === 'csv') {
       const sinceParam = c.req.query('since');
@@ -1389,7 +1398,8 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
           user: { select: { id: true, name: true, email: true, collegeName: true } },
         },
       });
-      const answers = await prisma.registrationAnswer.findMany({
+      // Answers belong to custom questions (deleted with them), so none exist without any.
+      const answers = customQuestions.length === 0 ? [] : await prisma.registrationAnswer.findMany({
         where: { eventId, userId: { in: rows.map((r: any) => r.user.id).filter(Boolean) } },
       });
       const byUser: Record<string, Record<string, string>> = {};
@@ -1442,7 +1452,7 @@ router.get('/participants/:eventId', authMiddleware, adminCoreAuthMiddleware, as
       prisma.userEvents.count({ where }),
       filtered ? prisma.userEvents.count({ where: { eventId } }) : Promise.resolve(null),
     ]);
-    const answers = await prisma.registrationAnswer.findMany({
+    const answers = customQuestions.length === 0 ? [] : await prisma.registrationAnswer.findMany({
       where: { eventId, userId: { in: participants.map((p: any) => p.user?.id).filter(Boolean) } },
       include: { question: { select: { label: true } } },
     });

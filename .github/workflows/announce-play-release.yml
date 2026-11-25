@@ -1,0 +1,45 @@
+name: Announce Google Play release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: Android version code
+        required: true
+        type: number
+      version_name:
+        description: Android version name (for example, 1.0.4)
+        required: true
+        type: string
+      rollout_live:
+        description: Confirm the production rollout is live in Google Play
+        required: true
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: google-play-release-announcements
+  cancel-in-progress: false
+
+jobs:
+  announce:
+    if: inputs.rollout_live
+    runs-on: ubuntu-latest
+    env:
+      BACKEND_URL: ${{ secrets.BACKEND_URL }}
+      INTERNAL_PROXY_SECRET: ${{ secrets.INTERNAL_PROXY_SECRET }}
+      VERSION_CODE: ${{ inputs.version_code }}
+      VERSION_NAME: ${{ inputs.version_name }}
+    steps:
+      - name: Send release notification
+        run: |
+          : "${BACKEND_URL:?Set BACKEND_URL to the production Worker URL}"
+          : "${INTERNAL_PROXY_SECRET:?Set INTERNAL_PROXY_SECRET}"
+          payload=$(jq -nc --argjson versionCode "$VERSION_CODE" --arg versionName "$VERSION_NAME" \
+            '{versionCode: $versionCode, versionName: $versionName, rolloutLive: true}')
+          curl --fail-with-body --silent --show-error --max-time 120 \
+            -X POST "${BACKEND_URL%/}/api/v1/ops/play-release" \
+            -H "x-internal-proxy-secret: $INTERNAL_PROXY_SECRET" \
+            -H 'Content-Type: application/json' --data "$payload"
