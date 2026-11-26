@@ -7,6 +7,7 @@ import { cached, memo } from '../cache';
 import { logger } from '../logger';
 import { rateLimiter } from '../middleware/ratelimit';
 import { cleanCollegeName, collegeKey, isPlaceholderCollege, sameCollege } from '../utils/college';
+import { createNotification } from '../utils/notification';
 
 const router = new Hono<HonoEnv>();
 
@@ -480,7 +481,25 @@ router.post('/follow/:targetId', authMiddleware, async (c) => {
   const prisma = c.get('prisma') as any;
   const target = await prisma.user.findUnique({ where: { id: followingId }, select: { id: true } });
   if (!target) return jsonError(c, requestId, 'user not found', 404);
-  await prisma.follow.upsert({ where: { followerId_followingId: { followerId, followingId } }, create: { followerId, followingId }, update: {} });
+  const created = await prisma.follow.createMany({ data: [{ followerId, followingId }], skipDuplicates: true });
+  if (created.count) {
+    const notify = async () => {
+      const follower = await prisma.user.findUnique({ where: { id: followerId }, select: { name: true } });
+      await createNotification(prisma, {
+        projectId: c.env.FIREBASE_PROJECT_ID,
+        clientEmail: c.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: c.env.FIREBASE_PRIVATE_KEY,
+      }, {
+        userId: followingId,
+        type: 'follow',
+        title: 'New follower',
+        body: `${follower?.name?.trim() || 'Someone'} started following you.`,
+        data: { followerId, route: `/profile/${followerId}` },
+        push: true,
+      });
+    };
+    c.executionCtx.waitUntil(notify().catch((error) => logger.warn('Follow notification failed', { error: String(error) })));
+  }
   return c.json({ msg: 'following' }, 200);
 });
 

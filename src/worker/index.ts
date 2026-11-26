@@ -17,6 +17,7 @@ import { sendDailyDigest } from './digest';
 import { remindOrganizersOfPendingApprovals } from './pending-registrations';
 import { announceLiveAppUpdate } from './app-update';
 import { runCampusDrop } from './campus-drop/run';
+import { backfillAllUsersTopic } from './push-topic-backfill';
 
 // ── Route imports ─────────────────────────────────────────────
 import authRouter from './routes/auth';
@@ -208,6 +209,11 @@ export default {
     ctx.waitUntil(
       announceLiveAppUpdate(env).catch((err: any) =>
         logger.error('App update announcement failed', { error: String(err?.message ?? err) }),
+      ),
+    );
+    ctx.waitUntil(
+      backfillAllUsersTopic(env).catch((error) =>
+        logger.error('Push topic backfill failed', { error: String(error) }),
       ),
     );
   },
