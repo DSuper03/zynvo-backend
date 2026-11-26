@@ -22,9 +22,8 @@ const getFcmCfg = (c: any): FcmConfig => ({
 
 /**
  * Tells an event's organisers (club founder + core members, and the event
- * creator) about a new registration. Every registration lands in their in-app
- * inbox; a push is sent only when it needs action (approval or a payment
- * screenshot to check), so big events don't buzz phones for every sign-up.
+ * creator) about a new registration. Organizers can control these alerts
+ * separately through the organizer registration notification channel.
  */
 async function notifyOrganisersOfRegistration(
   prisma: any,
@@ -73,7 +72,7 @@ async function notifyOrganisersOfRegistration(
         // `route` is the app/inbox navigation contract (resolveNotificationRoute).
         data: { eventId: input.eventId, route: `/events/${input.eventId}?tab=manage` },
       },
-      push: input.needsApproval || input.paymentToReview,
+      push: true,
     });
   } catch (err: any) {
     logger.error('notifyOrganisersOfRegistration failed', { error: err.message, eventId: input.eventId });

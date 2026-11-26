@@ -319,10 +319,11 @@ router.post('/:postId/comments', authMiddleware, async (c) => {
   try {
     const post = await prisma.createPost.findUnique({ where: { id: postId }, select: { id: true, authorId: true, title: true } });
     if (!post) return jsonError(c, requestId, 'post not found', 404);
-    if (parentId) {
-      const parent = await prisma.postComment.findUnique({ where: { id: parentId }, select: { id: true, postId: true, authorId: true } });
-      if (!parent || parent.postId !== postId) return jsonError(c, requestId, 'parent comment not found', 404);
-    }
+    const parent = parentId ? await prisma.postComment.findUnique({
+      where: { id: parentId },
+      select: { postId: true, authorId: true },
+    }) : null;
+    if (parentId && parent?.postId !== postId) return jsonError(c, requestId, 'parent comment not found', 404);
     const comment = await prisma.postComment.create({
       data: { postId, authorId: userId, content, parentId: parentId ?? null },
       select: commentSelect,
@@ -330,12 +331,21 @@ router.post('/:postId/comments', authMiddleware, async (c) => {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
     const snippet = content.length > 120 ? `${content.slice(0, 117)}...` : content;
     const commenterName = user?.name?.trim() || 'Someone';
-    if (post.authorId !== userId) {
+    const data = { postId, commentId: comment.id, route: `/post/${postId}` };
+    if (parent && parent.authorId !== userId) {
+      c.executionCtx.waitUntil(createNotification(prisma, fcmCfg, {
+        userId: parent.authorId, type: 'comment_reply',
+        title: 'New reply to your comment',
+        body: `${commenterName} replied: "${snippet}"`,
+        data, push: true,
+      }));
+    }
+    if (post.authorId !== userId && post.authorId !== parent?.authorId) {
       c.executionCtx.waitUntil(createNotification(prisma, fcmCfg, {
         userId: post.authorId, type: 'comment',
         title: 'New comment on your post',
         body: `${commenterName} commented on "${post.title}": "${snippet}"`,
-        data: { postId, commentId: comment.id, route: `/post/${postId}` }, push: true,
+        data, push: true,
       }));
     }
     moderateInBackground(c, { kind: 'comment', id: comment.id, authorId: userId, text: content });
