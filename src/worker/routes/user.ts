@@ -32,6 +32,9 @@ router.get('/getUser', authMiddleware, async (c) => {
           select: {
             uniquePassId: true,
             checkedInAt: true,
+            // Lets the web show a pass's QR only once it's approved and paid.
+            approvalStatus: true,
+            paymentStatus: true,
             // Dates/venue feed the app's "My events" calendar.
             event: { select: { EventName: true, id: true, posterUrl: true, startDate: true, endDate: true, Venue: true, EventMode: true, clubName: true } },
           },
