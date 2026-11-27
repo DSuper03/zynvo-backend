@@ -813,6 +813,7 @@ router.get('/event-details', async (c) => {
         },
         user: { select: { profileAvatar: true } },
         approvalStatus: true,
+        paymentStatus: true,
       },
     });
     if (!found) return c.json({ data: {} }, 404);
@@ -824,6 +825,10 @@ router.get('/event-details', async (c) => {
         startDate: found.event.startDate,
         profilePic: found.user.profileAvatar,
         approvalStatus: found.approvalStatus,
+        paymentStatus: found.paymentStatus,
+        // Same rule as checkInPass: only a pass the scanner would accept is valid.
+        ticketValid: found.approvalStatus === 'approved'
+          && !['PENDING', 'REJECTED'].includes(String(found.paymentStatus).toUpperCase()),
         venue: found.event.Venue,
         posterUrl: found.event.posterUrl,
       },
