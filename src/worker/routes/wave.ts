@@ -3,7 +3,7 @@ import type { HonoEnv } from '../types';
 import { authMiddleware } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
-import { sendToDeviceTokens, isFcmConfigured, type FcmConfig } from '../fcm';
+import type { FcmConfig } from '../fcm';
 import { createNotification } from '../utils/notification';
 
 const router = new Hono<HonoEnv>();
@@ -32,7 +32,7 @@ const waveHandler: Handler<HonoEnv> = async (c) => {
   try {
     const [sender, recipient] = await Promise.all([
       prisma.user.findUnique({ where: { id: senderId }, select: { id: true, name: true } }),
-      prisma.user.findUnique({ where: { id: receiverId }, select: { id: true, deviceTokens: { select: { id: true, token: true } } } }),
+      prisma.user.findUnique({ where: { id: receiverId }, select: { id: true } }),
     ]);
 
     if (!sender) return jsonError(c, requestId, 'Sender not found.', 401);
@@ -69,32 +69,12 @@ const waveHandler: Handler<HonoEnv> = async (c) => {
     const senderName = sender.name?.trim() || 'Someone';
     const fcmCfg = getFcmCfg(c);
 
-    // Persist in-app notification (fire-and-forget)
     c.executionCtx.waitUntil(createNotification(prisma, fcmCfg, {
       userId: receiverId, type: 'wave',
       title: '👋 Someone waved at you!', body: `${senderName} waved at you.`,
       data: { senderId, receiverId, route: `/profile/${senderId}` },
+      push: true,
     }));
-
-    const tokens = recipient.deviceTokens.map((dt: any) => dt.token);
-    if (tokens.length === 0) {
-      return c.json({ success: true, message: 'User has no registered devices.' }, 200);
-    }
-
-    if (!isFcmConfigured(fcmCfg)) {
-      return c.json({ success: true, message: 'Wave recorded. FCM not configured.' }, 200);
-    }
-
-    const pushResult = await sendToDeviceTokens(
-      fcmCfg, tokens,
-      { title: '👋 Someone waved at you!', body: `${senderName} waved at you.` },
-      { type: 'wave', senderId, receiverId, route: `/profile/${senderId}` },
-    );
-
-    // Prune stale tokens
-    if (pushResult.invalidTokens.length > 0) {
-      void prisma.deviceToken.deleteMany({ where: { token: { in: pushResult.invalidTokens }, userId: receiverId } });
-    }
 
     return c.json({ success: true, message: 'Wave sent successfully.' }, 200);
   } catch (err: any) {

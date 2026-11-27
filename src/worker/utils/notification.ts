@@ -8,8 +8,6 @@ import type { FcmConfig } from '../fcm';
 import { isFcmConfigured, sendToDeviceTokens } from '../fcm';
 import { logger } from '../logger';
 
-const ANDROID_CHANNEL = 'new_posts';
-
 export type NotificationInput = {
   userId: string;
   type: string;
@@ -21,10 +19,11 @@ export type NotificationInput = {
 
 // ── pushToUser ────────────────────────────────────────────────
 
-async function pushToUser(
+async function pushToUsers(
   prisma: AppPrismaClient,
   fcmCfg: FcmConfig,
-  input: NotificationInput,
+  userIds: string[],
+  input: Omit<NotificationInput, 'userId'>,
 ): Promise<void> {
   try {
     if (!isFcmConfigured(fcmCfg)) {
@@ -33,31 +32,31 @@ async function pushToUser(
     }
 
     const rows = await (prisma as any).deviceToken.findMany({
-      where: { userId: input.userId },
+      where: { userId: { in: userIds } },
       select: { token: true },
     });
     const tokens: string[] = [...new Set<string>(rows.map((r: any) => String(r.token)))];
     if (tokens.length === 0) {
-      logger.info('Push skipped: no registered device', { type: input.type, userId: input.userId });
+      logger.info('Push skipped: no registered device', { type: input.type, recipients: userIds.length });
       return;
     }
 
-    const strData: Record<string, string> = { type: input.type };
+    const strData: Record<string, string> = {};
     for (const [k, v] of Object.entries(input.data ?? {})) {
       if (v != null) strData[k] = typeof v === 'string' ? v : JSON.stringify(v);
     }
+    strData.type = input.type;
 
     const result = await sendToDeviceTokens(
       fcmCfg,
       tokens,
       { title: input.title, body: input.body },
       strData,
-      { channelId: ANDROID_CHANNEL },
     );
     if (result.failureCount > 0) {
       logger.warn('Firebase did not accept all device pushes', {
         type: input.type,
-        userId: input.userId,
+        recipients: userIds.length,
         accepted: result.successCount,
         failed: result.failureCount,
         stale: result.invalidTokens.length,
@@ -66,11 +65,11 @@ async function pushToUser(
 
     if (result.invalidTokens.length > 0) {
       await (prisma as any).deviceToken.deleteMany({
-        where: { token: { in: result.invalidTokens }, userId: input.userId },
+        where: { token: { in: result.invalidTokens }, userId: { in: userIds } },
       });
     }
   } catch (err: any) {
-    logger.error('pushToUser failed', { error: err.message, userId: input.userId });
+    logger.error('Device push failed', { error: err.message, type: input.type, recipients: userIds.length });
   }
 }
 
@@ -91,7 +90,7 @@ export async function createNotification(
         data: input.data ?? undefined,
       },
     });
-    if (input.push) await pushToUser(prisma, fcmCfg, input);
+    if (input.push) await pushToUsers(prisma, fcmCfg, [input.userId], input);
   } catch (err: any) {
     logger.error('createNotification failed', { error: err.message, userId: input.userId });
   }
@@ -124,15 +123,7 @@ export async function sendToMany(
     logger.error('sendToMany persist failed', { error: err.message });
   }
   if (input.push) {
-    for (let offset = 0; offset < input.userIds.length; offset += 50) {
-      await Promise.all(input.userIds.slice(offset, offset + 50).map((userId) => pushToUser(prisma, fcmCfg, {
-        userId,
-        type: input.type ?? 'direct',
-        title: input.message.title,
-        body: input.message.body,
-        data: input.message.data ?? null,
-      })));
-    }
+    await pushToUsers(prisma, fcmCfg, input.userIds, { ...input.message, type: input.type ?? 'direct' });
   }
 }
 

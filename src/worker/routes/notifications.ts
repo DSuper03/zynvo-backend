@@ -5,19 +5,18 @@ import { authMiddleware, adminAuthMiddleware } from '../middleware/auth';
 import { generateRequestId, jsonError } from '../utils/response';
 import { logger } from '../logger';
 import {
+  ALL_USERS_TOPIC,
   isFcmConfigured,
   subscribeTokenToTopic,
   unsubscribeTokenFromTopic,
   sendToDeviceTokens,
-  FcmNotConfiguredError,
+  sendToTopic,
   type FcmConfig,
 } from '../fcm';
 import { broadcast } from '../utils/notification';
 import { DROP_TOPIC } from '../campus-drop/tick';
 
 const router = new Hono<HonoEnv>();
-
-const ALL_USERS_TOPIC = 'all_users';
 
 const broadcastSchema = z.object({
   title: z.string().trim().min(1).max(100),
@@ -58,20 +57,22 @@ router.post('/register', authMiddleware, async (c) => {
     });
 
     const fcmCfg = getFcmCfg(c);
-    if (isFcmConfigured(fcmCfg)) {
-      try { await subscribeTokenToTopic(fcmCfg, token, ALL_USERS_TOPIC); } catch (err: any) {
-        logger.error(`[${requestId}] Failed to subscribe to topic`, { error: err.message });
-      }
-      // Campus Drop notifications, unless this user turned them off.
-      try {
+    const fcmConfigured = isFcmConfigured(fcmCfg);
+    let topicsSynced = false;
+    if (fcmConfigured) {
+      const syncDrop = async () => {
         const optedOut = await prisma.campusDropOptOut.findUnique({ where: { userId }, select: { userId: true } });
-        if (!optedOut) await subscribeTokenToTopic(fcmCfg, token, DROP_TOPIC);
-      } catch (err: any) {
-        logger.warn(`[${requestId}] Failed to subscribe to the Drop topic`, { error: err.message });
+        if (optedOut) await unsubscribeTokenFromTopic(fcmCfg, token, DROP_TOPIC);
+        else await subscribeTokenToTopic(fcmCfg, token, DROP_TOPIC);
+      };
+      const results = await Promise.allSettled([subscribeTokenToTopic(fcmCfg, token, ALL_USERS_TOPIC), syncDrop()]);
+      topicsSynced = results.every((result) => result.status === 'fulfilled');
+      for (const result of results) {
+        if (result.status === 'rejected') logger.warn(`[${requestId}] Push topic sync failed`, { error: String(result.reason) });
       }
     }
 
-    return c.json({ msg: 'device registered for notifications', device, fcmConfigured: isFcmConfigured(fcmCfg) }, 200);
+    return c.json({ msg: 'device registered for notifications', device, fcmConfigured, topicsSynced }, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'error registering device token', 500, err);
   }
@@ -89,14 +90,15 @@ router.post('/unregister', authMiddleware, async (c) => {
   if (!token || typeof token !== 'string') return jsonError(c, requestId, 'token is required', 400);
 
   const prisma = c.get('prisma') as any;
-  const existing = await prisma.deviceToken.findUnique({ where: { token }, select: { id: true, userId: true } });
-  if (!existing || existing.userId !== userId) return jsonError(c, requestId, 'device token not found', 404);
-
-  await prisma.deviceToken.delete({ where: { token } });
+  const deleted = await prisma.deviceToken.deleteMany({ where: { token, userId } });
+  if (!deleted.count) return jsonError(c, requestId, 'device token not found', 404);
 
   const fcmCfg = getFcmCfg(c);
   if (isFcmConfigured(fcmCfg)) {
-    try { await unsubscribeTokenFromTopic(fcmCfg, token, ALL_USERS_TOPIC); } catch {}
+    const results = await Promise.allSettled([ALL_USERS_TOPIC, DROP_TOPIC].map((topic) => unsubscribeTokenFromTopic(fcmCfg, token, topic)));
+    if (results.some((result) => result.status === 'rejected')) {
+      logger.warn(`[${requestId}] Push topic cleanup failed`);
+    }
   }
 
   return c.json({ msg: 'device unregistered from notifications' }, 200);
@@ -162,12 +164,16 @@ router.post('/test', authMiddleware, async (c) => {
 
   const userId = c.get('userId');
   const prisma = c.get('prisma') as any;
-  const devices = await prisma.deviceToken.findMany({ where: { userId }, select: { token: true } });
+  if (body?.token !== undefined && (typeof body.token !== 'string' || !body.token.trim())) {
+    return jsonError(c, requestId, 'invalid device token', 400);
+  }
+  const requestedToken: string | undefined = body?.token;
+  const devices = await prisma.deviceToken.findMany({ where: { userId, token: requestedToken }, select: { token: true } });
   const tokens = devices.map((d: any) => d.token);
 
   let direct = null;
   if (tokens.length > 0) {
-    direct = await sendToDeviceTokens(fcmCfg, tokens, { title, body: notifBody }, { type: 'test', route: '/notifications' }, { channelId: 'new_posts' });
+    direct = await sendToDeviceTokens(fcmCfg, tokens, { title, body: notifBody }, { type: 'test', route: '/notifications' });
   }
 
   return c.json({ msg: 'test notification sent', topicSent: false, deviceTokensRegistered: tokens.length, directDelivered: direct?.successCount ?? 0, directFailed: direct?.failureCount ?? 0 }, 200);
@@ -186,6 +192,14 @@ router.post('/broadcast', authMiddleware, adminAuthMiddleware, async (c) => {
   const prisma = c.get('prisma');
   try {
     const result = await broadcast(prisma as any, { title: parsed.data.title, body: parsed.data.body, data: parsed.data.data ?? null });
+    const fcmCfg = getFcmCfg(c);
+    if (isFcmConfigured(fcmCfg)) {
+      const data = { ...parsed.data.data, type: 'broadcast' };
+      const payload = Object.fromEntries(Object.entries(data).filter(([, value]) => value != null)
+        .map(([key, value]) => [key, typeof value === 'string' ? value : JSON.stringify(value)]));
+      c.executionCtx.waitUntil(sendToTopic(fcmCfg, ALL_USERS_TOPIC, { title: parsed.data.title, body: parsed.data.body }, payload)
+        .catch((error) => logger.warn(`[${requestId}] Broadcast push failed`, { error: String(error) })));
+    }
     return c.json(result, 200);
   } catch (err: any) {
     return jsonError(c, requestId, 'error sending broadcast notification', 500, err);
