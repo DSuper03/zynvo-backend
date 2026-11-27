@@ -8,6 +8,9 @@ compatibility_flags = ["nodejs_compat"]
 # the [vars] below and the worker loses its database.
 keep_vars = true
 
+[secrets]
+required = ["FIREBASE_PROJECT_ID", "FIREBASE_CLIENT_EMAIL", "FIREBASE_PRIVATE_KEY"]
+
 # ── Non-secret config vars ────────────────────────────────────
 # Secrets (JWT_SECRET, DATABASE_URL, FIREBASE_*, CLERK_SECRET_KEY, ADMIN_EMAILS)
 # are stored via: npx wrangler secret put <KEY>

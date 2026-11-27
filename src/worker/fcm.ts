@@ -7,6 +7,8 @@
 
 import { logger } from './logger';
 
+export const ALL_USERS_TOPIC = 'all_users';
+
 // ── Types ─────────────────────────────────────────────────────
 
 export type FcmConfig = {
@@ -26,8 +28,27 @@ const INVALID_TOKEN_CODES = new Set([
   'messaging/registration-token-not-registered',
   'messaging/invalid-registration-token',
   'UNREGISTERED',
-  'INVALID_ARGUMENT',
 ]);
+
+function platformAlert(data?: Record<string, string>) {
+  const type = data?.type ?? '';
+  let channelId = 'new_posts';
+  if (type === 'event_registration' || type === 'registration_review_reminder' || type === 'registration_review') {
+    channelId = 'event_registrations';
+  } else if (type === 'club_event' || type === 'waitlist' || type.startsWith('event_') || type.startsWith('team_')) {
+    channelId = 'events';
+  } else if (type.startsWith('club_') || type.startsWith('core_')) {
+    channelId = 'clubs';
+  } else if (type === 'app_update' || type === 'play_store_update') {
+    channelId = 'app_updates';
+  } else if (['new_post', 'wave', 'comment', 'comment_reply', 'mention', 'follow', 'friend_registered', 'campus_drop'].includes(type)) {
+    channelId = 'social';
+  }
+  return {
+    android: { priority: 'high', notification: { channel_id: channelId, sound: 'default' } },
+    apns: { payload: { aps: { sound: 'default', badge: 1 } } },
+  };
+}
 
 // ── JWT helpers for service-account auth ──────────────────────
 
@@ -128,7 +149,6 @@ export async function sendToDeviceTokens(
   tokens: string[],
   notification: { title: string; body: string },
   data?: Record<string, string>,
-  options?: { channelId?: string },
 ): Promise<DeviceTokenPushResult> {
   if (tokens.length === 0) {
     return { successCount: 0, failureCount: 0, invalidTokens: [] };
@@ -142,7 +162,8 @@ export async function sendToDeviceTokens(
   const invalidTokens: string[] = [];
 
   // FCM HTTP v1 is one message per request — send concurrently in batches of 20
-  const BATCH = 20;
+  const BATCH = 5;
+  const alert = platformAlert(data);
   for (let i = 0; i < tokens.length; i += BATCH) {
     const chunk = tokens.slice(i, i + BATCH);
 
@@ -153,13 +174,7 @@ export async function sendToDeviceTokens(
             token,
             notification,
             ...(data ? { data } : {}),
-            android: {
-              priority: 'high',
-              notification: { channel_id: options?.channelId ?? 'new_posts', sound: 'default' },
-            },
-            apns: {
-              payload: { aps: { sound: 'default', badge: 1 } },
-            },
+            ...alert,
           },
         };
 
@@ -177,9 +192,10 @@ export async function sendToDeviceTokens(
             successCount++;
           } else {
             failureCount++;
-            const err = (await res.json()) as { error?: { details?: Array<{ errorCode?: string }> } };
-            const code = err?.error?.details?.[0]?.errorCode ?? '';
-            if (INVALID_TOKEN_CODES.has(code)) {
+            const err = await res.json().catch(() => null) as { error?: { status?: string; details?: Array<{ errorCode?: string }> } } | null;
+            const code = err?.error?.details?.find((detail) => detail.errorCode)?.errorCode;
+            logger.warn('FCM rejected a device alert', { status: res.status, code: code ?? err?.error?.status });
+            if (code && INVALID_TOKEN_CODES.has(code)) {
               invalidTokens.push(token);
             }
           }
@@ -211,11 +227,7 @@ export async function sendToTopic(
       topic,
       notification,
       ...(data ? { data } : {}),
-      android: {
-        priority: 'high',
-        notification: { channel_id: 'new_posts', sound: 'default' },
-      },
-      apns: { payload: { aps: { sound: 'default', badge: 1 } } },
+        ...platformAlert(data),
     },
   };
 
@@ -233,21 +245,12 @@ export async function sendToTopic(
   }
 }
 
-/**
- * Subscribe / unsubscribe a token to a topic via IID API.
- * Note: HTTP v1 doesn't have a topic-subscription endpoint;
- * we use the legacy IID endpoint which is still supported.
- */
 export async function subscribeTokenToTopic(
   cfg: FcmConfig,
   token: string,
   topic: string,
 ): Promise<void> {
-  const accessToken = await getAccessToken(cfg);
-  await fetch(`https://iid.googleapis.com/iid/v1/${token}/rel/topics/${topic}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}`, access_token_auth: 'true' },
-  });
+  await manageTopicSubscription(cfg, [token], topic, 'batchAdd', true);
 }
 
 /** Subscribe up to 1000 tokens to a topic in one call (IID batchAdd). */
@@ -256,18 +259,10 @@ export async function subscribeTokensToTopic(
   tokens: string[],
   topic: string,
 ): Promise<void> {
-  if (tokens.length === 0) return;
-  const accessToken = await getAccessToken(cfg);
-  const res = await fetch(`https://iid.googleapis.com/iid/v1:batchAdd`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      access_token_auth: 'true',
-    },
-    body: JSON.stringify({ to: `/topics/${topic}`, registration_tokens: tokens.slice(0, 1000) }),
-  });
-  if (!res.ok) throw new Error(`FCM topic batchAdd failed: ${res.status} ${await res.text()}`);
+  const batchSize = 1000;
+  for (let offset = 0; offset < tokens.length; offset += batchSize) {
+    await manageTopicSubscription(cfg, tokens.slice(offset, offset + batchSize), topic, 'batchAdd');
+  }
 }
 
 export async function unsubscribeTokenFromTopic(
@@ -275,14 +270,33 @@ export async function unsubscribeTokenFromTopic(
   token: string,
   topic: string,
 ): Promise<void> {
+  await manageTopicSubscription(cfg, [token], topic, 'batchRemove');
+}
+
+async function manageTopicSubscription(
+  cfg: FcmConfig,
+  tokens: string[],
+  topic: string,
+  action: 'batchAdd' | 'batchRemove',
+  strict = false,
+): Promise<void> {
+  if (tokens.length === 0) return;
   const accessToken = await getAccessToken(cfg);
-  await fetch(`https://iid.googleapis.com/iid/v1:batchRemove`, {
+  const response = await fetch(`https://iid.googleapis.com/iid/v1:${action}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
       access_token_auth: 'true',
     },
-    body: JSON.stringify({ to: `/topics/${topic}`, registration_tokens: [token] }),
+    body: JSON.stringify({ to: `/topics/${topic}`, registration_tokens: tokens }),
   });
+  if (!response.ok) throw new Error(`FCM ${action} failed for ${topic} (HTTP ${response.status})`);
+  const { results } = await response.json() as { results?: Array<{ error?: string }> };
+  if (results?.length !== tokens.length) throw new Error(`FCM returned incomplete ${action} results for ${topic}`);
+  const errors = results.flatMap(({ error }) => error ? [error] : []);
+  const retryable = errors.find((error) => !['NOT_FOUND', 'INVALID_ARGUMENT'].includes(error));
+  if (retryable || (strict && errors.length)) {
+    throw new Error(`FCM ${action} rejected ${topic}: ${retryable ?? errors[0]}`);
+  }
 }
