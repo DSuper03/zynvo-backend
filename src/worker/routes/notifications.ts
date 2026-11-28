@@ -16,6 +16,7 @@ import {
 import { broadcast } from '../utils/notification';
 import { DROP_TOPIC } from '../campus-drop/tick';
 import { KOLKATA_TOPIC } from '../kolkata-curation';
+import { campusArea, isKolkataArea, kolkataTopic, kolkataTopics } from '../kolkata-areas';
 
 const router = new Hono<HonoEnv>();
 
@@ -50,6 +51,10 @@ router.post('/register', authMiddleware, async (c) => {
 
   const prisma = c.get('prisma') as any;
   try {
+    const syncCampus = c.env.KOLKATA_BOT_TOKEN && normalizedPlatform === 'android';
+    const previous = syncCampus
+      ? await prisma.deviceToken.findUnique({ where: { token }, select: { userId: true } })
+      : null;
     const device = await prisma.deviceToken.upsert({
       where: { token },
       create: { token, userId, platform: normalizedPlatform },
@@ -67,10 +72,18 @@ router.post('/register', authMiddleware, async (c) => {
         else await subscribeTokenToTopic(fcmCfg, token, DROP_TOPIC);
       };
       const syncKolkata = async () => {
-        if (!c.env.KOLKATA_BOT_TOKEN || normalizedPlatform !== 'android') return;
+        if (!syncCampus) return;
         const subscription = await prisma.kolkataAlertSubscriber.findUnique({ where: { userId } });
-        if (subscription) await subscribeTokenToTopic(fcmCfg, token, KOLKATA_TOPIC);
-        else await unsubscribeTokenFromTopic(fcmCfg, token, KOLKATA_TOPIC);
+        if (!subscription && previous?.userId === userId) return;
+        const inferredArea = subscription && !subscription.area
+          ? campusArea((await prisma.user.findUnique({ where: { id: userId }, select: { collegeName: true } }))?.collegeName)
+          : null;
+        const area = isKolkataArea(subscription?.area) ? subscription.area : inferredArea;
+        const topic = area ? kolkataTopic(area) : null;
+        for (const stale of [KOLKATA_TOPIC, ...kolkataTopics]) {
+          if (stale !== topic) await unsubscribeTokenFromTopic(fcmCfg, token, stale);
+        }
+        if (topic) await subscribeTokenToTopic(fcmCfg, token, topic);
       };
       const results = await Promise.allSettled([
         subscribeTokenToTopic(fcmCfg, token, ALL_USERS_TOPIC), syncDrop(), syncKolkata(),
@@ -104,7 +117,7 @@ router.post('/unregister', authMiddleware, async (c) => {
 
   const fcmCfg = getFcmCfg(c);
   if (isFcmConfigured(fcmCfg)) {
-    const topics = c.env.KOLKATA_BOT_TOKEN ? [ALL_USERS_TOPIC, DROP_TOPIC, KOLKATA_TOPIC] : [ALL_USERS_TOPIC, DROP_TOPIC];
+    const topics = c.env.KOLKATA_BOT_TOKEN ? [ALL_USERS_TOPIC, DROP_TOPIC, KOLKATA_TOPIC, ...kolkataTopics] : [ALL_USERS_TOPIC, DROP_TOPIC];
     const results = await Promise.allSettled(topics.map((topic) => unsubscribeTokenFromTopic(fcmCfg, token, topic)));
     if (results.some((result) => result.status === 'rejected')) {
       logger.warn(`[${requestId}] Push topic cleanup failed`);

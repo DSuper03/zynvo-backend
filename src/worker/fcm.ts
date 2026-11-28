@@ -218,16 +218,22 @@ export async function sendToTopic(
   topic: string,
   notification: { title: string; body: string },
   data?: Record<string, string>,
+  options?: { ttlSeconds?: number },
 ): Promise<void> {
   const accessToken = await getAccessToken(cfg);
   const url = `https://fcm.googleapis.com/v1/projects/${cfg.projectId}/messages:send`;
 
+  const alert = platformAlert(data);
   const body = {
     message: {
       topic,
       notification,
       ...(data ? { data } : {}),
-        ...platformAlert(data),
+      ...alert,
+      android: {
+        ...alert.android,
+        ...(options?.ttlSeconds !== undefined ? { ttl: options.ttlSeconds + 's' } : {}),
+      },
     },
   };
 

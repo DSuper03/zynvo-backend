@@ -2,8 +2,17 @@ import { createPrismaClient } from './db';
 import type { CFEnv } from './types';
 import { listKccEvents, readKccEvent } from './kolkata-source';
 import { logger } from './logger';
+import { kolkataAreas, type KolkataArea } from './kolkata-areas';
 
 export const KOLKATA_TOPIC = 'kolkata_events';
+
+export function kolkataReviewButtons(id: string, area?: KolkataArea) {
+  const targets = area ? [area] : Object.keys(kolkataAreas) as KolkataArea[];
+  return { inline_keyboard: [
+    ...targets.map((target) => [{ text: 'Approve for ' + kolkataAreas[target], callback_data: 'notify:' + id + ':' + target }]),
+    [{ text: 'Skip', callback_data: 'skip:' + id }],
+  ] };
+}
 
 export async function kolkataTelegram(env: CFEnv, method: string, payload: object) {
   const response = await fetch('https://api.telegram.org/bot' + env.KOLKATA_BOT_TOKEN + '/' + method, {
@@ -53,10 +62,7 @@ export async function scanKolkataEvents(env: CFEnv) {
           chat_id: env.KOLKATA_REVIEWER_ID,
           text: [event.title, event.dateLabel, event.venue, event.priceLabel ?? 'Price: see organizer', event.sourceUrl].join('\n'),
           link_preview_options: { is_disabled: true },
-          reply_markup: { inline_keyboard: [[
-            { text: 'Yes, send alert', callback_data: 'notify:' + event.id },
-            { text: 'No, skip', callback_data: 'skip:' + event.id },
-          ]] },
+          reply_markup: kolkataReviewButtons(event.id),
         });
         await prisma.curatedKolkataEvent.update({ where: { id: event.id }, data: { reviewMessageId: result.message_id } });
         queued++;
