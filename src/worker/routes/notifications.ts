@@ -15,6 +15,7 @@ import {
 } from '../fcm';
 import { broadcast } from '../utils/notification';
 import { DROP_TOPIC } from '../campus-drop/tick';
+import { KOLKATA_TOPIC } from '../kolkata-curation';
 
 const router = new Hono<HonoEnv>();
 
@@ -65,7 +66,15 @@ router.post('/register', authMiddleware, async (c) => {
         if (optedOut) await unsubscribeTokenFromTopic(fcmCfg, token, DROP_TOPIC);
         else await subscribeTokenToTopic(fcmCfg, token, DROP_TOPIC);
       };
-      const results = await Promise.allSettled([subscribeTokenToTopic(fcmCfg, token, ALL_USERS_TOPIC), syncDrop()]);
+      const syncKolkata = async () => {
+        if (!c.env.KOLKATA_BOT_TOKEN || normalizedPlatform !== 'android') return;
+        const subscription = await prisma.kolkataAlertSubscriber.findUnique({ where: { userId } });
+        if (subscription) await subscribeTokenToTopic(fcmCfg, token, KOLKATA_TOPIC);
+        else await unsubscribeTokenFromTopic(fcmCfg, token, KOLKATA_TOPIC);
+      };
+      const results = await Promise.allSettled([
+        subscribeTokenToTopic(fcmCfg, token, ALL_USERS_TOPIC), syncDrop(), syncKolkata(),
+      ]);
       topicsSynced = results.every((result) => result.status === 'fulfilled');
       for (const result of results) {
         if (result.status === 'rejected') logger.warn(`[${requestId}] Push topic sync failed`, { error: String(result.reason) });
@@ -95,7 +104,8 @@ router.post('/unregister', authMiddleware, async (c) => {
 
   const fcmCfg = getFcmCfg(c);
   if (isFcmConfigured(fcmCfg)) {
-    const results = await Promise.allSettled([ALL_USERS_TOPIC, DROP_TOPIC].map((topic) => unsubscribeTokenFromTopic(fcmCfg, token, topic)));
+    const topics = c.env.KOLKATA_BOT_TOKEN ? [ALL_USERS_TOPIC, DROP_TOPIC, KOLKATA_TOPIC] : [ALL_USERS_TOPIC, DROP_TOPIC];
+    const results = await Promise.allSettled(topics.map((topic) => unsubscribeTokenFromTopic(fcmCfg, token, topic)));
     if (results.some((result) => result.status === 'rejected')) {
       logger.warn(`[${requestId}] Push topic cleanup failed`);
     }
