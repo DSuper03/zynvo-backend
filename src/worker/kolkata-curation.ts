@@ -54,9 +54,8 @@ export async function scanKolkataEvents(env: CFEnv) {
           text: [event.title, event.dateLabel, event.venue, event.priceLabel ?? 'Price: see organizer', event.sourceUrl].join('\n'),
           link_preview_options: { is_disabled: true },
           reply_markup: { inline_keyboard: [[
-            { text: 'Publish', callback_data: 'publish:' + event.id },
-            { text: 'Publish + Notify', callback_data: 'notify:' + event.id },
-            { text: 'Skip', callback_data: 'skip:' + event.id },
+            { text: 'Yes, send alert', callback_data: 'notify:' + event.id },
+            { text: 'No, skip', callback_data: 'skip:' + event.id },
           ]] },
         });
         await prisma.curatedKolkataEvent.update({ where: { id: event.id }, data: { reviewMessageId: result.message_id } });

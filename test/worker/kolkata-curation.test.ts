@@ -1,6 +1,6 @@
 ﻿import { Hono } from 'hono';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { parseKolkataDate, readKccEvent } from '../../src/worker/kolkata-source';
+import { parseKolkataDate } from '../../src/worker/kolkata-source';
 import router from '../../src/worker/routes/kolkata';
 
 const mocks = vi.hoisted(() => ({ telegram: vi.fn(), send: vi.fn(), readEvent: vi.fn() }));
@@ -62,12 +62,19 @@ it('does not let an unauthorized callback publish or notify', async () => {
   expect(mocks.send).not.toHaveBeenCalled();
 });
 
-it('publishes without sending when the reviewer chooses Publish', async () => {
-  const { review } = setup();
+it('ignores the legacy publish-only button and exposes no list', async () => {
+  const { app, review } = setup();
   await review('publish');
-  expect(readKccEvent).toHaveBeenCalledWith(event.sourceUrl);
+  expect(records.updateMany).not.toHaveBeenCalled();
+  expect(mocks.send).not.toHaveBeenCalled();
+  expect(await (await app.request('/')).json()).toEqual({ events: [] });
+});
+
+it('records a skipped review without sending an alert', async () => {
+  const { review } = setup();
+  await review('skip');
   expect(records.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-    data: expect.objectContaining({ publishedAt: expect.any(Date), notifyDay: null }),
+    data: expect.objectContaining({ reviewedAt: expect.any(Date), publishedAt: null, notifyDay: null }),
   }));
   expect(mocks.send).not.toHaveBeenCalled();
 });
