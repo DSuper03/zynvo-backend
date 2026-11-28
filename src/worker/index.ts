@@ -17,6 +17,7 @@ import { sendDailyDigest } from './digest';
 import { remindOrganizersOfPendingApprovals } from './pending-registrations';
 import kolkataRouter from './routes/kolkata';
 import { scanKolkataEvents } from './kolkata-curation';
+import { deliverKolkataLunchAlerts } from './kolkata-lunch';
 import { announceLiveAppUpdate } from './app-update';
 import { runCampusDrop } from './campus-drop/run';
 import { backfillAllUsersTopic } from './push-topic-backfill';
@@ -180,6 +181,7 @@ export default {
   // and announces app updates. The every-minute cron only runs Campus Drop.
   async scheduled(event: ScheduledController, env: CFEnv, ctx: ExecutionContext) {
     if (event.cron === '* * * * *') {
+      ctx.waitUntil(deliverKolkataLunchAlerts(env).catch(() => logger.warn('Kolkata lunchtime queue failed')));
       ctx.waitUntil(
         runCampusDrop(env).catch((err: any) =>
           raiseAlert(env, {

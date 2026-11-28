@@ -2,10 +2,10 @@
 import { html } from 'hono/html';
 import type { CFEnv, HonoEnv } from '../types';
 import { authMiddleware } from '../middleware/auth';
-import { isFcmConfigured, sendToTopic, subscribeTokensToTopic, unsubscribeTokenFromTopic } from '../fcm';
-import { KOLKATA_TOPIC, kolkataTelegram } from '../kolkata-curation';
+import { isFcmConfigured, subscribeTokensToTopic, unsubscribeTokenFromTopic } from '../fcm';
+import { KOLKATA_TOPIC, kolkataReviewButtons, kolkataTelegram } from '../kolkata-curation';
+import { campusArea, isKolkataArea, kolkataAreas, kolkataTopic, kolkataTopics, lunchWindow } from '../kolkata-areas';
 import { readKccEvent } from '../kolkata-source';
-import { logger } from '../logger';
 
 const router = new Hono<HonoEnv>();
 const eventFields = {
@@ -20,8 +20,13 @@ const fcmConfig = (env: CFEnv) => ({
 router.get('/', (c) => c.json({ events: [] }));
 
 router.get('/alerts', authMiddleware, async (c) => {
-  const subscription = await c.get('prisma').kolkataAlertSubscriber.findUnique({ where: { userId: c.get('userId') } });
-  return c.json({ enabled: !!subscription });
+  const prisma = c.get('prisma');
+  const userId = c.get('userId');
+  const [subscription, user] = await Promise.all([
+    prisma.kolkataAlertSubscriber.findUnique({ where: { userId } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { collegeName: true } }),
+  ]);
+  return c.json({ enabled: !!subscription, area: subscription?.area ?? campusArea(user?.collegeName) });
 });
 
 router.put('/alerts', authMiddleware, async (c) => {
@@ -32,16 +37,22 @@ router.put('/alerts', authMiddleware, async (c) => {
   const fcm = fcmConfig(c.env);
   if (!isFcmConfigured(fcm)) return c.json({ msg: 'Push alerts are temporarily unavailable' }, 503);
   try {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { collegeName: true } });
+    const area = isKolkataArea(body.area) ? body.area : campusArea(user?.collegeName);
+    if (body.enabled && !area) return c.json({ msg: 'Choose your campus area first' }, 400);
     const devices = await prisma.deviceToken.findMany({ where: { userId, platform: 'android' }, select: { token: true } });
     const tokens = devices.map(({ token }) => token);
-    if (body.enabled) {
-      await subscribeTokensToTopic(fcm, tokens, KOLKATA_TOPIC);
-      await prisma.kolkataAlertSubscriber.upsert({ where: { userId }, create: { userId }, update: {} });
+    const target = body.enabled && area ? kolkataTopic(area) : null;
+    for (const topic of [KOLKATA_TOPIC, ...kolkataTopics]) {
+      if (topic !== target) for (const token of tokens) await unsubscribeTokenFromTopic(fcm, token, topic);
+    }
+    if (target && area) {
+      await subscribeTokensToTopic(fcm, tokens, target);
+      await prisma.kolkataAlertSubscriber.upsert({ where: { userId }, create: { userId, area }, update: { area } });
     } else {
-      for (const token of tokens) await unsubscribeTokenFromTopic(fcm, token, KOLKATA_TOPIC);
       await prisma.kolkataAlertSubscriber.deleteMany({ where: { userId } });
     }
-    return c.json({ enabled: body.enabled });
+    return c.json({ enabled: body.enabled, area });
   } catch {
     return c.json({ msg: 'Could not change Kolkata alerts. Try again.' }, 503);
   }
@@ -55,6 +66,35 @@ router.post('/telegram', async (c) => {
   const update = await c.req.json().catch(() => null);
   const query = update?.callback_query;
   const reviewer = c.env.KOLKATA_REVIEWER_ID;
+  const message = update?.message;
+  if (reviewer && String(message?.from?.id) === reviewer && String(message?.chat?.id) === reviewer &&
+      typeof message.text === 'string' && message.text.startsWith('/spot ')) {
+    const [area, title, venue, tip, extra] = message.text.slice(6).split('|').map((part: string) => part.trim());
+    if (!isKolkataArea(area) || !title || !venue || !tip || extra || title.length > 80 || venue.length > 120 || tip.length > 110) {
+      await kolkataTelegram(c.env, 'sendMessage', {
+        chat_id: reviewer, text: 'Use /spot area | title | address | useful tip. Areas: beliaghata, garia, sector-v.',
+      });
+      return c.json({ ok: true });
+    }
+    const id = 'spot-' + String(message.message_id);
+    const prisma = c.get('prisma');
+    const now = new Date();
+    await prisma.curatedKolkataEvent.createMany({
+      data: [{ id, fingerprint: id, title, venue, dateLabel: tip, startsAt: now,
+        endsAt: new Date(now.getTime() + 7 * 86_400_000), alertArea: area,
+        sourceUrl: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(title + ', ' + venue) }],
+      skipDuplicates: true,
+    });
+    const listing = await prisma.curatedKolkataEvent.findUnique({ where: { id } });
+    if (!listing?.reviewedAt && !listing?.reviewMessageId) {
+      const result = await kolkataTelegram(c.env, 'sendMessage', {
+        chat_id: reviewer, text: [kolkataAreas[area], title, venue, tip].join('\n'),
+        reply_markup: kolkataReviewButtons(id, area),
+      });
+      await prisma.curatedKolkataEvent.update({ where: { id }, data: { reviewMessageId: result.message_id } });
+    }
+    return c.json({ ok: true });
+  }
   if (!reviewer || String(query?.from?.id) !== reviewer || String(query?.message?.chat?.id) !== reviewer ||
       typeof query.id !== 'string' || typeof query.data !== 'string') return c.json({ ok: true });
   if (/^publish:kcc-\d+$/.test(query.data)) {
@@ -63,9 +103,9 @@ router.post('/telegram', async (c) => {
     }).catch(() => undefined);
     return c.json({ ok: true });
   }
-  const input = /^(notify|skip):(kcc-\d+)$/.exec(query.data);
+  const input = /^(notify|skip):((?:kcc|spot)-\d+)(?::([a-z-]+))?$/.exec(query.data);
   if (!input) return c.json({ ok: true });
-  const [, action, id] = input;
+  const [, action, id, area] = input;
   const prisma = c.get('prisma');
   const answer = async (text: string) => {
     await kolkataTelegram(c.env, 'answerCallbackQuery', { callback_query_id: query.id, text }).catch(() => undefined);
@@ -79,9 +119,20 @@ router.post('/telegram', async (c) => {
   const now = new Date();
   const fcm = fcmConfig(c.env);
   if (action === 'notify' && !isFcmConfigured(fcm)) return answer('Push is unavailable. Try again later.');
-  if (action !== 'skip') {
+  const window = lunchWindow(now);
+  if (action === 'notify') {
+    if (!isKolkataArea(area)) {
+      await kolkataTelegram(c.env, 'editMessageReplyMarkup', {
+        chat_id: reviewer, message_id: query.message.message_id, reply_markup: kolkataReviewButtons(id),
+      }).catch(() => undefined);
+      return answer('Choose the campus area to queue this alert.');
+    }
+    if (event.alertArea && area !== event.alertArea) return answer('This spot is assigned to a different area.');
+    if (event.endsAt <= window.startsAt) return answer('This pick expires before the next lunchtime window.');
+  }
+  if (action === 'notify' && id.startsWith('kcc-')) {
     const current = await readKccEvent(event.sourceUrl).catch(() => null);
-    if (!current || current.endsAt <= now) return answer('Could not verify the listing. Check the organizer link.');
+    if (!current || current.endsAt <= window.startsAt) return answer('Could not verify the listing for the next lunchtime window.');
     if (current.fingerprint !== event.fingerprint || current.dateLabel !== event.dateLabel || current.priceLabel !== event.priceLabel) {
       await prisma.curatedKolkataEvent.updateMany({
         where: { id, reviewedAt: null, reviewMessageId: event.reviewMessageId },
@@ -91,34 +142,21 @@ router.post('/telegram', async (c) => {
     }
   }
 
-  // A unique nullable date enforces the Kolkata-local daily cap across Workers.
-  const notifyDay = action === 'notify' ? new Date(now.getTime() + 330 * 60_000).toISOString().slice(0, 10) : null;
+  const notifyDay = action === 'notify' ? window.nextDay : null;
   try {
     const result = await prisma.curatedKolkataEvent.updateMany({
       where: { id, reviewedAt: null, reviewMessageId: event.reviewMessageId },
-      data: { reviewedAt: now, publishedAt: action === 'skip' ? null : now, notifyDay },
+      data: { reviewedAt: now, notifyDay, alertArea: notifyDay ? area : null },
     });
     if (!result.count) return answer('Already reviewed.');
   } catch (error) {
     if (notifyDay && typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
-      return answer('One alert has already been approved today. Try again tomorrow.');
+      return answer('An alert is already queued for this area and date.');
     }
     throw error;
   }
 
-  if (notifyDay) {
-    c.executionCtx.waitUntil(sendToTopic(fcm, KOLKATA_TOPIC, {
-      title: event.title,
-      body: [event.venue, event.dateLabel].join(' · ').slice(0, 200),
-    }, { type: 'kolkata_event', route: '/kolkata-events/' + id }).catch(async () => {
-      logger.error('Kolkata push could not be confirmed', { id });
-      await kolkataTelegram(c.env, 'sendMessage', {
-        chat_id: reviewer,
-        text: 'Firebase could not confirm delivery for ' + event.title + '.',
-      }).catch(() => undefined);
-    }));
-  }
-  return answer(notifyDay ? 'Alert queued.' : 'Skipped.');
+  return answer(notifyDay ? 'Queued for 1–2 pm IST on ' + notifyDay + '.' : 'Skipped.');
 });
 
 router.get('/:id', async (c) => {

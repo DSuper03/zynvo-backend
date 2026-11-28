@@ -722,12 +722,16 @@ model CuratedKolkataEvent {
   reviewedAt       DateTime?
   publishedAt      DateTime?
   reviewMessageId  Int?
-  notifyDay        String?  @unique
+  notifyDay        String?
+  alertArea        String?
+  claimedAt        DateTime?
 
+  @@unique([alertArea, notifyDay])
   @@index([publishedAt, endsAt])
 }
 
 model KolkataAlertSubscriber {
+  area   String?
   userId String @id
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
