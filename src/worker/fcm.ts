@@ -35,7 +35,7 @@ function platformAlert(data?: Record<string, string>) {
   let channelId = 'new_posts';
   if (type === 'event_registration' || type === 'registration_review_reminder' || type === 'registration_review') {
     channelId = 'event_registrations';
-  } else if (type === 'club_event' || type === 'waitlist' || type.startsWith('event_') || type.startsWith('team_')) {
+  } else if (type === 'kolkata_event' || type === 'club_event' || type === 'waitlist' || type.startsWith('event_') || type.startsWith('team_')) {
     channelId = 'events';
   } else if (type.startsWith('club_') || type.startsWith('core_')) {
     channelId = 'clubs';

@@ -15,6 +15,8 @@ import { logger } from './logger';
 import { raiseAlert } from './alerts';
 import { sendDailyDigest } from './digest';
 import { remindOrganizersOfPendingApprovals } from './pending-registrations';
+import kolkataRouter from './routes/kolkata';
+import { scanKolkataEvents } from './kolkata-curation';
 import { announceLiveAppUpdate } from './app-update';
 import { runCampusDrop } from './campus-drop/run';
 import { backfillAllUsersTopic } from './push-topic-backfill';
@@ -99,6 +101,7 @@ app.route('/api/v1/notifications', notificationsRouter);
 app.route('/api/v1/contact', contactRouter);
 app.route('/api/v1/reports', reportsRouter);
 app.route('/api/v1/drops', dropsRouter);
+app.route('/api/v1/kolkata-events', kolkataRouter);
 app.route('/api/v1/users', waveRouter);    // wave: POST /api/v1/users/:userId
 
 // Admin
@@ -206,6 +209,9 @@ export default {
         logger.error('Pending registration reminder failed', { error: String(err?.message ?? err) }),
       ),
     );
+    if (event.cron === '0 * * * *') {
+      ctx.waitUntil(scanKolkataEvents(env).catch(() => logger.warn('Kolkata calendar scan failed')));
+    }
     ctx.waitUntil(
       announceLiveAppUpdate(env).catch((err: any) =>
         logger.error('App update announcement failed', { error: String(err?.message ?? err) }),

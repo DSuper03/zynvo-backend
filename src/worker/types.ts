@@ -23,6 +23,9 @@ export type CFEnv = {
   INTERNAL_PROXY_SECRET?: string;
   /** Telegram bot for alerts and the daily digest (set as secrets). */
   TELEGRAM_BOT_TOKEN?: string;
+  KOLKATA_BOT_TOKEN?: string;
+  KOLKATA_REVIEWER_ID?: string;
+  KOLKATA_WEBHOOK_SECRET?: string;
   TELEGRAM_CHAT_ID?: string;
   /** Alert dedup + 48h alert history for the digest (wrangler.toml [[kv_namespaces]]). */
   ALERTS_KV?: KVNamespace;

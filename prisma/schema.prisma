@@ -8,6 +8,7 @@ datasource db {
 }
 
 model User {
+  kolkataAlertSubscription KolkataAlertSubscriber?
   id            String         @id @default(cuid())
   email         String         @unique
   name          String?
@@ -706,4 +707,27 @@ model CampusDropOptOut {
   createdAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CuratedKolkataEvent {
+  id               String   @id
+  fingerprint      String   @unique
+  title            String
+  venue            String
+  dateLabel        String
+  startsAt         DateTime
+  endsAt           DateTime
+  priceLabel       String?
+  sourceUrl        String
+  reviewedAt       DateTime?
+  publishedAt      DateTime?
+  reviewMessageId  Int?
+  notifyDay        String?  @unique
+
+  @@index([publishedAt, endsAt])
+}
+
+model KolkataAlertSubscriber {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
