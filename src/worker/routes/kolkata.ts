@@ -16,15 +16,8 @@ const fcmConfig = (env: CFEnv) => ({
   projectId: env.FIREBASE_PROJECT_ID, clientEmail: env.FIREBASE_CLIENT_EMAIL, privateKey: env.FIREBASE_PRIVATE_KEY,
 });
 
-router.get('/', async (c) => {
-  const events = await c.get('prisma').curatedKolkataEvent.findMany({
-    where: { publishedAt: { not: null }, endsAt: { gt: new Date() } },
-    select: eventFields,
-    orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
-    take: 50,
-  });
-  return c.json({ events });
-});
+// Older app builds still request this collection.
+router.get('/', (c) => c.json({ events: [] }));
 
 router.get('/alerts', authMiddleware, async (c) => {
   const subscription = await c.get('prisma').kolkataAlertSubscriber.findUnique({ where: { userId: c.get('userId') } });
@@ -64,7 +57,13 @@ router.post('/telegram', async (c) => {
   const reviewer = c.env.KOLKATA_REVIEWER_ID;
   if (!reviewer || String(query?.from?.id) !== reviewer || String(query?.message?.chat?.id) !== reviewer ||
       typeof query.id !== 'string' || typeof query.data !== 'string') return c.json({ ok: true });
-  const input = /^(publish|notify|skip):(kcc-\d+)$/.exec(query.data);
+  if (/^publish:kcc-\d+$/.test(query.data)) {
+    await kolkataTelegram(c.env, 'answerCallbackQuery', {
+      callback_query_id: query.id, text: 'Use Publish + Notify or Skip on this older review card.',
+    }).catch(() => undefined);
+    return c.json({ ok: true });
+  }
+  const input = /^(notify|skip):(kcc-\d+)$/.exec(query.data);
   if (!input) return c.json({ ok: true });
   const [, action, id] = input;
   const prisma = c.get('prisma');
@@ -79,7 +78,7 @@ router.post('/telegram', async (c) => {
 
   const now = new Date();
   const fcm = fcmConfig(c.env);
-  if (action === 'notify' && !isFcmConfigured(fcm)) return answer('Push is unavailable. You can still publish.');
+  if (action === 'notify' && !isFcmConfigured(fcm)) return answer('Push is unavailable. Try again later.');
   if (action !== 'skip') {
     const current = await readKccEvent(event.sourceUrl).catch(() => null);
     if (!current || current.endsAt <= now) return answer('Could not verify the listing. Check the organizer link.');
@@ -102,7 +101,7 @@ router.post('/telegram', async (c) => {
     if (!result.count) return answer('Already reviewed.');
   } catch (error) {
     if (notifyDay && typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
-      return answer('One alert has already been approved today. Use Publish to list this event.');
+      return answer('One alert has already been approved today. Try again tomorrow.');
     }
     throw error;
   }
@@ -115,11 +114,11 @@ router.post('/telegram', async (c) => {
       logger.error('Kolkata push could not be confirmed', { id });
       await kolkataTelegram(c.env, 'sendMessage', {
         chat_id: reviewer,
-        text: 'Published ' + event.title + '. Firebase delivery could not be confirmed.',
+        text: 'Firebase could not confirm delivery for ' + event.title + '.',
       }).catch(() => undefined);
     }));
   }
-  return answer(notifyDay ? 'Published. Alert queued.' : action === 'skip' ? 'Skipped.' : 'Published.');
+  return answer(notifyDay ? 'Alert queued.' : 'Skipped.');
 });
 
 router.get('/:id', async (c) => {
